@@ -1,0 +1,212 @@
+<mxfile host="app.diagrams.net" modified="2026-07-11T00:00:00.000Z" agent="ForgeFlow" version="24.0.0" type="device">
+  <diagram name="ForgeFlow User Flow" id="forgeflow-user-flow">
+    <mxGraphModel dx="1422" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1360" pageHeight="2520" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== STAGE BANDS (background) ===================== -->
+        <mxCell id="bEntry" value="GETTING STARTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef3fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#3b5f86;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="78" width="1240" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" value="1 &#183; DESIGN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4eef8;strokeColor=#9673a6;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#7a4f96;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="522" width="1240" height="400" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="2 &#183; REQUIREMENTS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efeafb;strokeColor=#6a51c9;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#5a44ad;spacingLeft=14;spacingTop=6;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="926" width="1240" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="3 &#183; BUILD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef3fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#3b5f86;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1022" width="1240" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" value="4 &#183; TEST + SELF-HEALING REPAIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f5f6;strokeColor=#12a3ad;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#0e7a82;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1326" width="1240" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="b5" value="5 &#183; INFRA-AWARE DEPLOYMENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e6;strokeColor=#d79b00;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#a8770a;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1630" width="1240" height="406" as="geometry" />
+        </mxCell>
+        <mxCell id="b6" value="6 &#183; LIVE VALIDATION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdecea;strokeColor=#b85450;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#a03c38;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2040" width="1240" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="bEnd" value="DONE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#edf7ed;strokeColor=#82b366;verticalAlign=top;align=left;fontStyle=1;fontSize=15;fontColor=#4f8a3d;spacingLeft=14;spacingTop=8;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2266" width="1240" height="176" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== TITLE + LEGEND ===================== -->
+        <mxCell id="title" value="ForgeFlow &#8212; End-to-End User Flow" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="44" y="18" width="640" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Screenshots or spec &#8594; live prototype &#8594; tested build &#8594; deployed site. Fully non-linear and human-in-the-loop." style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#5a5a6e;" vertex="1" parent="1">
+          <mxGeometry x="44" y="52" width="800" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt;&lt;br&gt;&#9634; Process step&#160;&#160;&#9671; Decision&#160;&#160;&#9133;&#9135; Start / End&#160;&#160;&#9091; Database&lt;br&gt;&lt;br&gt;&lt;span style=&quot;color:#3c4043&quot;&gt;&#8212;&#8212;&#8212;&lt;/span&gt;&#160;Main path&lt;br&gt;&lt;span style=&quot;color:#b85450&quot;&gt;- - -&lt;/span&gt;&#160;Feedback / self-healing repair loop&lt;br&gt;&lt;span style=&quot;color:#80868b&quot;&gt;&#183;&#183;&#183;&#183;&lt;/span&gt;&#160;Skip / opt-out&#160;&#160;&#160;&lt;span style=&quot;color:#6c8ebf&quot;&gt;&#183;&#183;&#183;&#183;&lt;/span&gt;&#160;Live view / data link&lt;br&gt;&lt;br&gt;&lt;b&gt;Note:&lt;/b&gt; Every stage is optional. At any point the user can chat to refine an output, jump back to an earlier stage, or skip a stage entirely." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9aa0a6;align=left;verticalAlign=top;spacingLeft=12;spacingTop=10;fontSize=11;fontColor=#3c4043;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="852" y="80" width="436" height="222" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== GETTING STARTED ===================== -->
+        <mxCell id="start" value="Start &#183; PWA loads" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;fontColor=#0b3d0b;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="92" width="260" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="auth" value="Sign in / Sign up" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="172" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="dash" value="Dashboard &#183; your projects" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="252" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="np" value="Create a new project" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="332" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="ent" value="Choose starting point" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="418" width="184" height="84" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 1 DESIGN ===================== -->
+        <mxCell id="ci" value="Upload screenshots / images, or enter a text prompt" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="548" width="280" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="cg" value="Generate high-fidelity wireframes / UI&lt;br&gt;&lt;b&gt;Pluggable provider&lt;/b&gt; &#183; Stitch MCP (default) &#183; Figma MCP (alt)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="644" width="280" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="cr" value="Preview generated designs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="748" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="cd" value="Refine the designs?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="832" width="184" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="cfb" value="Request design changes (chat)&lt;br&gt;as many rounds as you like" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=2;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="744" width="272" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 2 REQUIREMENTS ===================== -->
+        <mxCell id="dr" value="Structured requirements guide &#183; fill-in-the-blanks per feature&#160;&#160;(&lt;b&gt;drives test generation&lt;/b&gt;)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0c9f0;strokeColor=#6a51c9;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="944" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 3 BUILD ===================== -->
+        <mxCell id="eg" value="Agentic code generation (Claude)&lt;br&gt;React frontend + Node/Express backend + MongoDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1044" width="300" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="eide" value="Live in-browser IDE (Monaco)&lt;br&gt;watch code stream &#183; optional" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1046" width="272" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="er" value="Run in isolated sandbox &#183; live preview" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="1148" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="ed" value="Happy with the app?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="1234" width="184" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="efb" value="Request changes (chat)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=2;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1150" width="272" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 4 TEST + REPAIR ===================== -->
+        <mxCell id="ft" value="Generate tests from requirements&lt;br&gt;unit + end-to-end (Playwright)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#12a3ad;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1348" width="300" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="frun" value="Run the test suite in the sandbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#12a3ad;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="1448" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="fd" value="All tests pass?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="1534" width="184" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="frep" value="&lt;b&gt;Diff-aware repair&lt;/b&gt;&lt;br&gt;send only failing tests + code diff to the agent&lt;br&gt;(bounded retries)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="970" y="1444" width="290" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="fesc" value="Max attempts / no progress&#160;&#8594;&#160;ask the user for guidance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="970" y="1548" width="290" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 5 DEPLOY ===================== -->
+        <mxCell id="gi" value="Analyze cloud infra needs&lt;br&gt;static FE / serverless / persistent BE / DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1648" width="300" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="gm" value="Deployment mode?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="1748" width="184" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="gbyo" value="&lt;b&gt;Bring your own&lt;/b&gt;&lt;br&gt;provide tokens + own MongoDB URI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="1750" width="252" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="gseam" value="&lt;b&gt;Seamless&lt;/b&gt; &#183; platform accounts&lt;br&gt;Vercel FE + Render BE + shared MongoDB Atlas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="970" y="1746" width="290" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="gdep" value="Provision and deploy FE + BE, connect DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1858" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="gtop" value="Visual deployment map (n8n-style)&lt;br&gt;FE / BE / DB nodes + live status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1954" width="300" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== 6 LIVE VALIDATION ===================== -->
+        <mxCell id="ht" value="Run end-to-end / smoke tests against the &lt;b&gt;LIVE URL&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="2068" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hd" value="Live site passes?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="548" y="2154" width="184" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="hrep" value="Diagnose and repair &#183; rebuild and redeploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="970" y="2064" width="290" height="64" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== DONE ===================== -->
+        <mxCell id="done" value="Deployed website link delivered &#10003;" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;fontColor=#0b3d0b;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="505" y="2268" width="270" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="idash" value="Project dashboard &#183; iterate, redeploy, revisit any stage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="505" y="2356" width="270" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="idb" value="Project Database&lt;br&gt;CRUD on your data (project-scoped)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#eeeeee;strokeColor=#666666;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="970" y="2356" width="272" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== MAIN PATH EDGES ===================== -->
+        <mxCell id="m1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="start" target="auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="auth" target="dash"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="dash" target="np"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="np" target="ent"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m5" value="Screenshots / text" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="ent" target="ci"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="ci" target="cg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="cg" target="cr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="cr" target="cd"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m9" value="Approve" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="cd" target="dr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="dr" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="eg" target="er"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="er" target="ed"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m13" value="Proceed to testing" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="ed" target="ft"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="ft" target="frun"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="frun" target="fd"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m16" value="All pass" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="fd" target="gi"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="gi" target="gm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m18" value="Seamless" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="gm" target="gseam"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m19" value="Bring your own" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="gm" target="gbyo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="gseam" target="gdep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="gbyo" target="gdep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="gdep" target="gtop"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="gtop" target="ht"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="ht" target="hd"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m25" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="hd" target="done"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m26" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#3c4043;strokeWidth=1.6;fontSize=10;fontColor=#3c4043;endArrow=block;endFill=1;" edge="1" parent="1" source="done" target="idash"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===================== FEEDBACK / REPAIR LOOPS (red dashed) ===================== -->
+        <mxCell id="l1" value="Refine" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="cd" target="cfb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l2" value="Regenerate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="cfb" target="cg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l3" value="Request changes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" edge="1" parent="1" source="ed" target="efb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l4" value="Re-generate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="efb" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l5" value="No &#183; fail" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="fd" target="frep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l6" value="Re-run tests" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="frep" target="frun"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l7" value="Cap reached" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="frep" target="fesc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l8" value="User-guided fix" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;" edge="1" parent="1" source="fesc" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l9" value="No &#183; fail" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="hd" target="hrep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l10" value="Rebuild + redeploy" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.85;entryDx=0;entryDy=0;" edge="1" parent="1" source="hrep" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l11" value="Iterate further" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=6 4;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;fontColor=#b85450;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;" edge="1" parent="1" source="idash" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===================== SKIP / OPT-OUT (gray dashed) ===================== -->
+        <mxCell id="s1" value="I have wireframes / a spec &#183; skip design" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=2 3;strokeColor=#9aa0a6;strokeWidth=1.5;fontSize=10;fontColor=#80868b;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ent" target="eg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="s2" value="Skip testing" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=2 3;strokeColor=#9aa0a6;strokeWidth=1.5;fontSize=10;fontColor=#80868b;endArrow=block;endFill=1;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ed" target="gi"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===================== ASSOCIATIONS (blue dotted) ===================== -->
+        <mxCell id="a1" value="live view" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=1 3;strokeColor=#6c8ebf;strokeWidth=1.4;fontSize=10;fontColor=#6c8ebf;endArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="eg" target="eide"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a2" value="manage data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;dashPattern=1 3;strokeColor=#6c8ebf;strokeWidth=1.4;fontSize=10;fontColor=#6c8ebf;endArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="idash" target="idb"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
