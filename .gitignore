@@ -82,3 +82,32 @@ android/key.properties
 # Firebase — never commit. See Documentation/firebase-fcm-setup.md
 android/app/google-services.json
 backend/firebase-service-account.json
+
+# --- ForgeFlow: Node / frontend ---
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dev-dist/
+frontend/coverage/
+frontend/.vite/
+*.tsbuildinfo
+
+# --- ForgeFlow: Python (root-level uv/tests) ---
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- ForgeFlow: local env variants ---
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# --- ForgeFlow: Caddy / infra local state ---
+infra/caddy/data/
+infra/caddy/config/

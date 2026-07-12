@@ -14,7 +14,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 
 | ID | Title | Epic | Depends on | Status |
 |----|-------|------|-----------|--------|
-| [01](./phase-01-repo-tooling.md) | Repo, tooling & local dev | 0 · Foundations | — | ⬜ |
+| [01](./phase-01-repo-tooling.md) | Repo, tooling & local dev | 0 · Foundations | — | ✅ |
 | [02](./phase-02-data-layer.md) | Control-plane data layer | 0 · Foundations | 01 | ⬜ |
 | [03](./phase-03-auth.md) | Auth & user management | 0 · Foundations | 02 | ⬜ |
 | [04](./phase-04-frontend-shell-pwa.md) | Frontend app shell & PWA base | 0 · Foundations | 01 | ⬜ |

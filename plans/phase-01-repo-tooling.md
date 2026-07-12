@@ -81,4 +81,10 @@ Everything else builds on this. It establishes the repo structure from `IMPLEMEN
 
 ## Status
 
-⬜ todo
+✅ done — Implemented and verified: `make test` (backend 8 + frontend 3 passing) and `make lint`
+(ruff + black + mypy + eslint + prettier + tsc, all clean); backend boots under uvicorn with
+`GET /health` → `200 {"status":"ok",...}`; frontend production `build` succeeds; layered config
+resolver + `os.environ` guard in place; `.env.example` covers every §13 var; `.env` git-ignored.
+**Deferred (environment-limited):** full `make dev` stack boot was not exercised here (Docker
+daemon/Colima unavailable in the build env) — the compose file was validated via
+`docker compose config` and both service Dockerfiles are in place.

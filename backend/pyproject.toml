@@ -1,0 +1,69 @@
+[project]
+name = "forgeflow-backend"
+version = "0.1.0"
+description = "ForgeFlow control plane (FastAPI)."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "motor>=3.5",
+    "beanie>=1.26",
+    "anthropic>=0.39",
+    "docker>=7.1",
+    "httpx>=0.27",
+    "cryptography>=43",
+    "python-jose[cryptography]>=3.3",
+    "passlib[bcrypt]>=1.7",
+    "websockets>=12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "black>=24.8",
+    "mypy>=1.11",
+]
+
+[tool.uv]
+# Application project (not a distributable package): don't try to build/install `app` as a wheel.
+package = false
+
+# ------------------------------------------------------------------ pytest
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra"
+
+# ------------------------------------------------------------------ ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "A", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# The error taxonomy name `SystemError` intentionally shadows the builtin (mandated by the plan);
+# A004 = import of a builtin-shadowing name, raised wherever `SystemError` is imported.
+"app/core/errors.py" = ["A001", "A002", "A003", "A004"]
+"app/core/config.py" = ["A001", "A002", "A003", "A004"]
+"tests/*" = ["A004"]
+
+# ------------------------------------------------------------------ black
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+# ------------------------------------------------------------------ mypy
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_decorators = false
+warn_unused_ignores = true
+files = ["app", "tests"]
