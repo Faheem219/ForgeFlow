@@ -1,0 +1,71 @@
+# ForgeFlow local dev stack: api + web + mongo + proxy.
+# Bring up with `make dev` (needs Colima/Docker running). Copy `.env.example` -> `.env` first.
+name: forgeflow
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # Container-network overrides win over .env (the resolver still reads them from env).
+      FORGEFLOW_ENV: local
+      MONGODB_URI: mongodb://mongo:27017
+      CORS_ORIGINS: "*"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app # hot reload; venv lives at /opt/venv (UV_PROJECT_ENVIRONMENT), not /app/.venv
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules # keep the image's installed modules, don't shadow with host
+    ports:
+      - "5173:5173"
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

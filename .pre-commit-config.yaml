@@ -1,0 +1,54 @@
+# Pre-commit hooks for ForgeFlow. Local hooks use the project envs (uv / pnpm)
+# so versions match the repo. Install with: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (backend)
+        entry: bash -c 'cd backend && uv run ruff check --fix .'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: black
+        name: black (backend)
+        entry: bash -c 'cd backend && uv run black .'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy (backend)
+        entry: bash -c 'cd backend && uv run mypy .'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && corepack pnpm run lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && corepack pnpm run format:check'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|css|json|md)$
+        pass_filenames: false
+
+      - id: no-os-environ
+        name: no direct os.environ outside config layer
+        entry: bash infra/scripts/check_no_os_environ.sh
+        language: system
+        pass_filenames: false

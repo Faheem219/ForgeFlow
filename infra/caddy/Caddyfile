@@ -1,0 +1,25 @@
+{
+	admin off
+	auto_https off
+}
+
+# Single local entrypoint on :80. The web dev server is also exposed directly on :5173
+# (needed for Vite HMR); this proxy is the convenience front door and the seam for
+# per-project sandbox preview subdomains added in phase 15.
+:80 {
+	# Control-plane API + health + docs.
+	@api path /api/* /health /docs /openapi.json
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	# Everything else -> the React dev server.
+	handle {
+		reverse_proxy web:5173
+	}
+}
+
+# Reserved for phase 15 (live preview): per-project subdomains, e.g.
+#   *.preview.localhost:80 {
+#       reverse_proxy sandbox-<project>:<port>
+#   }
