@@ -67,4 +67,17 @@ Delivers the presentation-plane baseline (D3, D14). ForgeFlow itself is a PWA (D
 
 ## Status
 
-⬜ todo
+✅ done — Router restructured with an `AppShell` layout route (collapsible sidebar + topbar with
+user menu/logout, theme + connection-status placeholders) wrapping protected `/`,
+`/projects/:id`, `/settings`, and a `*` 404; public `/login`, `/register`, and a `/_kit` UI-kit
+showcase. Theme tokens + focus-visible/a11y in `theme/index.css`. UI kit (`Button`, `Panel`,
+`Modal`, `Toaster`+`toastStore`, `Input`, `Tabs`, `Spinner`, `EmptyState`, `Badge`) with a barrel.
+PWA via `vite-plugin-pwa`: `manifest.webmanifest` (name/theme/bg + 192/512/maskable icons),
+generated `sw.js` with `navigateFallback: index.html` (offline app shell), and a `prompt`-mode
+update flow that raises a "Reload" toast. `QueryClientProvider` + `Toaster` mounted at the root.
+Verified: `make lint` clean; frontend **19 tests pass** (Button/Modal/Toaster, router 404 +
+redirect, manifest fields, SW-register smoke) + typecheck + prettier; `pnpm build` emits the SW +
+manifest + icons (16 precached entries). **Deferred (as scoped):** aggressive SW caching/offline
+polish (phase-49); real workspace internals (phase-09); admin settings screen (phase-52). A live
+Lighthouse "installable" audit / offline-reload needs a running browser (not available in this
+env) — validated structurally via the emitted manifest + service worker instead.

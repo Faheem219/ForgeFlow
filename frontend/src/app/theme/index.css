@@ -2,10 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (dark, indigo/violet). Tailwind `brand`/`accent` scales live in tailwind.config. */
 :root {
   color-scheme: dark;
+  --surface: #020617; /* slate-950 */
+  --surface-raised: #0f172a; /* slate-900 */
+  --border: #1e293b; /* slate-800 */
+  --text: #f1f5f9; /* slate-100 */
+  --text-muted: #94a3b8; /* slate-400 */
+  --brand: #6366f1;
+  --accent: #8b5cf6;
+  --radius: 0.75rem;
 }
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+  }
+
+  /* Visible, consistent keyboard focus for a11y. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-slate-950;
+  }
+
+  ::selection {
+    background-color: rgb(99 102 241 / 0.35);
+  }
+}
+
+/* Slim, theme-matched scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #334155;
+  border-radius: 9999px;
 }
