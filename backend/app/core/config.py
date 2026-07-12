@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     seed_admin_email: str = ""  # optional dev admin, created by scripts/seed.py when both set
     seed_admin_password: str = ""
 
+    # --- Realtime (phase-05) ---
+    realtime_ring_size: int = 256  # per-project replay ring buffer size
+    realtime_heartbeat_s: float = 20.0  # WS heartbeat/ping interval
+
     # --- Anthropic ---
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""

@@ -2,7 +2,19 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../lib/stores/authStore';
+import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { useUiStore } from '../../lib/stores/uiStore';
+
+const rtLabel: Record<string, string> = {
+  open: 'live',
+  connecting: 'connecting',
+  closed: 'offline',
+};
+const rtDot: Record<string, string> = {
+  open: 'bg-emerald-400',
+  connecting: 'bg-amber-400 animate-pulse',
+  closed: 'bg-slate-600',
+};
 
 const nav = [
   { to: '/', label: 'Dashboard', end: true },
@@ -14,6 +26,7 @@ export function AppShell(): JSX.Element {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
+  const rtStatus = useRealtimeStore((s) => s.status);
   const navigate = useNavigate();
 
   function logout(): void {
@@ -67,10 +80,11 @@ export function AppShell(): JSX.Element {
           <div className="flex items-center gap-4 text-sm">
             <span
               className="flex items-center gap-1.5 text-slate-400"
-              title="Realtime connects in phase 05"
+              title="Realtime connection"
+              data-testid="rt-status"
             >
-              <span className="h-2 w-2 rounded-full bg-slate-600" aria-hidden />
-              offline
+              <span className={`h-2 w-2 rounded-full ${rtDot[rtStatus]}`} aria-hidden />
+              {rtLabel[rtStatus]}
             </span>
             <span title="Theme: dark" aria-hidden>
               🌙

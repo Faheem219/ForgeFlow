@@ -6,6 +6,7 @@ import Register from '../features/auth/Register';
 import { RequireAuth } from '../features/auth/guards';
 import Dashboard from '../features/dashboard/Dashboard';
 import UiKit from '../features/kit/UiKit';
+import RealtimeDemo from '../features/realtime/RealtimeDemo';
 import Settings from '../features/settings/Settings';
 import Workspace from '../features/workspace/Workspace';
 import NotFound from './NotFound';
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: '/', element: <Dashboard /> },
       { path: '/projects/:id', element: <Workspace /> },
       { path: '/settings', element: <Settings /> },
+      { path: '/_realtime', element: <RealtimeDemo /> },
       { path: '*', element: <NotFound /> },
     ],
   },

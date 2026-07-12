@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
+from bson.errors import InvalidId
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -65,6 +66,6 @@ class AuthService:
     async def get_user_by_id(self, user_id: str) -> User | None:
         try:
             oid = PydanticObjectId(user_id)
-        except (ValueError, TypeError):
+        except (InvalidId, ValueError, TypeError):
             return None
         return await self._users.get(oid)

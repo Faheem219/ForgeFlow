@@ -67,4 +67,20 @@ Implements §7 realtime conventions. Every long-running task (agent tokens, file
 
 ## Status
 
-⬜ todo
+✅ done — Backend: typed `Event` + `EventType` schema; in-process `RealtimeHub` (per-project
+monotonic `seq`, bounded replay ring buffer, pub/sub queues, `subscription()` CM) + module `emit`
+helper; WS route `GET /ws/projects/{id}` (JWT-in-query auth, project/demo-channel authz, initial
+`ping` handshake, `last_seq` replay with dedup, heartbeat, clean disconnect) + a `POST
+/realtime/demo/progress` sample stream; wired into `create_app()`; ring/heartbeat are
+config-resolved. Frontend: reconnecting `RealtimeClient` (exp backoff, `last_seq` resume, seq
+dedup, ping-ignore), `realtimeStore`, topbar connection indicator (offline/connecting/live), and a
+`/_realtime` demo panel. Verified: `make lint` clean; `make test` = **backend 41** (hub
+ordering/replay/beyond-window/per-project-seq, WS auth+authz incl. malformed-id rejection) **+
+frontend 23** (wsClient dedup, reconnect+resume-from-last_seq, exp backoff, stop-on-close);
+frontend build OK. **Live end-to-end over a real socket (uvicorn + websockets client):** ordered
+stream `[1,2,3,4]`, resume `last_seq=6 → [7,8]` (no loss/dupes), and both no-token + foreign-channel
+rejections. **Bug fixed en route:** `bson.InvalidId` isn't a `ValueError` subclass here — added it
+to the id-parse guards in `authorize_project` + `get_user_by_id` (a malformed id would have 500'd).
+**Deferred (scoped):** the TestClient WS test (Starlette teardown deadlock) was replaced by the
+live-socket validation; `events_ref` persistence is phase-46; producers (agent/fs/test/deploy
+events) are their own phases.
