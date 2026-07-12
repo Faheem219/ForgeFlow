@@ -69,4 +69,17 @@ Gates every user-scoped resource (projects, sandboxes, credentials, data). Estab
 
 ## Status
 
-⬜ todo
+✅ done — Backend: `app/auth/` service (bcrypt via passlib, JWT via python-jose), schemas
+(`UserPublic` never returns the hash), `get_current_user` + `require_admin` deps, in-memory
+per-IP rate limiter, and `/auth/register|login|logout|me` wired into `create_app()`. Error
+taxonomy extended with `AuthError(401)`/`ForbiddenError(403)`/`ConflictError(409)`/
+`RateLimitError(429)` + a validation-error handler, all rendering the standard envelope. Seed
+script now creates a dev admin when `SEED_ADMIN_EMAIL`/`_PASSWORD` are set (Phase 02's deferral).
+Frontend: Zustand `authStore` (localStorage-persisted), `apiClient` attaches the bearer token +
+clears on 401, `RequireAuth`/`RequireAdmin` guards, Login/Register/Dashboard pages, and a
+React-Router router. Verified against real ephemeral mongod: `make lint` clean; `make test` =
+**backend 29** (auth flow via httpx, 409/401, bcrypt hashing, authz units) **+ frontend 7**
+(authStore persistence, RequireAuth redirect); frontend build OK; live uvicorn curl flow:
+health 200, register 201, dup 409, no-auth `/me` 401, admin login → `/me` role=admin.
+**Adaptation (flagged):** pinned `bcrypt<4.1` — passlib 1.7.4 breaks its self-test with bcrypt
+≥4.1. Deferred (out of scope): OAuth/SSO, password reset. Full app-shell/theme/PWA is Phase 04.

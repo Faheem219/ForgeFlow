@@ -16,6 +16,8 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -67,12 +69,53 @@ class ProviderError(ForgeFlowError):
         self.fallback_hint = fallback_hint
 
 
+class AuthError(ForgeFlowError):
+    """Authentication failed / missing (401)."""
+
+    status_code = 401
+    error_type = "auth_error"
+
+
+class ForbiddenError(ForgeFlowError):
+    """Authenticated but not allowed (403)."""
+
+    status_code = 403
+    error_type = "forbidden"
+
+
+class ConflictError(ForgeFlowError):
+    """A uniqueness/state conflict, e.g. duplicate email (409)."""
+
+    status_code = 409
+    error_type = "conflict"
+
+
+class RateLimitError(ForgeFlowError):
+    """Too many requests (429)."""
+
+    status_code = 429
+    error_type = "rate_limited"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Attach handlers that render every error as the standard envelope."""
 
     @app.exception_handler(ForgeFlowError)
     async def _handle_forgeflow_error(_request: Request, exc: ForgeFlowError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content=exc.to_envelope())
+
+    @app.exception_handler(RequestValidationError)
+    async def _handle_validation(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "type": "validation_error",
+                    "message": "Request validation failed",
+                    "detail": jsonable_encoder(exc.errors()),
+                }
+            },
+        )
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(_request: Request, _exc: Exception) -> JSONResponse:

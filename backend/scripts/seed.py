@@ -18,10 +18,12 @@ from pathlib import Path
 # Allow running as a bare file (`python scripts/seed.py`) by putting backend/ on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.auth.service import hash_password  # noqa: E402
 from app.core.config import get_config  # noqa: E402
-from app.db.models.enums import SettingCategory  # noqa: E402
+from app.db.models import User  # noqa: E402
+from app.db.models.enums import SettingCategory, UserRole  # noqa: E402
 from app.db.mongo import close_client, init_db  # noqa: E402
-from app.db.repos import PlatformSettingRepo  # noqa: E402
+from app.db.repos import PlatformSettingRepo, UserRepo  # noqa: E402
 
 # (config key, category) — keys match Settings field names so the phase-51 DB provider can
 # override them by the same name.
@@ -36,6 +38,23 @@ DEFAULT_SETTINGS: list[tuple[str, SettingCategory]] = [
 ]
 
 
+async def _seed_admin() -> str:
+    """Create a dev admin user when SEED_ADMIN_EMAIL/PASSWORD are configured."""
+    config = get_config()
+    email = str(config.get("seed_admin_email")).strip().lower()
+    password = str(config.get("seed_admin_password"))
+    if not email or not password:
+        return "skipped (set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD to enable)"
+
+    users = UserRepo()
+    if await users.get_by_email(email) is not None:
+        return f"already exists ({email})"
+    await users.insert(
+        User(email=email, hashed_password=hash_password(password), role=UserRole.admin)
+    )
+    return f"created admin ({email})"
+
+
 async def seed() -> None:
     await init_db()  # ensures indexes on all collections
     config = get_config()
@@ -47,7 +66,10 @@ async def seed() -> None:
             await repo.upsert(key, config.get(key), category)
             created += 1
 
+    admin_status = await _seed_admin()
+
     print(f"seed complete: indexes ensured; {created} default platform settings created")
+    print(f"admin user: {admin_status}")
     await close_client()
 
 

@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
+    # --- Auth (phase-03) ---
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 1440
+    auth_rate_limit_per_minute: int = 30  # per client IP on /auth/login + /auth/register
+    seed_admin_email: str = ""  # optional dev admin, created by scripts/seed.py when both set
+    seed_admin_password: str = ""
+
     # --- Anthropic ---
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""

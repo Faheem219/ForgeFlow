@@ -16,7 +16,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 |----|-------|------|-----------|--------|
 | [01](./phase-01-repo-tooling.md) | Repo, tooling & local dev | 0 · Foundations | — | ✅ |
 | [02](./phase-02-data-layer.md) | Control-plane data layer | 0 · Foundations | 01 | ✅ |
-| [03](./phase-03-auth.md) | Auth & user management | 0 · Foundations | 02 | ⬜ |
+| [03](./phase-03-auth.md) | Auth & user management | 0 · Foundations | 02 | ✅ |
 | [04](./phase-04-frontend-shell-pwa.md) | Frontend app shell & PWA base | 0 · Foundations | 01 | ⬜ |
 | [05](./phase-05-realtime-hub.md) | Realtime event hub | 0 · Foundations | 03 | ⬜ |
 | [06](./phase-06-project-lifecycle-state-machine.md) | Project lifecycle & stage state machine | 1 · Orchestration Core | 02, 03 | ⬜ |

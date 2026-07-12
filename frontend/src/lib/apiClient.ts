@@ -1,5 +1,8 @@
 // Typed fetch wrapper for the ForgeFlow control-plane API.
 // Base URL comes from VITE_API_BASE_URL (falls back to localhost for dev).
+// The bearer token (if any) is attached from the auth store; a 401 clears the session.
+
+import { useAuthStore } from './stores/authStore';
 
 export const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -21,10 +24,19 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const { token } = useAuthStore.getState();
   const res = await fetch(`${apiBaseUrl}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
   });
+
+  if (res.status === 401) {
+    useAuthStore.getState().clear();
+  }
 
   if (!res.ok) {
     let type = 'system_error';

@@ -16,6 +16,7 @@ dependencies = [
     "cryptography>=43",
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
+    "bcrypt>=4.0.1,<4.1",  # passlib 1.7.4 breaks with bcrypt>=4.1 (72-byte self-test)
     "websockets>=12",
 ]
 
@@ -46,6 +47,20 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "A", "W"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI intentionally calls these in argument defaults (dependency injection).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Security",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # The error taxonomy name `SystemError` intentionally shadows the builtin (mandated by the plan);
