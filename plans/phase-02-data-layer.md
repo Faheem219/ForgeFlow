@@ -79,4 +79,14 @@ Implements `IMPLEMENTATION_PLAN.md` §6 (domain model) and D8 (single Atlas clus
 
 ## Status
 
-⬜ todo
+✅ done — All §6 entities + `PlatformSetting` implemented as Beanie documents with the specified
+indexes; `BaseRepo` + per-aggregate repos (incl. `ProjectRepo.list_for_user`,
+`ArtifactRepo.latest_version`/`create_version`, `StageStateRepo.get_or_create`,
+`PlatformSettingRepo.upsert`); Mongo client + best-effort lifespan wiring in `create_app()`;
+seed script (`make seed`) + disposable-DB test fixture. Verified against a real ephemeral
+MongoDB (mongod 7.0.11): `make lint` clean and `make test` = **backend 26 passed** (incl. DB
+integration: CRUD, artifact versioning, unique indexes for email / (project,stage) / setting key)
+**+ frontend 3 passed**; seed created 7 default platform settings; CI backend job now runs a
+`mongo:7` service. **Adaptation (flagged):** pinned `beanie<2` to keep the documented **Motor +
+Beanie** stack (§4) — Beanie 2.x switched to pymongo-async. Deferred: dev-admin-user seeding
+(needs password hashing, phase-03) and secret **encryption** (phase-34).

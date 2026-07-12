@@ -3,7 +3,7 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
 
-.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env
+.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -51,3 +51,6 @@ fmt-frontend: ## prettier --write
 
 check-env: ## Verify no direct os.environ reads outside the config layer
 	@bash infra/scripts/check_no_os_environ.sh
+
+seed: ## Ensure indexes + seed default platform settings (needs MongoDB)
+	cd backend && uv run python -m scripts.seed

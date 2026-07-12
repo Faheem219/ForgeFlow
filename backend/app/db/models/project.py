@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import ClassVar
+
+import pymongo
+from beanie import Document, PydanticObjectId
+from pydantic import Field
+from pymongo import IndexModel
+
+from app.db.models.common import utcnow
+from app.db.models.enums import ProjectStatus, Stage
+
+
+class Project(Document):
+    user_id: PydanticObjectId
+    name: str
+    current_stage: Stage = Stage.design
+    status: ProjectStatus = ProjectStatus.active
+    stack: str = "fixed-mern-ts"
+    sandbox_id: str | None = None
+    app_db_name: str
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+    class Settings:
+        name = "projects"
+        indexes: ClassVar[list[IndexModel]] = [
+            IndexModel(
+                [("user_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)],
+                name="proj_user_created",
+            ),
+        ]
