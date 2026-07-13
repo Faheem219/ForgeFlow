@@ -83,6 +83,13 @@ class ForbiddenError(ForgeFlowError):
     error_type = "forbidden"
 
 
+class NotFoundError(ForgeFlowError):
+    """No such resource, or the caller does not own it (404 — existence is not leaked)."""
+
+    status_code = 404
+    error_type = "not_found"
+
+
 class ConflictError(ForgeFlowError):
     """A uniqueness/state conflict, e.g. duplicate email (409)."""
 

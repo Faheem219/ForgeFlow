@@ -75,4 +75,4 @@ This is the load-bearing implementation of invariant D12 and §8. Every stage ha
 
 ## Status
 
-⬜ todo
+✅ done

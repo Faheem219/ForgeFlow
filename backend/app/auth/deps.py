@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from beanie import PydanticObjectId
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -26,6 +27,13 @@ async def get_current_user(
     if user is None:
         raise AuthError("User no longer exists")
     return user
+
+
+async def get_current_user_id(user: User = Depends(get_current_user)) -> PydanticObjectId:
+    """The authenticated user's id, narrowed to non-optional (a fetched user always has one)."""
+    if user.id is None:  # pragma: no cover - a persisted user always carries an id
+        raise AuthError("Invalid user")
+    return user.id
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
