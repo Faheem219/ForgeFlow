@@ -66,4 +66,4 @@ Implements §6 (`Message`, `Artifact`) and the §7 idempotency rule ("artifacts 
 
 ## Status
 
-⬜ todo
+✅ done

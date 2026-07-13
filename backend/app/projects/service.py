@@ -19,17 +19,19 @@ from app.db.models import Project, StageState
 from app.db.models.common import utcnow
 from app.db.models.enums import ProjectStatus, Stage, StageStatus
 from app.db.repos import ProjectRepo, StageStateRepo
+from app.orchestrator.artifacts import ArtifactService
+from app.orchestrator.messages import MessageService
 from app.projects.state_machine import Action, apply_transition
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
 
 
-def parse_object_id(raw: str) -> PydanticObjectId:
+def parse_object_id(raw: str, label: str = "Project") -> PydanticObjectId:
     """Parse a path-param string into an ObjectId, or 404 (never leak malformed-id vs missing)."""
     try:
         return PydanticObjectId(raw)
     except (InvalidId, ValueError, TypeError) as exc:
-        raise NotFoundError("Project not found") from exc
+        raise NotFoundError(f"{label} not found") from exc
 
 
 @dataclass(frozen=True)
@@ -89,8 +91,11 @@ class ProjectService:
 
     async def delete(self, project_id: PydanticObjectId, user_id: PydanticObjectId) -> None:
         project = await self.get_owned(project_id, user_id)
+        # Cascade: stage states, conversation, and versioned artifacts (+ their offloaded blobs).
         for state in await self._stages.list_for_project(project_id):
             await state.delete()
+        await MessageService().delete_for_project(project_id)
+        await ArtifactService().delete_for_project(project_id)
         await project.delete()
 
     async def list_stages(

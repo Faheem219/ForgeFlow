@@ -95,12 +95,22 @@ class MessageRepo(BaseRepo[Message]):
         super().__init__(Message)
 
     async def list_for_project(
-        self, project_id: PydanticObjectId, stage: Stage | None = None
+        self,
+        project_id: PydanticObjectId,
+        stage: Stage | None = None,
+        *,
+        skip: int = 0,
+        limit: int | None = None,
     ) -> list[Message]:
         query: dict[str, Any] = {"project_id": project_id}
         if stage is not None:
             query["stage"] = stage
-        return await Message.find(query).sort("+created_at").to_list()
+        cursor = Message.find(query).sort("+created_at")
+        if skip:
+            cursor = cursor.skip(skip)
+        if limit is not None:
+            cursor = cursor.limit(limit)
+        return await cursor.to_list()
 
 
 class ArtifactRepo(BaseRepo[Artifact]):

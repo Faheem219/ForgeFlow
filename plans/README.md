@@ -20,7 +20,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [04](./phase-04-frontend-shell-pwa.md) | Frontend app shell & PWA base | 0 · Foundations | 01 | ✅ |
 | [05](./phase-05-realtime-hub.md) | Realtime event hub | 0 · Foundations | 03 | ✅ |
 | [06](./phase-06-project-lifecycle-state-machine.md) | Project lifecycle & stage state machine | 1 · Orchestration Core | 02, 03 | ✅ |
-| [07](./phase-07-conversation-artifact-model.md) | Conversation & artifact model | 1 · Orchestration Core | 06 | ⬜ |
+| [07](./phase-07-conversation-artifact-model.md) | Conversation & artifact model | 1 · Orchestration Core | 06 | ✅ |
 | [08](./phase-08-conductor.md) | Conductor (orchestrator) | 1 · Orchestration Core | 05, 06, 07 | ⬜ |
 | [09](./phase-09-workspace-ui-shell.md) | Workspace UI shell | 1 · Orchestration Core | 04, 05, 08 | ⬜ |
 | [10](./phase-10-sandbox-base-image.md) | Sandbox base image | 2 · Sandbox & IDE | 01 | ⬜ |

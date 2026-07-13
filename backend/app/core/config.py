@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"
 
+    # --- Artifacts & blobs (phase-07) ---
+    blob_backend: str = "gridfs"  # gridfs | filesystem
+    blob_fs_dir: str = ""  # filesystem-backend root (required when blob_backend=filesystem)
+    artifact_inline_max_bytes: int = 16384  # payloads <= this stay inline; larger go to a blob
+
     # --- Sandbox (phase 10/11) ---
     sandbox_image: str = "forgeflow-sandbox:latest"
     sandbox_cpu_limit: float = 1.0

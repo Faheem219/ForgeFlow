@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.auth.deps import get_current_user_id
-from app.db.models.enums import Stage
+from app.db.models.enums import ArtifactType, Stage
+from app.orchestrator.artifacts import ArtifactService
+from app.orchestrator.messages import MessageService
+from app.orchestrator.schemas import ArtifactPublic, MessagePublic
 from app.projects.schemas import (
     ProjectCreateRequest,
     ProjectPublic,
@@ -80,3 +83,32 @@ async def transition_stage(
         parse_object_id(project_id), user_id, stage, body.action
     )
     return StageTransitionResponse.from_outcome(outcome)
+
+
+@router.get("/{project_id}/messages", response_model=list[MessagePublic])
+async def list_messages(
+    project_id: str,
+    stage: Stage | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> list[MessagePublic]:
+    pid = parse_object_id(project_id)
+    await ProjectService().get_owned(pid, user_id)
+    messages = await MessageService().list_for_project(pid, stage=stage, skip=skip, limit=limit)
+    return [MessagePublic.from_message(m) for m in messages]
+
+
+@router.get("/{project_id}/artifacts", response_model=list[ArtifactPublic])
+async def list_artifacts(
+    project_id: str,
+    stage: Stage | None = Query(default=None),
+    artifact_type: ArtifactType | None = Query(default=None, alias="type"),
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> list[ArtifactPublic]:
+    pid = parse_object_id(project_id)
+    await ProjectService().get_owned(pid, user_id)
+    artifacts = await ArtifactService().list_for_project(
+        pid, stage=stage, artifact_type=artifact_type
+    )
+    return [ArtifactPublic.from_artifact(a) for a in artifacts]
