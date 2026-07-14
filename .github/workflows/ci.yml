@@ -57,6 +57,14 @@ jobs:
       - name: No direct os.environ outside config layer
         run: bash infra/scripts/check_no_os_environ.sh
 
+  sandbox:
+    name: Sandbox image (build + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image and run Node + Playwright smoke
+        run: bash sandbox/smoke/run_smoke.sh
+
   frontend:
     name: Frontend (lint + type + tests + build)
     runs-on: ubuntu-latest

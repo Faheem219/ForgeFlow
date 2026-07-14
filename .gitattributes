@@ -1,0 +1,6 @@
+# Files that run inside Linux containers / shells must keep LF line endings even when checked out
+# on Windows — CRLF breaks shebangs (`#!/usr/bin/env bash\r`) and Dockerfile parsing at runtime.
+*.sh            text eol=lf
+sandbox/Dockerfile   text eol=lf
+sandbox/entrypoint.sh text eol=lf
+sandbox/smoke/*.cjs  text eol=lf

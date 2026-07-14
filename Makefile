@@ -2,8 +2,9 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
+SANDBOX_IMAGE ?= forgeflow-sandbox:latest
 
-.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed
+.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed sandbox-build sandbox-smoke
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -54,3 +55,9 @@ check-env: ## Verify no direct os.environ reads outside the config layer
 
 seed: ## Ensure indexes + seed default platform settings (needs MongoDB)
 	cd backend && uv run python -m scripts.seed
+
+sandbox-build: ## Build the sandbox image (Node 20 + pnpm + Playwright chromium, non-root)
+	docker build -t $(SANDBOX_IMAGE) sandbox/
+
+sandbox-smoke: ## Build + smoke-test the sandbox image (Node app + Playwright chromium)
+	SANDBOX_IMAGE=$(SANDBOX_IMAGE) bash sandbox/smoke/run_smoke.sh

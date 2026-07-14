@@ -1,0 +1,4 @@
+# Keep the build context tiny: the image only needs entrypoint.sh. Smoke assets, docs, etc. are
+# mounted at run time, never baked into the image.
+*
+!entrypoint.sh

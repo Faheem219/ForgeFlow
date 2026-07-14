@@ -23,7 +23,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [07](./phase-07-conversation-artifact-model.md) | Conversation & artifact model | 1 · Orchestration Core | 06 | ✅ |
 | [08](./phase-08-conductor.md) | Conductor (orchestrator) | 1 · Orchestration Core | 05, 06, 07 | ✅ |
 | [09](./phase-09-workspace-ui-shell.md) | Workspace UI shell | 1 · Orchestration Core | 04, 05, 08 | ✅ |
-| [10](./phase-10-sandbox-base-image.md) | Sandbox base image | 2 · Sandbox & IDE | 01 | ⬜ |
+| [10](./phase-10-sandbox-base-image.md) | Sandbox base image | 2 · Sandbox & IDE | 01 | ✅ |
 | [11](./phase-11-sandbox-manager.md) | Sandbox manager | 2 · Sandbox & IDE | 06, 10 | ⬜ |
 | [12](./phase-12-workspace-filesystem-service.md) | Workspace filesystem service | 2 · Sandbox & IDE | 11 | ⬜ |
 | [13](./phase-13-command-execution-terminal.md) | Command execution & terminal | 2 · Sandbox & IDE | 05, 11 | ⬜ |

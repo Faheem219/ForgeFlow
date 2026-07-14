@@ -64,4 +64,10 @@ Implements D5/§4 sandbox image and the §7 security posture (generated code run
 
 ## Status
 
-⬜ todo
+✅ done
+
+> **Environment note:** Docker/Colima is not available in the authoring environment, so
+> `make sandbox-build` / `run_smoke.sh` were not executed locally. All artifacts are statically
+> validated (`bash -n`, `node --check`, YAML parse) and a CI `sandbox` job builds the image and runs
+> the Node + Playwright smoke on push. Run `make sandbox-smoke` locally where Docker is available to
+> confirm the acceptance criteria end-to-end.
