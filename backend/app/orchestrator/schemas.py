@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel
+from beanie import PydanticObjectId
+from pydantic import BaseModel, Field
 
 from app.db.models import Artifact, Message
-from app.db.models.enums import ArtifactType, MessageRole, Stage
+from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 
 
 class MessagePublic(BaseModel):
@@ -70,3 +72,86 @@ class ArtifactDiffResponse(BaseModel):
     a: str
     b: str
     diff: str
+
+
+# --------------------------------------------------------------------- Conductor (phase-08)
+
+
+class IntentAction(StrEnum):
+    """The three UI affordances (§8): iterate, accept-and-advance, opt out."""
+
+    refine = "refine"
+    proceed = "proceed"
+    skip = "skip"
+
+
+class IntentRequest(BaseModel):
+    """``POST /projects/{id}/intent`` body — project id comes from the path."""
+
+    stage: Stage
+    action: IntentAction
+    message: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class Intent(BaseModel):
+    """A fully-resolved user intent handed to the conductor."""
+
+    project_id: PydanticObjectId
+    stage: Stage
+    action: IntentAction
+    message: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_request(cls, project_id: PydanticObjectId, body: IntentRequest) -> Intent:
+        return cls(
+            project_id=project_id,
+            stage=body.stage,
+            action=body.action,
+            message=body.message,
+            payload=body.payload,
+        )
+
+
+class OutboundMessage(BaseModel):
+    """A message a stage handler wants persisted (usually the assistant's reply)."""
+
+    role: MessageRole = MessageRole.assistant
+    content: str
+
+
+class ArtifactSpec(BaseModel):
+    """An artifact a stage handler wants versioned + stored by the conductor."""
+
+    stage: Stage
+    type: ArtifactType
+    text: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class StageResult(BaseModel):
+    """What a stage handler returns; the conductor persists it and applies the transition.
+
+    ``next_status`` optionally overrides the status the state machine would set (e.g. a real
+    handler that needs more input can return ``awaiting_user``). ``events`` are extra realtime
+    events to emit beyond the ``stage.transition`` the conductor always emits.
+    """
+
+    messages: list[OutboundMessage] = Field(default_factory=list)
+    artifacts: list[ArtifactSpec] = Field(default_factory=list)
+    next_status: StageStatus | None = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class IntentResponse(BaseModel):
+    """Summary of a conductor run, returned by the intent endpoint."""
+
+    stage: Stage
+    action: IntentAction
+    from_status: StageStatus
+    to_status: StageStatus
+    stale: list[Stage]
+    messages: list[MessagePublic]
+    artifacts: list[ArtifactPublic]
+    run_id: str

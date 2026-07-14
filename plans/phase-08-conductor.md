@@ -68,4 +68,4 @@ The "conductor" of §8/domain glossary — the single place that owns transition
 
 ## Status
 
-⬜ todo
+✅ done

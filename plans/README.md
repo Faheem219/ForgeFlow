@@ -21,7 +21,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [05](./phase-05-realtime-hub.md) | Realtime event hub | 0 · Foundations | 03 | ✅ |
 | [06](./phase-06-project-lifecycle-state-machine.md) | Project lifecycle & stage state machine | 1 · Orchestration Core | 02, 03 | ✅ |
 | [07](./phase-07-conversation-artifact-model.md) | Conversation & artifact model | 1 · Orchestration Core | 06 | ✅ |
-| [08](./phase-08-conductor.md) | Conductor (orchestrator) | 1 · Orchestration Core | 05, 06, 07 | ⬜ |
+| [08](./phase-08-conductor.md) | Conductor (orchestrator) | 1 · Orchestration Core | 05, 06, 07 | ✅ |
 | [09](./phase-09-workspace-ui-shell.md) | Workspace UI shell | 1 · Orchestration Core | 04, 05, 08 | ⬜ |
 | [10](./phase-10-sandbox-base-image.md) | Sandbox base image | 2 · Sandbox & IDE | 01 | ⬜ |
 | [11](./phase-11-sandbox-manager.md) | Sandbox manager | 2 · Sandbox & IDE | 06, 10 | ⬜ |

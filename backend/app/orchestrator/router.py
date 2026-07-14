@@ -13,10 +13,18 @@ from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
 from app.db.models import Artifact
 from app.orchestrator.artifacts import ArtifactService
-from app.orchestrator.schemas import ArtifactDetail, ArtifactDiffResponse
+from app.orchestrator.conductor import Conductor
+from app.orchestrator.schemas import (
+    ArtifactDetail,
+    ArtifactDiffResponse,
+    Intent,
+    IntentRequest,
+    IntentResponse,
+)
 from app.projects.service import ProjectService, parse_object_id
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
+intents_router = APIRouter(prefix="/projects", tags=["orchestrator"])
 
 
 async def _owned_artifact(artifact_id: str, user_id: PydanticObjectId) -> Artifact:
@@ -48,3 +56,14 @@ async def diff_artifacts(
     artifact_b = await _owned_artifact(b, user_id)
     diff = await ArtifactService().diff(artifact_a, artifact_b)
     return ArtifactDiffResponse(a=str(artifact_a.id), b=str(artifact_b.id), diff=diff)
+
+
+@intents_router.post("/{project_id}/intent", response_model=IntentResponse)
+async def submit_intent(
+    project_id: str,
+    body: IntentRequest,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> IntentResponse:
+    """Route a user intent through the conductor; detailed progress streams over the WS."""
+    intent = Intent.from_request(parse_object_id(project_id), body)
+    return await Conductor().handle_intent(user_id, intent)
