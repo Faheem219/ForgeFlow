@@ -4,7 +4,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
 SANDBOX_IMAGE ?= forgeflow-sandbox:latest
 
-.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed sandbox-build sandbox-smoke
+.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed sandbox-build sandbox-smoke sandbox-reap-all
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -61,3 +61,10 @@ sandbox-build: ## Build the sandbox image (Node 20 + pnpm + Playwright chromium,
 
 sandbox-smoke: ## Build + smoke-test the sandbox image (Node app + Playwright chromium)
 	SANDBOX_IMAGE=$(SANDBOX_IMAGE) bash sandbox/smoke/run_smoke.sh
+
+sandbox-reap-all: ## DANGER: remove ALL forgeflow sandbox containers + volumes (deletes workspace code)
+	@echo "This removes ALL forgeflow-sb-* containers and forgeflow-vol-* volumes."
+	@echo "Workspace code in those volumes is PERMANENTLY LOST."
+	@read -p "Type 'yes' to continue: " ans; [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
+	-docker ps -aq --filter "label=forgeflow.managed=true" | xargs -r docker rm -f
+	-docker volume ls -q --filter "label=forgeflow.managed=true" | xargs -r docker volume rm

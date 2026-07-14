@@ -68,6 +68,8 @@ extend-immutable-calls = [
 "app/core/errors.py" = ["A001", "A002", "A003", "A004"]
 "app/core/config.py" = ["A001", "A002", "A003", "A004"]
 "tests/*" = ["A004"]
+# The docker-SDK test double mirrors real method signatures (e.g. containers.list(all=...)).
+"tests/sandbox/fakes.py" = ["A002", "E501"]
 
 # ------------------------------------------------------------------ black
 [tool.black]

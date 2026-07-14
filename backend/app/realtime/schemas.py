@@ -18,6 +18,7 @@ class EventType(StrEnum):
     terminal_output = "terminal.output"
     test_result = "test.result"
     deploy_status = "deploy.status"
+    sandbox_status = "sandbox.status"
     stage_transition = "stage.transition"
     progress = "progress"
     ping = "ping"

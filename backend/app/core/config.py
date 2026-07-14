@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     sandbox_mem_limit: str = "1g"
     sandbox_pids_limit: int = 256
     sandbox_idle_timeout_s: int = 900
+    sandbox_read_only_root: bool = True  # read-only root; /workspace volume + /tmp stay writable
+    sandbox_reap_interval_s: int = 60  # how often the idle reaper sweeps
     preview_base_domain: str = ""
 
     # --- Design providers (phase 17/18) ---

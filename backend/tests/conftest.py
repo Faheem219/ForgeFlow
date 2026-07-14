@@ -13,18 +13,21 @@ from app.auth.ratelimit import reset_rate_limits
 from app.core.config import get_config, reset_config
 from app.db.models import ALL_DOCUMENT_MODELS
 from app.realtime.hub import reset_hub
+from app.sandbox.manager import reset_manager
 
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> Iterator[None]:
-    """Fresh config resolver + rate-limit counters + realtime hub per test."""
+    """Fresh config resolver + rate-limit counters + realtime hub + sandbox manager per test."""
     reset_config()
     reset_rate_limits()
     reset_hub()
+    reset_manager()
     yield
     reset_config()
     reset_rate_limits()
     reset_hub()
+    reset_manager()
 
 
 @pytest_asyncio.fixture

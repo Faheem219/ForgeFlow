@@ -70,4 +70,27 @@ Implements D5 + §7 security posture at runtime. This is where the sandbox isola
 
 ## Status
 
-⬜ todo
+✅ done — `app/sandbox/manager.py` `SandboxManager`: `ensure` (create-if-absent / start-if-stopped,
+persists `Project.sandbox_id`, idempotent when running), `stop`, `destroy(remove_volume=False)`,
+`status`, plus startup `reconcile` (adopt managed containers by label / clear stale mappings) and an
+idle `reaper`. Isolation posture lives in a pure `build_run_kwargs` — `network_mode=none`,
+`cap_drop=[ALL]`, `security_opt=[no-new-privileges]`, read-only root (config-gated) with a per-project
+named volume at `/workspace` + `/tmp` tmpfs, `pids_limit`/`mem_limit`/`nano_cpus` from config. Docker
+SDK calls are off-loaded via `asyncio.to_thread`; the client is injectable (tests use an in-memory
+Docker double). Containers/volumes carry `forgeflow.managed`/`forgeflow.project` labels for
+reconciliation + reaping. `app/sandbox/router.py`: `GET status` + `POST ensure|stop|destroy`
+(ownership-checked via `ProjectService.get_owned`). Lifecycle emits `sandbox.status` realtime events
+(new `EventType`). Wired into `create_app()` (router) and the lifespan (best-effort `reconcile` +
+cancellable `run_reaper`). New config keys `sandbox_read_only_root` (default true) +
+`sandbox_reap_interval_s` (60) with `.env.example` entries; `make sandbox-reap-all` (guarded) added.
+
+Verified: `ruff`/`black`/`mypy --strict` clean; **backend 168 passed** (19 new — isolation-flags,
+idle-reaper incl. activity-reset + no-op-when-empty, full lifecycle create→start→stop→restart→destroy
+with `sandbox_id` persistence, two-projects-never-share-state, reconcile adopt/clear, and the router
+happy-path + auth/ownership guards; Docker faked, DB on ephemeral Mongo). **Live boot with Docker
+unreachable** (the current dev box): `/health` 200, `reconcile` fails **soft** (INFO log, no crash),
+reaper starts + shuts down cleanly, `ensure` unauth → 401 envelope.
+
+**Deferred (scoped):** an opt-in real-daemon integration test (behind a marker) is a no-op without
+Colima here — the fake-client lifecycle + isolation-spec assertions cover the acceptance criteria; FS
+API (phase-12), exec/terminal (phase-13), and preview networking (phase-15) build on this container.
