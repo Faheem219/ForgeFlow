@@ -67,4 +67,4 @@ The UI contract from §8. This shell is where every later stage panel (design, I
 
 ## Status
 
-⬜ todo
+✅ done
