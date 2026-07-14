@@ -111,3 +111,5 @@ frontend/.env.*
 # --- ForgeFlow: Caddy / infra local state ---
 infra/caddy/data/
 infra/caddy/config/
+# Claude Code personal settings
+.claude/settings.local.json
