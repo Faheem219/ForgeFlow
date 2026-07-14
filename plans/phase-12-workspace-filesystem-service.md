@@ -68,4 +68,31 @@ The FS layer the IDE (`phase-14`) and agent tools (`phase-21`) use. Git-backing 
 
 ## Status
 
-⬜ todo
+✅ done — Workspace FS + git over the sandbox, behind a `WorkspaceRuntime` seam with two backends:
+`DockerRuntime` (**production** — every op via docker exec/archive, so untrusted files never touch
+the host, §7) and `LocalRuntime` (**tests only** — real Python FS + real `git` in an isolated temp
+dir). `app/sandbox/paths.py` `safe_rel_path` is the pure choke-point (rejects `..`/absolute/`~`/NUL);
+`app/sandbox/fs.py` `WorkspaceFs` adds a resolved-path **symlink-escape guard**, the config
+`workspace_max_file_bytes` cap, UTF-8 handling, and emits `fs.write`; `list_tree`/`read`/`write`/
+`delete`/`mkdir`/`move`. `app/sandbox/git.py` `WorkspaceGit`: `ensure_init` (idempotent, identity +
+`gpgsign=false`), `commit`→`(sha, created)`, `current_sha`, `diff(a,b,paths?)`, and the moving
+`refs/forgeflow/last-passing` ref (`set_last_passing`/`last_passing`) that anchors repair diffs
+(updated by the test runner in phase-28). `app/sandbox/workspace.py` `WorkspaceService` binds a
+project→runtime (git-backed on first touch) behind an injectable provider; the default provider
+`manager.ensure`+`DockerRuntime` (so FS access also touches idle activity, phase-11). `fs_router.py`:
+`GET fs/tree`, `GET/PUT/DELETE fs/file`, `POST fs/dir`, `POST fs/move`, `POST sandbox/git/commit`,
+`GET sandbox/git` — ownership-checked; wired into `create_app()`. New config key + `.env.example`
+entry; `manager.get_container` accessor added.
+
+Verified: `ruff`/`black`/`mypy --strict` clean; **backend 207 passed** (39 new — path-safety
+(traversal/absolute/NUL/**symlink-escape**/oversize), FS round-trip write→read-identical +
+list/subdir/delete/move/mkdir + `fs.write` events, git init/commit/no-op/**diff**/last-passing (real
+git), tar pack/unpack round-trip covering DockerRuntime's archive plumbing, and the HTTP router
+happy-path + traversal-rejected + git commit/diff + auth/ownership guards over a real local FS).
+**Live boot** (Docker unreachable): `/health` 200, all six workspace routes registered, unauth
+`PUT /fs/file` → 401 envelope.
+
+**Deferred (scoped):** an opt-in real-daemon integration test for `DockerRuntime` is a no-op without
+Colima here — its archive plumbing is unit-tested (tar helpers) and the identical service logic is
+proven via `LocalRuntime`; Monaco IDE (phase-14), exec/terminal (phase-13), and repair-context
+assembly (phase-29) build on these primitives.

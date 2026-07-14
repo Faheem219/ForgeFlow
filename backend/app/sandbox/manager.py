@@ -122,6 +122,10 @@ class SandboxManager:
         except NotFound:
             return None
 
+    async def get_container(self, project_id: str) -> Any | None:
+        """The running container object for a project, or ``None`` (used by the FS layer)."""
+        return await self._get_container(project_id)
+
     async def _ensure_volume(self, project_id: str) -> None:
         client = self._client()
         name = volume_name(project_id)

@@ -25,7 +25,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [09](./phase-09-workspace-ui-shell.md) | Workspace UI shell | 1 · Orchestration Core | 04, 05, 08 | ✅ |
 | [10](./phase-10-sandbox-base-image.md) | Sandbox base image | 2 · Sandbox & IDE | 01 | ✅ |
 | [11](./phase-11-sandbox-manager.md) | Sandbox manager | 2 · Sandbox & IDE | 06, 10 | ✅ |
-| [12](./phase-12-workspace-filesystem-service.md) | Workspace filesystem service | 2 · Sandbox & IDE | 11 | ⬜ |
+| [12](./phase-12-workspace-filesystem-service.md) | Workspace filesystem service | 2 · Sandbox & IDE | 11 | ✅ |
 | [13](./phase-13-command-execution-terminal.md) | Command execution & terminal | 2 · Sandbox & IDE | 05, 11 | ⬜ |
 | [14](./phase-14-web-ide-monaco.md) | Web IDE (Monaco) + live code streaming | 2 · Sandbox & IDE | 09, 12 | ⬜ |
 | [15](./phase-15-live-preview.md) | Live preview | 2 · Sandbox & IDE | 11, 13 | ⬜ |

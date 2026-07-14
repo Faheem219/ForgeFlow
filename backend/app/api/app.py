@@ -24,6 +24,7 @@ from app.orchestrator.router import intents_router
 from app.orchestrator.router import router as artifacts_router
 from app.projects.router import router as projects_router
 from app.realtime.router import router as realtime_router
+from app.sandbox.fs_router import router as workspace_router
 from app.sandbox.manager import get_manager
 from app.sandbox.router import router as sandbox_router
 
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(realtime_router)
     app.include_router(projects_router)
     app.include_router(sandbox_router)
+    app.include_router(workspace_router)
     app.include_router(artifacts_router)
     app.include_router(intents_router)
 

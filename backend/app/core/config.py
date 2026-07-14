@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     sandbox_idle_timeout_s: int = 900
     sandbox_read_only_root: bool = True  # read-only root; /workspace volume + /tmp stay writable
     sandbox_reap_interval_s: int = 60  # how often the idle reaper sweeps
+    workspace_max_file_bytes: int = 1_048_576  # per-file read/write cap for the FS API (phase-12)
     preview_base_domain: str = ""
 
     # --- Design providers (phase 17/18) ---
