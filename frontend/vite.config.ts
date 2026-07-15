@@ -17,6 +17,12 @@ export default defineConfig({
         // App-shell offline fallback; conservative caching (phase-49 hardens this).
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        // Keep Monaco out of the precache. Its language workers are large (ts.worker alone is
+        // ~6 MB — it's the TypeScript compiler), and the IDE can't work offline regardless: it
+        // reads and writes the sandbox over the API. Precaching it would make the service-worker
+        // install cost megabytes for no offline benefit, so these chunks load on demand instead.
+        // The app shell stays precached, which is where the offline value actually is.
+        globIgnores: ['**/*.worker-*.js', '**/Ide-*.js'],
       },
     }),
   ],

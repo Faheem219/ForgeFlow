@@ -1,7 +1,12 @@
-import { Badge, Button, EmptyState, Panel } from '../../components/ui';
+import { Suspense, lazy } from 'react';
+
+import { Badge, Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import type { IntentAction, Stage } from '../../lib/types';
 import { STAGE_LABELS, STATUS_LABELS, STATUS_TONES } from './stageMeta';
 import { useStage } from './useStage';
+
+// Monaco is heavy — only pull it in when the Build stage is actually shown.
+const Ide = lazy(() => import('../ide/Ide'));
 
 const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
@@ -10,13 +15,51 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 };
 
 /**
- * Placeholder panel for a stage. Real content (design upload, Monaco IDE, requirements form,
- * test/repair view, deploy topology, data browser) fills in per-stage in later epics — this
- * scaffold just exposes the refine/skip/proceed affordances and an artifacts area.
+ * Per-stage panel. Build hosts the web IDE; the remaining stages (design upload, requirements
+ * form, test/repair view, deploy topology, data browser) fill in during later epics — for those
+ * this scaffold just exposes the refine/skip/proceed affordances and an artifacts area.
  */
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);
   const status = stageState?.status ?? 'empty';
+
+  if (stage === 'build') {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+            {STAGE_LABELS.build}
+            <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
+          </span>
+          <div className="flex gap-2">
+            {(['refine', 'proceed', 'skip'] as IntentAction[]).map((action) => (
+              <Button
+                key={action}
+                size="sm"
+                variant={action === 'proceed' ? 'primary' : 'secondary'}
+                disabled={isActing}
+                data-testid={`panel-action-${action}`}
+                onClick={() => runAction(action)}
+              >
+                {ACTION_LABELS[action]}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1">
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Spinner />
+              </div>
+            }
+          >
+            <Ide projectId={projectId} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Panel

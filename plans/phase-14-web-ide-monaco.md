@@ -63,4 +63,41 @@ The IDE surface of D5 and the "watch it build" experience. Live streaming consum
 
 ## Status
 
-⬜ todo
+✅ done — `src/features/ide/`: Monaco editor bound to the phase-12 FS API with a **FileTree**
+(`/fs/tree`, flat→nested via a pure `buildTree` that also synthesises intermediate dirs),
+**EditorTabs** (dirty dots, generating badge, close), per-extension language detection, a
+theme-matched dark editor, and save via **Ctrl/Cmd-S** or button → `PUT /fs/file`. State lives in a
+pure `ideStore` (tabs/dirty/generating/conflict), so the interesting logic is testable without
+mounting Monaco. Mounted as the **Build** stage's primary surface, lazy-loaded.
+
+**Live-generation mode** (`liveWrites.ts`): `fs.write` → re-read the file (the event carries only a
+path) → open/focus it **read-only** with a "generating…" badge → unlock after a quiet period
+(`UNLOCK_QUIET_MS`; phase-23 can emit an explicit completion signal later). **Save + conflict:** a
+server write landing on unsaved edits raises a non-destructive keep-mine / reload prompt; a clean
+open file just reloads in place.
+
+Verified: eslint/prettier/tsc clean; **frontend 67 passed** (35 new — buildTree nesting/synthesised
+dirs, tree render+expand/collapse+open, open→tab, dirty→save→clean, Ctrl/Cmd-S, no-op save,
+save-failure keeps dirty, self-write marker, tab close; live stream read-only→unlock, successive
+writes, echo suppression, conflict raised + resolved both ways, foreign-project ignored, backlog not
+replayed); build OK. **Live FS contract check against the real backend — 11/11**: the exact URLs
+`api.ts` builds work, response shapes match the TS types (incl. `size: null` for dirs), nested files
+report their ancestor dirs, and **an edit persists across a re-read and on disk in the workspace**.
+
+**Design notes / decisions:**
+- **Monaco is bundled locally** (`monacoSetup.ts` points the loader at the bundled copy and wires
+  the language workers). The default CDN loader would break the PWA offline and add a third-party
+  origin.
+- **Monaco is excluded from the PWA precache** (`globIgnores` in `vite.config.ts`). `ts.worker` is
+  ~6 MB (it *is* the TypeScript compiler) and the IDE chunk ~3.4 MB, but the IDE cannot work offline
+  regardless — it reads/writes the sandbox over the API — so precaching it would cost megabytes of
+  service-worker install for zero offline benefit. The app shell stays precached (1.3 MB); the IDE
+  loads on demand. Trimming Monaco's language set is a possible future win (phase-49).
+- **Bug caught en route:** `useLiveWrites` started from `processed = 0`, so mounting the IDE would
+  replay the realtime store's whole buffered backlog (up to 200 events) and spray open a tab per past
+  write. It now baselines to the current event count (and re-baselines on project switch); covered by
+  a regression test.
+
+**Deferred (scoped):** codegen itself is phase-23, preview is phase-15; no LSP/IntelliSense beyond
+Monaco defaults. `act()` warnings in the IDE tests come from react-query refetches resolving outside
+`act` — a known async-testing artifact; `waitFor` keeps the tests deterministic.

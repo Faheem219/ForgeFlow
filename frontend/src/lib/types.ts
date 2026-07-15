@@ -49,6 +49,19 @@ export interface ArtifactDto {
   created_at: string;
 }
 
+/** Workspace filesystem (backend app/sandbox/fs.py). Paths are workspace-relative, POSIX. */
+export interface FileNode {
+  path: string;
+  type: 'file' | 'dir';
+  size: number | null;
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  size: number;
+}
+
 export interface IntentRequest {
   stage: Stage;
   action: IntentAction;
