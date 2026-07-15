@@ -66,4 +66,38 @@ Stitch is the **default** design backend (D9) but carries real constraints (D10)
 
 ## Status
 
-⬜ todo
+✅ done — Real Stitch adapter behind the phase-16 `DesignProvider`, split into transport + auth +
+quota so each is independently testable:
+
+- `app/design/stitch.py` — `StitchDesignProvider` (registered as a builtin; `health()=down` when
+  creds absent so the stage falls back, never crashes). Maps all interface methods to `DesignResult`/
+  `DesignCode`; `fetch_code` is free, generations consume quota. `StitchClient` Protocol isolates the
+  MCP transport; `HttpStitchClient` is the default (JSON-over-HTTP; the one unavoidable schema guess,
+  isolated behind the Protocol). `_invoke()` adds transparent token refresh-on-401 (once) + transient
+  backoff/retry.
+- `app/design/stitch_auth.py` — `StitchAuth`: OAuth2 client-credentials, cached token, transparent
+  refresh across expiry (configurable skew), **single-flight** lock (concurrent callers → one fetch).
+  Tokens/secrets never logged; error bodies never echoed.
+- `app/design/stitch_quota.py` + `DesignQuota` model — per-provider/per-window counter in
+  `forgeflow_meta` (atomic `$inc` upsert). Pre-check fails soft at the cap with a classified
+  `ProviderError`; `design.quota` events on a reserved `platform` channel carry a strictly token-free
+  payload; `health()` degrades near the cap.
+- `app/design/stitch_errors.py` — classifies every failure (auth/quota/transient/fatal) as a
+  `ProviderError` with `kind` + a tailored `fallback_hint` (phase-19/48 use these to degrade).
+- Config: `STITCH_MCP_URL/TOKEN_URL/SCOPE/TIMEOUT_S/MAX_RETRIES/TOKEN_SKEW_S/QUOTA_SOFT_RATIO` added
+  to the resolver + `.env.example` (all `admin > env > default`).
+
+**Acceptance:** token refresh across an expiry boundary + single-flight (tested with a mock
+clock/counting fetcher); quota exhaustion fails soft (no crash, clear hint, `design.quota` event,
+transport never called); tokens never persisted on the artifact or emitted. The **live** screenshot→
+artifact smoke needs real GCP/Stitch creds (unavailable here); it is covered offline by
+`test_stitch_mock.py` against a mocked MCP (image/text→UI, refine, fetch_code, result→artifact).
+
+**Verification:** ruff/black clean; mypy clean on the phase-17 surface; **design suite 46 passed**
+(30 new) and **full non-sandbox backend suite 195 passed** — no regressions from registering Stitch
+as a builtin or adding `DesignQuota`/`design.quota`.
+
+**Environment notes:** run on Windows where (a) the locked FastAPI 0.139.0 lives in an isolated
+venv (system has 0.115.5), and (b) the phase-11 sandbox `runtime.py` imports Unix-only `fcntl`/`pty`/
+`termios`, so `tests/sandbox` and a whole-repo mypy can't run here — they're the other agent's
+Linux-verified code and were left untouched. Everything phase-17 touches is fully verified.

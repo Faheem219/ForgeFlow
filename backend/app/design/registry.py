@@ -18,6 +18,7 @@ from app.core.errors import UserError
 from app.db.models import Project
 from app.design.base import DesignProvider
 from app.design.fake import FakeDesignProvider
+from app.design.stitch import StitchDesignProvider
 
 _PROVIDERS: dict[str, DesignProvider] = {}
 
@@ -62,6 +63,9 @@ def reset_registry() -> None:
 def _register_builtins() -> None:
     # The fake is always available: it is the offline dev/demo fallback and the test default.
     register_provider(FakeDesignProvider())
+    # Stitch is the default provider (D9). It registers unconditionally and self-reports
+    # health()=down when creds are absent, so the stage falls back rather than crashing.
+    register_provider(StitchDesignProvider())
 
 
 _register_builtins()

@@ -7,6 +7,7 @@ from beanie import Document
 from app.db.models.artifact import Artifact
 from app.db.models.credential import Credential
 from app.db.models.deployment import Deployment
+from app.db.models.design_quota import DesignQuota
 from app.db.models.message import Message
 from app.db.models.platform_setting import PlatformSetting
 from app.db.models.project import Project
@@ -33,6 +34,7 @@ ALL_DOCUMENT_MODELS: list[type[Document]] = [
     Deployment,
     Run,
     PlatformSetting,
+    DesignQuota,
 ]
 
 __all__ = [
@@ -41,6 +43,7 @@ __all__ = [
     "Cost",
     "Credential",
     "Deployment",
+    "DesignQuota",
     "Feature",
     "Message",
     "PlatformSetting",

@@ -21,6 +21,7 @@ class EventType(StrEnum):
     test_result = "test.result"
     deploy_status = "deploy.status"
     sandbox_status = "sandbox.status"
+    design_quota = "design.quota"
     stage_transition = "stage.transition"
     progress = "progress"
     ping = "ping"

@@ -120,6 +120,15 @@ class Settings(BaseSettings):
     stitch_client_id: str = ""
     stitch_client_secret: str = ""
     stitch_quota_monthly: int = 350
+    # Stitch MCP + OAuth endpoints and call tuning (phase-17). Blank creds → provider health()=down
+    # and the design stage falls back (fake/figma) rather than crashing.
+    stitch_mcp_url: str = ""  # Stitch MCP server base URL
+    stitch_token_url: str = ""  # OAuth2 token endpoint (client-credentials grant)
+    stitch_scope: str = ""  # optional OAuth scope
+    stitch_timeout_s: float = 60.0  # per-call wall clock
+    stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
+    stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry
+    stitch_quota_soft_ratio: float = 0.9  # used/limit >= this → health() degraded
     figma_token: str = ""
     design_provider: str = "stitch"
 
