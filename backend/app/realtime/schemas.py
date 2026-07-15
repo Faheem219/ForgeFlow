@@ -16,6 +16,7 @@ class EventType(StrEnum):
     agent_token = "agent.token"
     fs_write = "fs.write"
     terminal_output = "terminal.output"
+    exec_status = "exec.status"
     test_result = "test.result"
     deploy_status = "deploy.status"
     sandbox_status = "sandbox.status"

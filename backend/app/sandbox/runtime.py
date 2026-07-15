@@ -18,15 +18,23 @@ layer off-loads them via :func:`asyncio.to_thread`.
 
 from __future__ import annotations
 
+import fcntl
 import io
 import os
 import posixpath
+import pty
+import queue
 import shutil
+import signal
+import struct
 import subprocess
 import tarfile
+import termios
+import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from docker.errors import NotFound
 
@@ -60,6 +68,45 @@ class NodeInfo:
     size: int
 
 
+StreamName = Literal["stdout", "stderr"]
+
+
+@dataclass(frozen=True)
+class ExecChunk:
+    stream: StreamName
+    data: bytes
+
+
+class ExecHandle(Protocol):
+    """A running non-interactive command."""
+
+    def stream(self) -> Iterator[ExecChunk]:
+        """Blocking generator of output chunks, ending when the process closes its pipes."""
+        ...
+
+    def wait(self) -> int:
+        """The exit code (call after :meth:`stream` is exhausted)."""
+        ...
+
+    def kill(self) -> None:
+        """Terminate the process (and its children) — used for timeout + cancellation."""
+        ...
+
+
+class TtyHandle(Protocol):
+    """An interactive PTY-backed shell."""
+
+    def read(self, size: int = 4096) -> bytes:
+        """Blocking read of TTY output; returns ``b""`` at EOF."""
+        ...
+
+    def write(self, data: bytes) -> None: ...
+    def resize(self, cols: int, rows: int) -> None: ...
+    def close(self) -> None:
+        """Kill the shell and release the PTY (must reap the process)."""
+        ...
+
+
 class WorkspaceRuntime(Protocol):
     @property
     def workspace_root(self) -> str:
@@ -76,6 +123,30 @@ class WorkspaceRuntime(Protocol):
     def real_path(self, rel: str) -> str: ...
     def list_tree(self, start: str, depth: int) -> list[NodeInfo]: ...
     def run_git(self, args: list[str], stdin: bytes | None = None) -> ExecResult: ...
+    def start_exec(
+        self, argv: list[str], cwd: str = "", env: dict[str, str] | None = None
+    ) -> ExecHandle: ...
+    def start_tty(
+        self, argv: list[str], cwd: str = "", cols: int = 80, rows: int = 24
+    ) -> TtyHandle: ...
+
+
+def _pump_pipe(fd: int, name: StreamName, sink: queue.Queue[ExecChunk | None]) -> None:
+    """Forward a pipe to the queue using unbuffered reads (so output streams live)."""
+    try:
+        while True:
+            chunk = os.read(fd, 4096)
+            if not chunk:
+                break
+            sink.put(ExecChunk(name, chunk))
+    except OSError:
+        pass
+    finally:
+        sink.put(None)
+
+
+def _set_winsize(fd: int, cols: int, rows: int) -> None:
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
 
 # --------------------------------------------------------------------------- tar helpers (pure)
@@ -108,6 +179,78 @@ def read_single_from_tar(chunks: Any) -> bytes:
 
 
 # --------------------------------------------------------------------------- LocalRuntime (tests)
+
+
+def _kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+    """SIGKILL the whole group so children (shells, dev servers) die with the parent."""
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+
+
+class LocalExecHandle:
+    def __init__(self, proc: subprocess.Popen[bytes]) -> None:
+        self._proc = proc
+
+    def stream(self) -> Iterator[ExecChunk]:
+        sink: queue.Queue[ExecChunk | None] = queue.Queue()
+        pipes: list[tuple[int, StreamName]] = []
+        if self._proc.stdout is not None:
+            pipes.append((self._proc.stdout.fileno(), "stdout"))
+        if self._proc.stderr is not None:
+            pipes.append((self._proc.stderr.fileno(), "stderr"))
+        for fd, name in pipes:
+            threading.Thread(target=_pump_pipe, args=(fd, name, sink), daemon=True).start()
+
+        remaining = len(pipes)
+        while remaining > 0:
+            item = sink.get()
+            if item is None:
+                remaining -= 1
+                continue
+            yield item
+
+    def wait(self) -> int:
+        return self._proc.wait()
+
+    def kill(self) -> None:
+        _kill_process_group(self._proc)
+
+
+class LocalTtyHandle:
+    def __init__(self, proc: subprocess.Popen[bytes], master_fd: int) -> None:
+        self._proc = proc
+        self._master = master_fd
+        self._closed = False
+
+    def read(self, size: int = 4096) -> bytes:
+        try:
+            return os.read(self._master, size)
+        except OSError:
+            return b""  # EIO is how a PTY reports the child hung up
+
+    def write(self, data: bytes) -> None:
+        os.write(self._master, data)
+
+    def resize(self, cols: int, rows: int) -> None:
+        _set_winsize(self._master, cols, rows)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        _kill_process_group(self._proc)
+        try:
+            os.close(self._master)
+        except OSError:
+            pass
+        self._proc.wait()  # reap; never leave a zombie behind
 
 
 class LocalRuntime:
@@ -207,8 +350,110 @@ class LocalRuntime:
         )
         return ExecResult(completed.returncode, completed.stdout, completed.stderr)
 
+    def start_exec(
+        self, argv: list[str], cwd: str = "", env: dict[str, str] | None = None
+    ) -> ExecHandle:
+        proc = subprocess.Popen(  # noqa: S603 - argv list, never a shell string
+            argv,
+            cwd=self._abs(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, **(env or {})},
+            start_new_session=True,  # own process group → killable as a unit
+        )
+        return LocalExecHandle(proc)
+
+    def start_tty(
+        self, argv: list[str], cwd: str = "", cols: int = 80, rows: int = 24
+    ) -> TtyHandle:
+        master, slave = pty.openpty()
+        _set_winsize(master, cols, rows)
+        try:
+            proc = subprocess.Popen(  # noqa: S603 - argv list, never a shell string
+                argv,
+                cwd=self._abs(cwd),
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                env={**os.environ, "TERM": "xterm-256color"},
+                start_new_session=True,
+            )
+        except BaseException:
+            os.close(master)
+            os.close(slave)
+            raise
+        os.close(slave)  # the child owns it now; keeping it open would mask EOF
+        return LocalTtyHandle(proc, master)
+
 
 # ------------------------------------------------------------------------- DockerRuntime (prod)
+
+
+class DockerExecHandle:
+    """A ``docker exec`` in flight. Killed by signalling its in-container PID."""
+
+    def __init__(self, container: Any, exec_id: str, stream: Any) -> None:
+        self._container = container
+        self._api = container.client.api
+        self._exec_id = exec_id
+        self._stream = stream
+
+    def stream(self) -> Iterator[ExecChunk]:
+        for out, err in self._stream:
+            if out:
+                yield ExecChunk("stdout", out)
+            if err:
+                yield ExecChunk("stderr", err)
+
+    def wait(self) -> int:
+        # ExitCode is null until the exec finishes, hence: drain the stream first.
+        return int(self._api.exec_inspect(self._exec_id).get("ExitCode") or 0)
+
+    def kill(self) -> None:
+        pid = self._api.exec_inspect(self._exec_id).get("Pid")
+        if not pid:
+            return
+        # Docker has no "kill exec" API; signal the process group from inside the container.
+        self._container.exec_run(["sh", "-c", f"kill -9 -{pid} 2>/dev/null || kill -9 {pid}"])
+
+
+class DockerTtyHandle:
+    def __init__(self, container: Any, exec_id: str, socket: Any) -> None:
+        self._container = container
+        self._api = container.client.api
+        self._exec_id = exec_id
+        self._socket = socket
+        self._closed = False
+
+    def _raw(self) -> Any:
+        # docker-py wraps the connection; the raw socket is what supports recv/sendall.
+        return getattr(self._socket, "_sock", self._socket)
+
+    def read(self, size: int = 4096) -> bytes:
+        try:
+            data: bytes = self._raw().recv(size)
+        except OSError:
+            return b""
+        return data
+
+    def write(self, data: bytes) -> None:
+        self._raw().sendall(data)
+
+    def resize(self, cols: int, rows: int) -> None:
+        self._api.exec_resize(self._exec_id, height=rows, width=cols)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        pid = self._api.exec_inspect(self._exec_id).get("Pid")
+        if pid:
+            self._container.exec_run(["sh", "-c", f"kill -9 -{pid} 2>/dev/null || kill -9 {pid}"])
+        try:
+            self._raw().close()
+        except OSError:
+            pass
 
 
 class DockerRuntime:
@@ -317,3 +562,38 @@ class DockerRuntime:
     def run_git(self, args: list[str], stdin: bytes | None = None) -> ExecResult:
         # stdin-carrying git ops (e.g. `git apply`) arrive in the repair phases; not needed here.
         return self._exec(["git", *args], workdir=DOCKER_WORKSPACE)
+
+    def start_exec(
+        self, argv: list[str], cwd: str = "", env: dict[str, str] | None = None
+    ) -> ExecHandle:
+        api = self._container.client.api
+        created = api.exec_create(
+            self._container.id,
+            argv,
+            workdir=self._abs(cwd),
+            environment=env or None,
+            stdout=True,
+            stderr=True,
+            tty=False,
+        )
+        stream = api.exec_start(created["Id"], stream=True, demux=True)
+        return DockerExecHandle(self._container, created["Id"], stream)
+
+    def start_tty(
+        self, argv: list[str], cwd: str = "", cols: int = 80, rows: int = 24
+    ) -> TtyHandle:
+        api = self._container.client.api
+        created = api.exec_create(
+            self._container.id,
+            argv,
+            workdir=self._abs(cwd),
+            environment={"TERM": "xterm-256color"},
+            stdout=True,
+            stderr=True,
+            stdin=True,
+            tty=True,
+        )
+        socket = api.exec_start(created["Id"], tty=True, socket=True, demux=False)
+        handle = DockerTtyHandle(self._container, created["Id"], socket)
+        handle.resize(cols, rows)
+        return handle

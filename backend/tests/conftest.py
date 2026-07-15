@@ -13,24 +13,27 @@ from app.auth.ratelimit import reset_rate_limits
 from app.core.config import get_config, reset_config
 from app.db.models import ALL_DOCUMENT_MODELS
 from app.realtime.hub import reset_hub
+from app.sandbox.exec import reset_exec_service
 from app.sandbox.manager import reset_manager
 from app.sandbox.workspace import reset_runtime_provider
 
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> Iterator[None]:
-    """Fresh config + rate-limit counters + realtime hub + sandbox manager/runtime per test."""
+    """Fresh config + rate limits + hub + sandbox manager/runtime/exec service per test."""
     reset_config()
     reset_rate_limits()
     reset_hub()
     reset_manager()
     reset_runtime_provider()
+    reset_exec_service()
     yield
     reset_config()
     reset_rate_limits()
     reset_hub()
     reset_manager()
     reset_runtime_provider()
+    reset_exec_service()
 
 
 @pytest_asyncio.fixture

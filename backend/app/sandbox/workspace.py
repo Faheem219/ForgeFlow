@@ -48,7 +48,8 @@ def reset_runtime_provider() -> None:
     _provider = None
 
 
-def _active_provider() -> RuntimeProvider:
+def active_runtime_provider() -> RuntimeProvider:
+    """The effective provider (injected override, else the production Docker-backed one)."""
     return _provider or _default_runtime_provider
 
 
@@ -57,7 +58,7 @@ class WorkspaceService:
         self._provider = provider
 
     async def _open(self, project: Project) -> tuple[WorkspaceFs, WorkspaceGit]:
-        provider = self._provider or _active_provider()
+        provider = self._provider or active_runtime_provider()
         runtime = await provider(project)
         git = WorkspaceGit(runtime)
         await git.ensure_init()  # every workspace is git-backed from first touch

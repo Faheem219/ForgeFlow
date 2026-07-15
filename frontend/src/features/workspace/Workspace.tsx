@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { EmptyState, Panel, Spinner } from '../../components/ui';
+import { Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
@@ -13,6 +13,9 @@ import { StageNavigator } from './StageNavigator';
 import { StagePanel } from './StagePanel';
 import { getProject, listStages, submitIntent } from './api';
 
+// xterm is heavy and only needed once the drawer is opened — keep it out of the main chunk.
+const Terminal = lazy(() => import('../ide/Terminal'));
+
 export default function Workspace(): JSX.Element {
   const { id } = useParams();
   const projectId = id ?? '';
@@ -22,6 +25,7 @@ export default function Workspace(): JSX.Element {
   const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const openProject = useWorkspaceStore((s) => s.openProject);
   const storeProjectId = useWorkspaceStore((s) => s.projectId);
+  const [terminalOpen, setTerminalOpen] = useState(false);
 
   const projectQuery = useQuery({
     queryKey: ['project', projectId],
@@ -104,11 +108,21 @@ export default function Workspace(): JSX.Element {
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
-        <p className="text-sm text-slate-400">
-          Any stage is clickable — start anywhere, skip, or jump back.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
+          <p className="text-sm text-slate-400">
+            Any stage is clickable — start anywhere, skip, or jump back.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setTerminalOpen((open) => !open)}
+          aria-pressed={terminalOpen}
+        >
+          {terminalOpen ? 'Hide terminal' : 'Terminal'}
+        </Button>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
@@ -130,6 +144,20 @@ export default function Workspace(): JSX.Element {
           <ChatPanel projectId={projectId} activeStage={activeStage} />
         </section>
       </div>
+
+      {terminalOpen ? (
+        <section className="h-64 shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Spinner />
+              </div>
+            }
+          >
+            <Terminal projectId={projectId} />
+          </Suspense>
+        </section>
+      ) : null}
     </div>
   );
 }

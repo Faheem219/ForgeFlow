@@ -65,4 +65,36 @@ Powers dep installs, dev servers, and test runs (agent tools `phase-21`, test ru
 
 ## Status
 
-⬜ todo
+✅ done — Exec + terminal transport over the sandbox, extending the phase-12 `WorkspaceRuntime` seam
+with `start_exec`/`start_tty` so both backends share one service. `DockerRuntime` (**production**):
+`exec_create`/`exec_start(demux)` streaming, `exec_inspect` exit codes, kill-by-PID (docker has no
+"kill exec" API), and a TTY exec socket + `exec_resize`. `LocalRuntime` (**tests**): real subprocess
+pipes + a real `pty`, each in its own process group so a kill takes the whole tree.
+
+`app/sandbox/exec.py` `ExecService.run(project, cmd, cwd, env, timeout)`: bridges the blocking
+runtime handle onto the loop (worker thread → `asyncio.Queue`, never blocking it), streams
+`terminal.output` chunks, emits `exec.status` started/exited (new `EventType`), enforces the
+timeout (kill + reap → exit `124`), supports `cancel(exec_id)`, caps concurrent execs per project,
+and captures combined output to a blob for later `TestRun` stdout refs (best-effort). Routes:
+`POST /projects/{id}/exec`, `POST /projects/{id}/exec/{exec_id}/cancel`, and
+`GET /ws/projects/{id}/terminal` — the terminal deliberately carries **raw bytes** (binary = stdin/
+stdout, text = JSON `resize`) to preserve TTY fidelity; the PTY is always reaped on disconnect.
+Frontend: `TerminalClient` (raw-byte WS, exp-backoff reconnect that resumes at the current size) +
+`Terminal.tsx` (xterm + FitAddon, ResizeObserver → PTY winsize, theme-matched), lazy-loaded behind a
+Workspace drawer so xterm stays out of the main chunk. New config keys `sandbox_exec_timeout_s`,
+`sandbox_max_concurrent_execs`, `sandbox_shell` (+ `.env.example`).
+
+Verified: `ruff`/`black`/`mypy --strict` + eslint/prettier/tsc clean; **backend 219 passed** (12 new)
+**+ frontend 45 passed** (14 new); frontend build OK (Terminal split into its own 294 kB chunk).
+**Live over real sockets** (uvicorn + `websockets`, real PTY) — 13/13: exec exit code, blob capture
+(real GridFS ref), stdout+stderr streamed, started/exited events, timeout→124; terminal runs
+commands, `node -v`→v20.14.0, **resize reaches the PTY** (`stty size`→`44 133`), **Ctrl-C interrupts**
+`sleep 60`, shell **reaped on disconnect**, and both no-token + foreign-project rejected.
+
+**Notes:** non-root execution is inherent to the production path — `DockerRuntime` execs inside the
+phase-10 image whose `USER app` (uid 1000) is the only account; `LocalRuntime` is a test backend and
+never used by the control plane. Pre-`accept()` WS rejections surface as an HTTP 403 handshake
+failure rather than the 4401/4403 close codes (same as phase-05) — the connection is refused either
+way. **Deferred (scoped):** a real-daemon integration test is a no-op without Colima here — the
+identical service logic is proven through `LocalRuntime`; Monaco (phase-14), preview (phase-15), and
+structured test parsing (phase-28) build on this.
