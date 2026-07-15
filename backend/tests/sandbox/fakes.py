@@ -114,8 +114,53 @@ class FakeVolumes:
         return volume
 
 
+class FakeNetwork:
+    def __init__(self, client: FakeDockerClient, name: str, kwargs: dict[str, Any]) -> None:
+        self._client = client
+        self.name = name
+        self.kwargs = kwargs
+        self.connected: list[FakeContainer] = []
+
+    def _find(self, container_id: str) -> FakeContainer | None:
+        for container in self._client.containers._store.values():
+            if container.id == container_id:
+                return container
+        return None
+
+    def connect(self, container_id: str) -> None:
+        container = self._find(container_id)
+        if container is not None and container not in self.connected:
+            self.connected.append(container)
+
+    def disconnect(self, container_id: str, force: bool = False) -> None:
+        container = self._find(container_id)
+        if container is not None and container in self.connected:
+            self.connected.remove(container)
+
+
+class FakeNetworks:
+    def __init__(self, client: FakeDockerClient) -> None:
+        self._client = client
+        self._store: dict[str, FakeNetwork] = {}
+
+    def get(self, name: str) -> FakeNetwork:
+        network = self._store.get(name)
+        if network is None:
+            raise NotFound(f"no such network: {name}")
+        return network
+
+    def create(self, **kwargs: Any) -> FakeNetwork:
+        name = kwargs["name"]
+        network = FakeNetwork(self._client, name, kwargs)
+        self._store[name] = network
+        self._client.network_create_calls.append(kwargs)
+        return network
+
+
 class FakeDockerClient:
     def __init__(self) -> None:
         self.containers = FakeContainers(self)
         self.volumes = FakeVolumes(self)
+        self.networks = FakeNetworks(self)
         self.run_calls: list[dict[str, Any]] = []
+        self.network_create_calls: list[dict[str, Any]] = []

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 
 import { Badge, Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import type { IntentAction, Stage } from '../../lib/types';
@@ -7,6 +7,7 @@ import { useStage } from './useStage';
 
 // Monaco is heavy — only pull it in when the Build stage is actually shown.
 const Ide = lazy(() => import('../ide/Ide'));
+const Preview = lazy(() => import('../ide/Preview'));
 
 const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
@@ -22,6 +23,7 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);
   const status = stageState?.status ?? 'empty';
+  const [showPreview, setShowPreview] = useState(false);
 
   if (stage === 'build') {
     return (
@@ -32,6 +34,15 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowPreview((open) => !open)}
+              aria-pressed={showPreview}
+              data-testid="toggle-preview"
+            >
+              {showPreview ? 'Hide preview' : 'Preview'}
+            </Button>
             {(['refine', 'proceed', 'skip'] as IntentAction[]).map((action) => (
               <Button
                 key={action}
@@ -46,7 +57,9 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
             ))}
           </div>
         </div>
-        <div className="min-h-0 flex-1">
+        <div
+          className={`grid min-h-0 flex-1 gap-3 ${showPreview ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
+        >
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">
@@ -56,6 +69,17 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
           >
             <Ide projectId={projectId} />
           </Suspense>
+          {showPreview ? (
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center">
+                  <Spinner />
+                </div>
+              }
+            >
+              <Preview projectId={projectId} />
+            </Suspense>
+          ) : null}
         </div>
       </div>
     );

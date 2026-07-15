@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 WORKSPACE = "/workspace"
 LABEL_MANAGED = "forgeflow.managed"
 LABEL_PROJECT = "forgeflow.project"
+LABEL_ROLE = "forgeflow.role"
 
 # Docker container.status → our coarse runtime state.
 _STARTING = {"created", "restarting"}
@@ -91,6 +92,26 @@ def build_run_kwargs(
         "volumes": {volume_name(project_id): {"bind": WORKSPACE, "mode": "rw"}},
         "labels": {LABEL_MANAGED: "true", LABEL_PROJECT: project_id},
         "restart_policy": {"Name": "no"},
+    }
+
+
+def build_preview_network_kwargs(name: str) -> dict[str, Any]:
+    """The ``docker network create`` spec for live preview (phase-15).
+
+    ``internal=True`` is the whole point: containers on this network can reach *each other*
+    (proxy → sandbox, and the browser's FE → BE calls land via the proxy), but the network has
+    **no route to the host or the internet**. This is a deliberate, minimal relaxation of the
+    ``network_mode=none`` default from phase-11 — never the host network. Flagged for the
+    phase-47 hardening review.
+
+    Pure + side-effect free so the isolation guarantee is unit-testable without a daemon.
+    """
+    return {
+        "name": name,
+        "driver": "bridge",
+        "internal": True,
+        "check_duplicate": True,
+        "labels": {LABEL_MANAGED: "true", LABEL_ROLE: "preview"},
     }
 
 
@@ -160,6 +181,50 @@ class SandboxManager:
             return False
         await asyncio.to_thread(container.stop, timeout=10)
         return True
+
+    # -- preview network (phase-15) ----------------------------------------------------
+
+    async def ensure_preview_network(self) -> Any:
+        """Get-or-create the shared internal preview network."""
+        client = self._client()
+        name = str(get_config().get("preview_network_name"))
+        try:
+            return await asyncio.to_thread(client.networks.get, name)
+        except NotFound:
+            kwargs = build_preview_network_kwargs(name)
+            try:
+                return await asyncio.to_thread(client.networks.create, **kwargs)
+            except APIError as exc:
+                raise SystemError("Failed to create the preview network") from exc
+
+    async def attach_preview_network(self, project_id: str) -> bool:
+        """Join the sandbox to the preview network so the proxy can reach its dev servers."""
+        container = await self._get_container(project_id)
+        if container is None:
+            return False
+        network = await self.ensure_preview_network()
+        try:
+            await asyncio.to_thread(network.connect, container.id)
+        except APIError:
+            # Already connected — docker reports a 403/409 here; joining twice is a no-op for us.
+            logger.debug("sandbox %s already on the preview network", project_id, exc_info=True)
+        return True
+
+    async def detach_preview_network(self, project_id: str) -> None:
+        """Drop the sandbox back to no-network once preview stops."""
+        container = await self._get_container(project_id)
+        if container is None:
+            return
+        client = self._client()
+        name = str(get_config().get("preview_network_name"))
+        try:
+            network = await asyncio.to_thread(client.networks.get, name)
+        except NotFound:
+            return
+        try:
+            await asyncio.to_thread(network.disconnect, container.id, force=True)
+        except APIError:
+            logger.debug("sandbox %s was not on the preview network", project_id, exc_info=True)
 
     # -- activity / reaping ------------------------------------------------------------
 

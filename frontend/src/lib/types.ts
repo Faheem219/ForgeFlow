@@ -62,6 +62,17 @@ export interface FileContent {
   size: number;
 }
 
+/** Live preview (backend app/sandbox/preview.py). */
+export type PreviewStatus = 'stopped' | 'starting' | 'running' | 'failed';
+
+export interface PreviewInfo {
+  project_id: string;
+  fe_url: string | null;
+  be_url: string | null;
+  fe_status: PreviewStatus;
+  be_status: PreviewStatus;
+}
+
 export interface IntentRequest {
   stage: Stage;
   action: IntentAction;

@@ -17,6 +17,7 @@ class EventType(StrEnum):
     fs_write = "fs.write"
     terminal_output = "terminal.output"
     exec_status = "exec.status"
+    preview_status = "preview.status"
     test_result = "test.result"
     deploy_status = "deploy.status"
     sandbox_status = "sandbox.status"

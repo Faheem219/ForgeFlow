@@ -43,8 +43,11 @@ class ExecOutcome:
     output_ref: str | None = None
 
 
-async def _aiter_chunks(handle: ExecHandle) -> AsyncIterator[ExecChunk]:
-    """Bridge the runtime's blocking chunk generator onto the event loop."""
+async def aiter_chunks(handle: ExecHandle) -> AsyncIterator[ExecChunk]:
+    """Bridge the runtime's blocking chunk generator onto the event loop.
+
+    Shared with the preview service (phase-15), which pumps long-lived dev-server output.
+    """
     loop = asyncio.get_running_loop()
     sink: asyncio.Queue[ExecChunk | None] = asyncio.Queue()
 
@@ -134,7 +137,7 @@ class ExecService:
         timed_out = False
         try:
             async with asyncio.timeout(window):
-                async for chunk in _aiter_chunks(handle):
+                async for chunk in aiter_chunks(handle):
                     collected += chunk.data
                     await emit(
                         project_id,

@@ -27,6 +27,7 @@ from app.realtime.router import router as realtime_router
 from app.sandbox.exec_router import router as exec_router
 from app.sandbox.fs_router import router as workspace_router
 from app.sandbox.manager import get_manager
+from app.sandbox.preview_router import router as preview_router
 from app.sandbox.router import router as sandbox_router
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(sandbox_router)
     app.include_router(workspace_router)
     app.include_router(exec_router)
+    app.include_router(preview_router)
     app.include_router(artifacts_router)
     app.include_router(intents_router)
 

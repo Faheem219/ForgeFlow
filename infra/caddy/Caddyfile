@@ -19,7 +19,22 @@
 	}
 }
 
-# Reserved for phase 15 (live preview): per-project subdomains, e.g.
-#   *.preview.localhost:80 {
-#       reverse_proxy sandbox-<project>:<port>
-#   }
+# --- Live preview (phase 15): per-project sandbox subdomains -------------------------------
+#
+# Routed by *name*, so no config regeneration is needed when a project appears: the sandbox
+# container is `forgeflow-sb-<project-id>` on the `forgeflow-preview` network, and Caddy's
+# docker DNS resolves it. Host labels are indexed right-to-left, e.g. for
+# `abc123.api.preview.localhost` → labels.0=localhost, .1=preview, .2=api, .3=abc123.
+#
+# The sandbox itself sits on an INTERNAL network (no host, no internet); this proxy is the only
+# way in, and it only reaches the two dev-server ports.
+
+# Backend: <project-id>.api.preview.localhost
+*.api.preview.localhost:80 {
+	reverse_proxy forgeflow-sb-{http.request.host.labels.3}:3001
+}
+
+# Frontend: <project-id>.preview.localhost
+*.preview.localhost:80 {
+	reverse_proxy forgeflow-sb-{http.request.host.labels.2}:5173
+}

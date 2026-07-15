@@ -97,7 +97,23 @@ class Settings(BaseSettings):
     sandbox_exec_timeout_s: int = 600  # default per-command wall clock before the process is killed
     sandbox_max_concurrent_execs: int = 3  # per project
     sandbox_shell: str = "/bin/bash"  # interactive terminal shell inside the sandbox
-    preview_base_domain: str = ""
+
+    # --- Live preview (phase-15) ---
+    # Commands run inside the sandbox against the phase-22 skeleton layout ({port} is substituted).
+    preview_fe_dir: str = "frontend"
+    preview_be_dir: str = "backend"
+    preview_fe_cmd: str = "pnpm dev --host 0.0.0.0 --port {port}"
+    preview_be_cmd: str = "pnpm dev"  # port arrives via the injected PORT env var
+    preview_fe_port: int = 5173
+    preview_be_port: int = 3001
+    preview_health_timeout_s: int = 90  # how long start() waits for both servers to answer
+    preview_health_path: str = "/"  # FE probe path; the BE probe uses /health (skeleton contract)
+    preview_be_health_path: str = "/health"
+    # Dedicated *internal* docker network for preview: sandbox↔proxy only, never the host (§7).
+    preview_network_name: str = "forgeflow-preview"
+    preview_base_domain: str = (
+        ""  # set in prod → https://<project>.<domain>; else *.preview.localhost
+    )
 
     # --- Design providers (phase 17/18) ---
     stitch_gcp_project: str = ""

@@ -64,8 +64,23 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      # The proxy straddles both: reachable from the host on :80, and able to reach sandboxes
+      # on the internal preview network. It is the ONLY route into a sandbox (phase-15).
+      - default
+      - preview
 
 volumes:
   mongo-data:
   caddy-data:
   caddy-config:
+
+networks:
+  default:
+  preview:
+    name: forgeflow-preview
+    # `internal` is the isolation guarantee: sandboxes joined here can be reached by the proxy
+    # and reach each other's dev servers, but have NO route to the host or the internet. The
+    # sandbox manager (phase-11) still creates containers with network_mode=none by default and
+    # only joins them here while preview runs.
+    internal: true

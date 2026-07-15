@@ -77,3 +77,26 @@ class GitCommitResponse(BaseModel):
 class GitInfo(BaseModel):
     current_sha: str | None
     last_passing: str | None
+
+
+# --- Live preview (phase-15) ---
+
+
+class PreviewProcess(StrEnum):
+    frontend = "frontend"
+    backend = "backend"
+
+
+class PreviewStatus(StrEnum):
+    stopped = "stopped"
+    starting = "starting"  # process is up but not answering health probes yet
+    running = "running"
+    failed = "failed"  # process exited on its own (crash / bad command)
+
+
+class PreviewInfo(BaseModel):
+    project_id: str
+    fe_url: str | None = None
+    be_url: str | None = None
+    fe_status: PreviewStatus = PreviewStatus.stopped
+    be_status: PreviewStatus = PreviewStatus.stopped
