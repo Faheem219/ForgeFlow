@@ -19,6 +19,9 @@ class Project(Document):
     status: ProjectStatus = ProjectStatus.active
     stack: str = "fixed-mern-ts"
     sandbox_id: str | None = None
+    # Per-project design provider override; None → the admin/env/default provider (phase-16).
+    # Lets one project pin Figma when Stitch's quota is exhausted, without affecting others (D10).
+    design_provider: str | None = None
     app_db_name: str
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

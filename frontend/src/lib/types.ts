@@ -16,6 +16,8 @@ export interface ProjectSummary {
   status: 'active' | 'archived';
   stack: string;
   sandbox_id: string | null;
+  /** Per-project design-provider override; null → the platform default (phase-16). */
+  design_provider: string | null;
   app_db_name: string;
   created_at: string;
   updated_at: string;

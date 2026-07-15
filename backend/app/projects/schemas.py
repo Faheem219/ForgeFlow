@@ -25,6 +25,7 @@ class ProjectPublic(BaseModel):
     status: ProjectStatus
     stack: str
     sandbox_id: str | None
+    design_provider: str | None
     app_db_name: str
     created_at: datetime
     updated_at: datetime
@@ -38,6 +39,7 @@ class ProjectPublic(BaseModel):
             status=project.status,
             stack=project.stack,
             sandbox_id=project.sandbox_id,
+            design_provider=project.design_provider,
             app_db_name=project.app_db_name,
             created_at=project.created_at,
             updated_at=project.updated_at,

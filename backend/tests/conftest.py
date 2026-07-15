@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.auth.ratelimit import reset_rate_limits
 from app.core.config import get_config, reset_config
 from app.db.models import ALL_DOCUMENT_MODELS
+from app.design.registry import reset_registry
 from app.realtime.hub import reset_hub
 from app.sandbox.exec import reset_exec_service
 from app.sandbox.manager import reset_manager
@@ -21,7 +22,7 @@ from app.sandbox.workspace import reset_runtime_provider
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> Iterator[None]:
-    """Fresh config + rate limits + hub + sandbox manager/runtime/exec/preview per test."""
+    """Fresh config + rate limits + hub + sandbox manager/runtime/exec/preview + design registry."""
     reset_config()
     reset_rate_limits()
     reset_hub()
@@ -29,6 +30,7 @@ def _reset_state() -> Iterator[None]:
     reset_runtime_provider()
     reset_exec_service()
     reset_preview_service()
+    reset_registry()
     yield
     reset_config()
     reset_rate_limits()
@@ -37,6 +39,7 @@ def _reset_state() -> Iterator[None]:
     reset_runtime_provider()
     reset_exec_service()
     reset_preview_service()
+    reset_registry()
 
 
 @pytest_asyncio.fixture

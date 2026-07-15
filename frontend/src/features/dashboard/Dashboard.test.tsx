@@ -21,6 +21,7 @@ function project(id: string, name: string): ProjectSummary {
     status: 'active',
     stack: 'fixed-mern-ts',
     sandbox_id: null,
+    design_provider: null,
     app_db_name: `app_${id}`,
     created_at: '',
     updated_at: '',

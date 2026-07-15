@@ -29,7 +29,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [13](./phase-13-command-execution-terminal.md) | Command execution & terminal | 2 · Sandbox & IDE | 05, 11 | ✅ |
 | [14](./phase-14-web-ide-monaco.md) | Web IDE (Monaco) + live code streaming | 2 · Sandbox & IDE | 09, 12 | ✅ |
 | [15](./phase-15-live-preview.md) | Live preview | 2 · Sandbox & IDE | 11, 13 | ✅ |
-| [16](./phase-16-designprovider-interface-registry.md) | DesignProvider interface & registry | 3 · Design | 08 | ⬜ |
+| [16](./phase-16-designprovider-interface-registry.md) | DesignProvider interface & registry | 3 · Design | 08 | ✅ |
 | [17](./phase-17-stitch-provider.md) | Stitch MCP provider | 3 · Design | 16 | ⬜ |
 | [18](./phase-18-figma-provider.md) | Figma MCP provider (alternative) | 3 · Design | 16 | ⬜ |
 | [19](./phase-19-design-stage-handler-ui.md) | Design stage handler & UI | 3 · Design | 09, 14, 16, 17 | ⬜ |
