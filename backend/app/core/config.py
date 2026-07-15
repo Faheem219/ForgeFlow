@@ -129,7 +129,11 @@ class Settings(BaseSettings):
     stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
     stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry
     stitch_quota_soft_ratio: float = 0.9  # used/limit >= this → health() degraded
+    # Figma MCP (phase-18): a static access token (no OAuth refresh). Blank token → health()=down.
     figma_token: str = ""
+    figma_mcp_url: str = ""  # Figma MCP server base URL
+    figma_timeout_s: float = 60.0  # per-call wall clock
+    figma_max_retries: int = 2  # extra attempts on transient errors
     design_provider: str = "stitch"
 
     # --- Deploy providers (phase 34/35) ---

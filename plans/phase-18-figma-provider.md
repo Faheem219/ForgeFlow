@@ -63,4 +63,29 @@ D9's second half: pluggability must be real, not theoretical. Figma is the alter
 
 ## Status
 
-⬜ todo
+✅ done — Second provider (`figma`) behind the same phase-16 `DesignProvider`, proving pluggability
+is real and giving Stitch a fallback target (D9/D10):
+
+- `app/design/figma.py` — `FigmaDesignProvider` (registered builtin; `health()=down` without a token
+  so the stage falls back). Supports text→UI, refine, fetch_code via a `FigmaClient` Protocol
+  (`HttpFigmaClient` is the default JSON-over-HTTP impl — the one schema guess, isolated behind the
+  Protocol). **No screenshot→UI:** `capabilities().from_image = False` and `generate_from_image`
+  raises an `unsupported` `ProviderError` *before* touching the transport — degrade clearly, never a
+  fake result (the D9 "capability differences" design note). `_invoke` retries transient errors (no
+  token refresh — the token is static).
+- `app/design/figma_auth.py` — static token from config; never logged.
+- `app/design/figma_errors.py` — classifies auth/**unsupported**/transient/fatal as `ProviderError`
+  with `kind` + a tailored `fallback_hint`.
+- Config: `FIGMA_MCP_URL/TIMEOUT_S/MAX_RETRIES` added to the resolver + `.env.example`.
+
+**Acceptance:** the *same* `DesignService.generate_from_text` call site produces a `design` artifact
+under `fake`, `figma`, and `stitch` with **only config differing** (no handler change) — covered by
+`test_provider_switch.py`, including flipping figma↔stitch on one project and getting versioned (not
+overwritten) artifacts. `capabilities()` truthfully reports supported ops; the unsupported op
+degrades with a clear message (`test_figma_capabilities.py`). Live Figma smoke needs a real
+`FIGMA_TOKEN`; covered offline against a mocked MCP (`test_figma_mock.py`).
+
+**Verification:** ruff/black + mypy (phase-18 surface) clean; **design suite 57 passed** (11 new) and
+**full non-sandbox backend suite 206 passed** — no regressions from registering Figma. Same
+Windows-environment notes as phase-17 (isolated FastAPI 0.139.0 venv; `tests/sandbox` untouched and
+skipped on this box).

@@ -18,6 +18,7 @@ from app.core.errors import UserError
 from app.db.models import Project
 from app.design.base import DesignProvider
 from app.design.fake import FakeDesignProvider
+from app.design.figma import FigmaDesignProvider
 from app.design.stitch import StitchDesignProvider
 
 _PROVIDERS: dict[str, DesignProvider] = {}
@@ -66,6 +67,8 @@ def _register_builtins() -> None:
     # Stitch is the default provider (D9). It registers unconditionally and self-reports
     # health()=down when creds are absent, so the stage falls back rather than crashing.
     register_provider(StitchDesignProvider())
+    # Figma is the alternative + Stitch's fallback target (D10); same self-reports-down behavior.
+    register_provider(FigmaDesignProvider())
 
 
 _register_builtins()

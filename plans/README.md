@@ -31,7 +31,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [15](./phase-15-live-preview.md) | Live preview | 2 · Sandbox & IDE | 11, 13 | ✅ |
 | [16](./phase-16-designprovider-interface-registry.md) | DesignProvider interface & registry | 3 · Design | 08 | ✅ |
 | [17](./phase-17-stitch-provider.md) | Stitch MCP provider | 3 · Design | 16 | ✅ |
-| [18](./phase-18-figma-provider.md) | Figma MCP provider (alternative) | 3 · Design | 16 | ⬜ |
+| [18](./phase-18-figma-provider.md) | Figma MCP provider (alternative) | 3 · Design | 16 | ✅ |
 | [19](./phase-19-design-stage-handler-ui.md) | Design stage handler & UI | 3 · Design | 09, 14, 16, 17 | ⬜ |
 | [20](./phase-20-anthropic-client-model-routing.md) | Anthropic client & model routing | 4 · Build | 07 | ⬜ |
 | [21](./phase-21-agent-tools-sandbox.md) | Agent tools bound to the sandbox | 4 · Build | 12, 13, 20 | ⬜ |
