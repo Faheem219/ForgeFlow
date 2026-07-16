@@ -69,4 +69,36 @@ Turns the client's tool-use loop (`phase-20`) into real actions over the FS (`ph
 
 ## Status
 
-⬜ todo
+✅ done — The strictly-schemaed tool surface the agents act through, every effect scoped to the
+project sandbox (§7). Turns the phase-20 tool-use loop into real FS/exec/preview/git actions.
+
+- `app/agents/tools/definitions.py` — 10 tools, each with a pydantic args model (single source of
+  truth for validation + JSON schema): `read_file`/`write_file`/`list_dir` (phase-12 FS),
+  `run_command`/`install_deps`/`run_tests` (phase-13 exec, output tail-captured from the blob store),
+  `start_preview`/`restart_preview` (phase-15), `git_commit` (phase-12 git), and
+  `instantiate_skeleton` (deterministic copy of `templates/app-skeleton` — the LLM never regenerates
+  the scaffold).
+- `app/agents/tools/registry.py` — validates the model's call against the tool schema, dispatches to
+  the sandbox-bound handler, records `{tool, ok, at}` on the `Run` trace, and returns a structured
+  `{"ok": …}` JSON result. Invalid args / unsafe paths / service failures come back as errors fed to
+  the model (the loop never crashes). `make_tool_dispatch(registry, ctx)` binds it to the phase-20
+  client; `anthropic_tools()` hands it the schema list; `catalog_markdown()` is the prompt-author
+  catalog.
+- `app/agents/tools/context.py` — `ToolContext` scoping every tool to one project's
+  WorkspaceService/ExecService/PreviewService (Protocol-typed so tests inject fakes).
+- **Guardrails:** tool-level path safety (`app.sandbox.paths`, lexical) rejects absolute/traversal/
+  home paths and host `cwd` **before** touching the sandbox; exec runs non-root in the container,
+  time/concurrency capped; FS is size-capped and emits `fs.write`. New `Run.tool_calls` trace field;
+  config `APP_SKELETON_DIR`, `TOOL_OUTPUT_MAX_CHARS`.
+
+**Acceptance:** a scripted mock model scaffolds → writes → installs → runs → tests → previews →
+commits **purely through tools**, with every effect in the sandbox + on the `Run` trace; args are
+schema-validated and unsafe calls rejected with structured errors; no host access anywhere. Covered
+by `tests/agents/tools/` (17): schemas, FS, exec, guardrails, skeleton, and the full loop.
+
+**Verification:** ruff/black + mypy (phase-21 surface) clean; agents suite **32 passed**; full
+non-sandbox backend suite **253 passed**. Tools are tested against fakes (the plan's "mock sandbox")
+so they run anywhere; the real FS/git/exec runtimes are covered by the phase-12/13 sandbox suite
+(Linux/CI). Same Windows-env notes as prior phases (isolated FastAPI 0.139.0 venv; `tests/sandbox`
+and `app/sandbox/runtime.py` use Unix-only `fcntl`/`pty`/`os.killpg`, so they're untouched/excluded
+here).

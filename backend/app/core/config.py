@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     # Blank → the built-in defaults in app/agents/pricing.py. Admin-editable (phase-51/52).
     model_pricing_json: str = ""
 
+    # --- Agent tools (phase-21) ---
+    # Prebuilt generated-app skeleton copied into /workspace by instantiate_skeleton (phase-22/23).
+    # Relative paths resolve from the repo root; absolute paths are used as-is.
+    app_skeleton_dir: str = "templates/app-skeleton"
+    tool_output_max_chars: int = 8000  # cap command output fed back to the model (keep the tail)
+
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"
