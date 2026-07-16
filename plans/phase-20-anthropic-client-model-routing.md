@@ -67,4 +67,34 @@ The engine behind every agent (D4). Cost discipline (§7, D4, risk §12) is enfo
 
 ## Status
 
-⬜ todo
+✅ done — Opens Epic 4. The agent substrate: a Claude client with a streamed, bounded tool-use loop,
+model routing, and cost/budget guardrails, all tested against a mocked transport.
+
+- `app/agents/models.py` — `route(TaskKind) -> model_id`: codegen/testgen/repair → `MODEL_CODEGEN`,
+  classify/summarize/route/title → `MODEL_ROUTING` (config-resolved). `TaskKind` is a plain `Enum`
+  (not `StrEnum`) so a member like `title` can't shadow a `str` method.
+- `app/agents/anthropic_client.py` — `AnthropicClient.run_tool_loop`: per turn it enforces budget →
+  streams the turn (text deltas → `agent.token` events) → records cost on the `Run` → enforces
+  budget again → dispatches any tool calls and threads results back, else returns. Bounded by
+  `anthropic_max_tool_turns`. The transport is a `Protocol` (fully mocked in tests); the real
+  `SdkTransport` lazy-imports `anthropic` (only needed for live calls) and adds 429/5xx/network
+  backoff — classified as `ProviderError` (`pragma: no cover`, no SDK/creds in tests).
+- `app/agents/cost.py` + `pricing.py` — `record_cost` accrues `{tokens, ₹}` onto the `Run`;
+  `project_spend_inr`/`global_spend_inr` roll up via a Mongo `$sum`. Pricing is **config**
+  (`MODEL_PRICING_JSON`, ₹/Mtok) with built-in defaults; an unpriced model costs ₹0.
+- `app/agents/budget.py` — `enforce_budget` raises a clear `UserError` **and** emits `budget.halt`
+  when the per-project or global cap is reached; nothing runs past the cap (checked before *and*
+  after each call).
+- `app/agents/prompts/` — versioned base system prompt (`PROMPT_VERSION`) for eval reproducibility.
+- Config/.env: `ANTHROPIC_MAX_OUTPUT_TOKENS`/`MAX_TOOL_TURNS`/`MAX_RETRIES`, `MODEL_PRICING_JSON`;
+  new `budget.halt` event type.
+
+**Acceptance:** streamed multi-turn tool loop against a mocked transport (tokens streamed, tool
+calls dispatched, results fed back); router honors config; tokens/₹ recorded per call on the Run +
+project/global rollups; a breached cap halts (before *and* after a call) with a clear message +
+`budget.halt` event. All covered by `tests/agents/` (15).
+
+**Verification:** ruff/black + mypy (phase-20 surface) clean; agents suite **15 passed**; full
+non-sandbox backend suite **236 passed** (no regressions). `anthropic` isn't installed in the test
+venv — by design the SDK path is lazy-imported and the loop is tested via the fake transport. Same
+Windows-env notes as prior phases (isolated FastAPI 0.139.0 venv; `tests/sandbox` untouched/skipped).

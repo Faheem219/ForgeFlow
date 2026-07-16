@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     model_routing: str = "claude-haiku-4-5-20251001"
     budget_cap_inr_per_project: float | None = None
     budget_cap_inr_global: float | None = None
+    # Agent client tuning (phase-20).
+    anthropic_max_output_tokens: int = 4096
+    anthropic_max_tool_turns: int = 16  # safety bound on the tool-use loop
+    anthropic_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
+    # Per-model pricing (₹ per 1M tokens) as JSON: {"<model>": {"input": .., "output": ..}}.
+    # Blank → the built-in defaults in app/agents/pricing.py. Admin-editable (phase-51/52).
+    model_pricing_json: str = ""
 
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
