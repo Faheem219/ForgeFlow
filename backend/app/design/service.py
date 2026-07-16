@@ -37,6 +37,28 @@ class DesignPayload(BaseModel):
     css: str
 
 
+def design_artifact_fields(
+    result: DesignResult, *, source: str, refined_from: int | None = None
+) -> tuple[str, dict[str, object]]:
+    """Map a :class:`DesignResult` → the ``(text, meta)`` of a versioned ``design`` artifact.
+
+    Pure (no I/O) so both :meth:`DesignService.save_result` and the design stage handler
+    (phase-19, which lets the conductor persist) build identical artifacts.
+    """
+    payload = DesignPayload(html=result.html, css=result.css)
+    meta: dict[str, object] = {
+        META_PROVIDER: result.provider,
+        META_EXTERNAL_REF: result.external_ref,
+        META_PREVIEW_IMAGE: result.preview_image,
+        META_SOURCE: source,
+        # Nested so provider-specific keys can never clobber ours.
+        META_PROVIDER_META: result.meta,
+    }
+    if refined_from is not None:
+        meta[META_REFINED_FROM] = refined_from
+    return payload.model_dump_json(), meta
+
+
 class DesignService:
     def __init__(self, artifacts: ArtifactService | None = None) -> None:
         self._artifacts = artifacts or ArtifactService()
@@ -52,23 +74,12 @@ class DesignService:
         refined_from: int | None = None,
     ) -> Artifact:
         """Append the next ``design`` artifact version for a provider result."""
-        payload = DesignPayload(html=result.html, css=result.css)
-        meta: dict[str, object] = {
-            META_PROVIDER: result.provider,
-            META_EXTERNAL_REF: result.external_ref,
-            META_PREVIEW_IMAGE: result.preview_image,
-            META_SOURCE: source,
-            # Nested so provider-specific keys can never clobber ours.
-            META_PROVIDER_META: result.meta,
-        }
-        if refined_from is not None:
-            meta[META_REFINED_FROM] = refined_from
-
+        text, meta = design_artifact_fields(result, source=source, refined_from=refined_from)
         return await self._artifacts.create_version(
             project_id,
             Stage.design,
             ArtifactType.design,
-            text=payload.model_dump_json(),
+            text=text,
             meta=meta,
         )
 

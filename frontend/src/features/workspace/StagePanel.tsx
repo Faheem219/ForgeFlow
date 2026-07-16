@@ -5,9 +5,10 @@ import type { IntentAction, Stage } from '../../lib/types';
 import { STAGE_LABELS, STATUS_LABELS, STATUS_TONES } from './stageMeta';
 import { useStage } from './useStage';
 
-// Monaco is heavy — only pull it in when the Build stage is actually shown.
+// Monaco / the design panel are heavy — only pull them in when their stage is shown.
 const Ide = lazy(() => import('../ide/Ide'));
 const Preview = lazy(() => import('../ide/Preview'));
+const DesignPanel = lazy(() => import('../design/DesignPanel'));
 
 const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
@@ -16,14 +17,28 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 };
 
 /**
- * Per-stage panel. Build hosts the web IDE; the remaining stages (design upload, requirements
- * form, test/repair view, deploy topology, data browser) fill in during later epics — for those
- * this scaffold just exposes the refine/skip/proceed affordances and an artifacts area.
+ * Per-stage panel. Design hosts the full design UI; Build hosts the web IDE; the remaining stages
+ * (requirements form, test/repair view, deploy topology, data browser) fill in during later epics —
+ * for those this scaffold just exposes the refine/skip/proceed affordances and an artifacts area.
  */
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);
   const status = stageState?.status ?? 'empty';
   const [showPreview, setShowPreview] = useState(false);
+
+  if (stage === 'design') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner />
+          </div>
+        }
+      >
+        <DesignPanel projectId={projectId} />
+      </Suspense>
+    );
+  }
 
   if (stage === 'build') {
     return (

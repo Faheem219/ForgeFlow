@@ -70,4 +70,37 @@ First real stage handler, exercising the conductor (`phase-08`), providers (`pha
 
 ## Status
 
-⬜ todo
+✅ done — The first real stage handler + full design UI, provider-agnostic and non-linear (D12).
+
+**Backend**
+- `app/orchestrator/stages/design.py` — `DesignStageHandler` (registered as the real `design` handler
+  via `stages/__init__._register_real_handlers`, replacing the stub). Maps the three UI actions onto
+  the design lifecycle: `refine` = generate (text / uploaded screenshots) **or** import BYO **or**
+  provider-refine the latest → new `design` version, stage → `awaiting_user`; `proceed` = approve
+  (→ `complete`, no provider call); `skip` = opt out. Returns an `ArtifactSpec` so the **conductor**
+  is the single persister (artifact linked to the reply + returned in the response). Refine on a
+  complete stage marks downstream `stale` (via the conductor's refine action).
+- `app/design/service.py` — extracted `design_artifact_fields()` (pure) so handler + `save_result`
+  build identical artifacts without double-persisting.
+- `app/design/{schemas,router}.py` — design intake schema (`DesignIntake`) + `POST /projects/{id}/
+  design/images` (base64 JSON → blob store, capped) + `GET /projects/{id}/design/provider`
+  (health + capabilities). `ProviderError.to_envelope` now includes `fallback_hint` so quota/auth
+  failures surface a clear message **and** the fallback, never a crash.
+
+**Frontend**
+- `features/design/` — `DesignPanel` (text/screenshot/import intake, chat-refine, version history,
+  Approve/Skip, provider health badge) + `DesignPreview` (untrusted HTML/CSS in a **fully sandboxed**
+  `srcdoc` iframe, `sandbox=""`, never in the platform DOM). Lazy-mounted as the Design stage panel;
+  `apiClient` now carries `fallbackHint` into toasts.
+
+**Acceptance:** upload/text → preview → refine ×N → Approve (each refine a new version); Skip
+(downstream tolerates no design); BYO stored without a provider call; refine-after-complete stales
+downstream; provider quota/auth failure → clear message + fallback (no crash). All covered by
+`tests/orchestrator/stages/test_design_handler.py` (10), `tests/design/test_design_router.py` (5),
+and `features/design/DesignPanel.test.tsx` (6).
+
+**Verification:** backend non-sandbox suite **221 passed** (updated 4 phase-08 tests that used
+`design` as a generic stub → now `requirements`); frontend **82 passed**; ruff/black + mypy
+(phase-19 surface) clean; eslint/prettier/tsc + vite build clean. Same Windows-env notes as phase-17
+(isolated FastAPI 0.139.0 venv; `tests/sandbox` untouched, skipped here). Live Stitch/Figma smoke
+needs real creds; covered offline via the `fake` provider.

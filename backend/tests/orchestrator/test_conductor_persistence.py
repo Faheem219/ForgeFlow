@@ -69,14 +69,14 @@ async def test_run_is_opened_and_closed_with_zero_cost() -> None:
     pid = await _project(user)
 
     resp = await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.proceed)
+        user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.proceed)
     )
 
     runs = await RunRepo().list_for_project(pid)
     assert len(runs) == 1
     run = runs[0]
     assert str(run.id) == resp.run_id
-    assert run.kind == "conductor:design"
+    assert run.kind == "conductor:requirements"
     assert run.finished_at is not None  # closed
     assert run.cost.tokens == 0 and run.cost.inr == 0.0  # zero for stubs
 
@@ -86,21 +86,21 @@ async def test_refine_marks_downstream_stale_and_reports_it() -> None:
     pid = await _project(user)
 
     await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.proceed)
-    )
-    await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.proceed)
     )
+    await Conductor().handle_intent(
+        user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
+    )
     resp = await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.refine)
+        user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.refine)
     )
 
     assert resp.to_status is StageStatus.in_progress
-    assert resp.stale == [Stage.requirements]
+    assert resp.stale == [Stage.build]
 
     stages = await ProjectService().list_stages(pid, user)
-    requirements = next(s for s in stages if s.stage is Stage.requirements)
-    assert requirements.status is StageStatus.stale
+    build = next(s for s in stages if s.stage is Stage.build)
+    assert build.status is StageStatus.stale
 
 
 async def test_artifacts_are_versioned_across_repeated_intents() -> None:
@@ -108,11 +108,11 @@ async def test_artifacts_are_versioned_across_repeated_intents() -> None:
     pid = await _project(user)
 
     await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.proceed)
+        user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.proceed)
     )
     await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.refine)
+        user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.refine)
     )
 
-    artifacts = await ArtifactService().list_for_project(pid, stage=Stage.design)
+    artifacts = await ArtifactService().list_for_project(pid, stage=Stage.requirements)
     assert [a.version for a in artifacts] == [1, 2]  # nothing overwritten

@@ -89,8 +89,10 @@ async def test_refine_on_empty_stage_enters_it() -> None:
     user = PydanticObjectId()
     pid = await _project(user)
 
+    # requirements is still a stub, so this isolates the conductor's action resolution
+    # (refine on an empty stage → enter → in_progress) from any real handler behavior.
     resp = await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.design, action=IntentAction.refine)
+        user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.refine)
     )
     assert resp.from_status is StageStatus.empty
     assert resp.to_status is StageStatus.in_progress

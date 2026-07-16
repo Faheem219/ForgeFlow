@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     figma_timeout_s: float = 60.0  # per-call wall clock
     figma_max_retries: int = 2  # extra attempts on transient errors
     design_provider: str = "stitch"
+    # Design intake (phase-19): screenshot upload caps.
+    design_max_images: int = 8
+    design_max_image_bytes: int = 5_242_880  # 5 MiB per screenshot
 
     # --- Deploy providers (phase 34/35) ---
     vercel_token: str = ""

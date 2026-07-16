@@ -79,6 +79,38 @@ export interface IntentRequest {
   stage: Stage;
   action: IntentAction;
   message?: string;
+  /** Stage-specific payload (e.g. design intake: text / image_refs / own_design). */
+  payload?: Record<string, unknown>;
+}
+
+/** An artifact plus its resolved text payload (backend GET /artifacts/{id}). */
+export interface ArtifactDetail extends ArtifactDto {
+  content: string | null;
+}
+
+// --- Design stage (phase-19) ---
+
+export type ProviderHealth = 'ok' | 'degraded' | 'down';
+
+export interface DesignImageRef {
+  ref: string;
+  filename: string;
+  media_type: string;
+}
+
+export interface DesignCapabilities {
+  provider: string;
+  from_image: boolean;
+  from_text: boolean;
+  refine: boolean;
+  fetch_code: boolean;
+  max_images: number;
+}
+
+export interface DesignProviderInfo {
+  key: string;
+  health: ProviderHealth;
+  capabilities: DesignCapabilities;
 }
 
 export interface IntentResponse {

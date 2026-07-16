@@ -68,6 +68,13 @@ class ProviderError(ForgeFlowError):
         super().__init__(message, detail)
         self.fallback_hint = fallback_hint
 
+    def to_envelope(self) -> dict[str, Any]:
+        # Surface the fallback hint so the client can offer graceful degradation (phase-19/48).
+        envelope = super().to_envelope()
+        if self.fallback_hint:
+            envelope["error"]["fallback_hint"] = self.fallback_hint
+        return envelope
+
 
 class AuthError(ForgeFlowError):
     """Authentication failed / missing (401)."""

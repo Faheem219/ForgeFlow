@@ -60,3 +60,14 @@ def get_handler(stage: Stage) -> StageHandler:
 def register_handler(stage: Stage, handler: StageHandler) -> None:
     """Replace a stage's handler (used by later epics to swap in real logic)."""
     _HANDLERS[stage] = handler
+
+
+def _register_real_handlers() -> None:
+    """Swap real handlers in for their stubs as each stage lands. Imported here (not at top) so a
+    handler module can import ``stages.base`` without a circular import through this package."""
+    from app.orchestrator.stages.design import DesignStageHandler
+
+    register_handler(Stage.design, DesignStageHandler())
+
+
+_register_real_handlers()
