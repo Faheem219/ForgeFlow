@@ -1,14 +1,13 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy } from 'react';
 
 import { Badge, Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import type { IntentAction, Stage } from '../../lib/types';
 import { STAGE_LABELS, STATUS_LABELS, STATUS_TONES } from './stageMeta';
 import { useStage } from './useStage';
 
-// Monaco / the design panel are heavy — only pull them in when their stage is shown.
-const Ide = lazy(() => import('../ide/Ide'));
-const Preview = lazy(() => import('../ide/Preview'));
+// The design + build panels are heavy (Monaco / xterm) — only pull them in when their stage shows.
 const DesignPanel = lazy(() => import('../design/DesignPanel'));
+const BuildPanel = lazy(() => import('../build/BuildPanel'));
 
 const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
@@ -24,9 +23,9 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);
   const status = stageState?.status ?? 'empty';
-  const [showPreview, setShowPreview] = useState(false);
 
-  if (stage === 'design') {
+  if (stage === 'design' || stage === 'build') {
+    const ActivePanel = stage === 'design' ? DesignPanel : BuildPanel;
     return (
       <Suspense
         fallback={
@@ -35,68 +34,8 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
           </div>
         }
       >
-        <DesignPanel projectId={projectId} />
+        <ActivePanel projectId={projectId} />
       </Suspense>
-    );
-  }
-
-  if (stage === 'build') {
-    return (
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
-            {STAGE_LABELS.build}
-            <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setShowPreview((open) => !open)}
-              aria-pressed={showPreview}
-              data-testid="toggle-preview"
-            >
-              {showPreview ? 'Hide preview' : 'Preview'}
-            </Button>
-            {(['refine', 'proceed', 'skip'] as IntentAction[]).map((action) => (
-              <Button
-                key={action}
-                size="sm"
-                variant={action === 'proceed' ? 'primary' : 'secondary'}
-                disabled={isActing}
-                data-testid={`panel-action-${action}`}
-                onClick={() => runAction(action)}
-              >
-                {ACTION_LABELS[action]}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <div
-          className={`grid min-h-0 flex-1 gap-3 ${showPreview ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
-        >
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <Spinner />
-              </div>
-            }
-          >
-            <Ide projectId={projectId} />
-          </Suspense>
-          {showPreview ? (
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center">
-                  <Spinner />
-                </div>
-              }
-            >
-              <Preview projectId={projectId} />
-            </Suspense>
-          ) : null}
-        </div>
-      </div>
     );
   }
 

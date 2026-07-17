@@ -65,4 +65,37 @@ Makes the codegen engine (`phase-23`) a first-class, steerable stage honoring D1
 
 ## Status
 
-⬜ todo
+✅ done — **completes M2**.
+
+### Completion notes
+
+- **Handler** [`app/orchestrator/stages/build.py`](../backend/app/orchestrator/stages/build.py)
+  (registered in `stages/__init__.py`): `proceed`/`refine` run the codegen agent (phase-23) on a
+  distinct `Run` (kind `codegen:build`); `skip` marks the stage skipped. A **healthy boot →
+  `complete`** (so deploy's hard-prereq is satisfiable), a broken boot → `awaiting_user`. Budget/
+  provider errors propagate to the conductor → the API error envelope + `budget.halt` event.
+- **Change requests:** `CodegenAgent.run` gained an additive `instruction` kwarg (threaded into the
+  plan + implement prompts) so a `refine` regenerates incrementally; the conductor's `refine` action
+  over a complete build marks downstream (test/deploy/validate) `stale` automatically. Initial build
+  and change request share ONE code path.
+- **UI** [`src/features/build/BuildPanel.tsx`](../frontend/src/features/build/BuildPanel.tsx):
+  live-generation IDE stream + toggleable preview, the structured **build report** (boot status,
+  features, files changed, follow-ups, notes), a **Request changes** chat, and **Build/Rebuild** +
+  **Skip** actions; live progress from `progress` events. Replaces the old inline build case in
+  `StagePanel`.
+- **Action-mapping decision (resolves a roadmap ambiguity — Design note):** the plan listed both
+  `proceed` and `refine` as "run codegen" yet also required `refine → downstream stale`, which needs
+  the build to be `complete` when a change is requested. Resolution: `proceed` = build →
+  `complete`-on-healthy (initial/rebuild), `refine` = change request (→ stale downstream), `skip` =
+  skip. This satisfies every acceptance criterion (generate → change → stale; skip-to-deploy subject
+  to the hard-prereq) and keeps deploy reachable.
+- **Ripple:** four existing conductor tests used `build` as a convenient stub stage (as they'd used
+  `design` before phase-19); switched them to the still-stubbed `test` stage / a direct state
+  transition. `test_conductor_routing` no longer expects a `build` stub.
+- **Verification:** frontend **87/87 vitest + ESLint + tsc clean** (BuildPanel: report render,
+  proceed, refine-with-message, skip, preview toggle). Backend ruff/black/mypy clean; a harness
+  confirmed the handler registration/import chain, the new `instruction` kwarg, and `_summarize`
+  output; the DB-backed handler tests (`test_build_handler.py`: proceed/refine/skip/boot-gating/
+  stale/error) run on Linux/CI.
+- **Out of scope (as planned):** requirements capture (Epic 5), test/repair (Epic 5/6), deploy
+  (Epic 7), and the codegen internals (phase-23).

@@ -37,7 +37,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [21](./phase-21-agent-tools-sandbox.md) | Agent tools bound to the sandbox | 4 · Build | 12, 13, 20 | ✅ |
 | [22](./phase-22-app-skeleton-template.md) | Fixed-stack app skeleton template | 4 · Build | 10 | ✅ |
 | [23](./phase-23-codegen-agent-loop.md) | Codegen agent loop | 4 · Build | 15, 19, 21, 22 | ✅ |
-| [24](./phase-24-build-stage-handler-ui.md) | Build stage handler & UI | 4 · Build | 09, 23 | ⬜ |
+| [24](./phase-24-build-stage-handler-ui.md) | Build stage handler & UI | 4 · Build | 09, 23 | ✅ |
 | [25](./phase-25-requirements-schema-api.md) | Structured requirements schema & API | 5 · Requirements & Tests | 07 | ⬜ |
 | [26](./phase-26-requirements-ui.md) | Requirements UI (guided form) | 5 · Requirements & Tests | 09, 25 | ⬜ |
 | [27](./phase-27-test-generation-agent.md) | Test generation agent | 5 · Requirements & Tests | 21, 25 | ⬜ |
@@ -74,7 +74,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | Milestone | Scope | Phases | Outcome |
 |-----------|-------|--------|---------|
 | **M1** ✅ | Epics 0–2 | 01–15 | Authenticated workspace + working web IDE / terminal / preview over sandboxes. |
-| **M2** | Epics 3–4 | 16–24 | Screenshots/text → design → generated **running app** with live code + change requests. |
+| **M2** ✅ | Epics 3–4 | 16–24 | Screenshots/text → design → generated **running app** with live code + change requests. |
 | **M3** | Epics 5–6 | 25–32 | Requirements → tests → **bounded self-healing repair loop** (the contribution) working. |
 | **M4** | Epics 7–8 | 33–40 | Dual-mode deploy + visual topology + live validation → **deployed URL delivered & verified**. |
 | **M5** | Epics 9–11 (+12) | 41–52 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, and admin configurability. |

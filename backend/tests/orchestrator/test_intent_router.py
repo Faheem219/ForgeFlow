@@ -43,12 +43,12 @@ async def test_intent_happy_path_returns_summary(client: AsyncClient) -> None:
 
     resp = await client.post(
         f"/projects/{pid}/intent",
-        json={"stage": "build", "action": "proceed", "message": "go"},
+        json={"stage": "test", "action": "proceed", "message": "go"},
         headers=_auth(token),
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["stage"] == "build"
+    assert body["stage"] == "test"
     assert body["to_status"] == "complete"
     assert body["run_id"]
     assert len(body["artifacts"]) == 1

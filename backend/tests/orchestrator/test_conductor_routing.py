@@ -45,10 +45,10 @@ async def test_each_stage_routes_to_its_own_stub_handler() -> None:
     pid = await _project(user)
 
     # The stub for each stage emits that stage's characteristic artifact type — proof of routing.
-    # (design has a real handler as of phase-19; the still-stubbed stages prove routing here.)
+    # (design (phase-19) and build (phase-24) have real handlers now; the still-stubbed stages
+    # prove routing here.)
     expected = {
         Stage.requirements: ArtifactType.requirement,
-        Stage.build: ArtifactType.code_change,
         Stage.test: ArtifactType.test,
     }
     for stage, artifact_type in expected.items():

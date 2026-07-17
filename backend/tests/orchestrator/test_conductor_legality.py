@@ -12,6 +12,7 @@ from app.orchestrator.conductor import Conductor
 from app.orchestrator.messages import MessageService
 from app.orchestrator.schemas import Intent, IntentAction
 from app.projects.service import ProjectService
+from app.projects.state_machine import Action
 
 pytestmark = pytest.mark.usefixtures("mongo_db")
 
@@ -66,9 +67,9 @@ async def test_deploy_proceed_allowed_after_build_complete() -> None:
     user = PydanticObjectId()
     pid = await _project(user)
 
-    await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
-    )
+    # Mark build complete directly — build now has a real (codegen) handler, and this test only
+    # cares about the deploy hard-prereq, not about running a build.
+    await ProjectService().transition_stage(pid, user, Stage.build, Action.complete)
     resp = await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.deploy, action=IntentAction.proceed)
     )

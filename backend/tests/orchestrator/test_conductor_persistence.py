@@ -33,7 +33,7 @@ async def test_happy_path_persists_messages_artifacts_state_and_emits() -> None:
         resp = await Conductor().handle_intent(
             user,
             Intent(
-                project_id=pid, stage=Stage.build, action=IntentAction.proceed, message="go build"
+                project_id=pid, stage=Stage.test, action=IntentAction.proceed, message="go test"
             ),
         )
         events = []
@@ -43,20 +43,20 @@ async def test_happy_path_persists_messages_artifacts_state_and_emits() -> None:
     # Inbound user message + outbound assistant message, in order.
     messages = await MessageService().list_for_project(pid)
     assert [m.role for m in messages] == [MessageRole.user, MessageRole.assistant]
-    assert messages[0].content == "go build"
+    assert messages[0].content == "go test"
 
     # One versioned artifact, linked to the assistant reply.
-    artifacts = await ArtifactService().list_for_project(pid, stage=Stage.build)
+    artifacts = await ArtifactService().list_for_project(pid, stage=Stage.test)
     assert len(artifacts) == 1 and artifacts[0].version == 1
     assert messages[1].artifacts == [artifacts[0].id]
 
     # State transition applied + reflected in the response.
     assert resp.to_status is StageStatus.complete
     stages = await ProjectService().list_stages(pid, user)
-    build = next(s for s in stages if s.stage is Stage.build)
-    assert build.status is StageStatus.complete
+    test_state = next(s for s in stages if s.stage is Stage.test)
+    assert test_state.status is StageStatus.complete
     refreshed = await ProjectService().get_owned(pid, user)
-    assert refreshed.current_stage is Stage.build
+    assert refreshed.current_stage is Stage.test
 
     # stage.transition event emitted.
     transition_events = [e for e in events if e.event == str(EventType.stage_transition)]
@@ -89,18 +89,18 @@ async def test_refine_marks_downstream_stale_and_reports_it() -> None:
         user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.proceed)
     )
     await Conductor().handle_intent(
-        user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
+        user, Intent(project_id=pid, stage=Stage.test, action=IntentAction.proceed)
     )
     resp = await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.requirements, action=IntentAction.refine)
     )
 
     assert resp.to_status is StageStatus.in_progress
-    assert resp.stale == [Stage.build]
+    assert resp.stale == [Stage.test]
 
     stages = await ProjectService().list_stages(pid, user)
-    build = next(s for s in stages if s.stage is Stage.build)
-    assert build.status is StageStatus.stale
+    test_state = next(s for s in stages if s.stage is Stage.test)
+    assert test_state.status is StageStatus.stale
 
 
 async def test_artifacts_are_versioned_across_repeated_intents() -> None:

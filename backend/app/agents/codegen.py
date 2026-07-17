@@ -160,6 +160,7 @@ class CodegenAgent:
         *,
         ctx: ToolContext | None = None,
         channel: str | None = None,
+        instruction: str | None = None,
     ) -> BuildReport:
         project_id = project.id
         if project_id is None:  # pragma: no cover - a persisted project always carries an id
@@ -187,10 +188,15 @@ class CodegenAgent:
         design, design_note = await self._design_context(project_id, stages)
         requirements, req_note, features = await self._requirements_context(project_id, stages)
         notes += [n for n in (design_note, req_note) if n]
+        # A change request (phase-24 refine) leads the context so the model prioritizes it.
+        if instruction:
+            notes.insert(0, f"Change request: {instruction}")
 
         # Step 1 — plan (Haiku).
         await self._emit(channel, "plan")
-        plan = await self._plan(project_id, run, project.name, design, requirements, channel)
+        plan = await self._plan(
+            project_id, run, project.name, design, requirements, channel, instruction
+        )
 
         # Steps 2–3 — implement + verify boot (Sonnet, bounded tool-use loop).
         await self._emit(channel, "implement")
@@ -240,15 +246,17 @@ class CodegenAgent:
         design: str | None,
         requirements: str | None,
         channel: str,
+        instruction: str | None = None,
     ) -> str:
+        user = plan_user_prompt(project_name, design, requirements)
+        if instruction:
+            user += f"\n\nThe user requested this specific change — plan for it: {instruction}"
         result = await self._client.run_tool_loop(
             task_kind=TaskKind.summarize,  # routes to MODEL_ROUTING (Haiku) — cheap planning
             project_id=project_id,
             run=run,
             system=system_prompt(PLAN_SYSTEM_EXTRA),
-            messages=[
-                {"role": "user", "content": plan_user_prompt(project_name, design, requirements)}
-            ],
+            messages=[{"role": "user", "content": user}],
             channel=channel,
         )
         return result.text.strip() or "(no explicit plan produced)"
