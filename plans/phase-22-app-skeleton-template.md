@@ -68,4 +68,24 @@ Implements D2 (fixed generated-app stack) and the **user directive**: *a base Re
 
 ## Status
 
-⬜ todo
+✅ done
+
+### Completion notes
+
+- Skeleton is a **pnpm workspace** (`frontend` + `backend`) so the phase-15 preview commands
+  (`pnpm dev` in each dir) and the phase-21 `run_tests` tool commands (`pnpm test`/`test:unit`/
+  `test:e2e` at the root) resolve against the shipped scripts without change.
+- Verified locally on Node 24 / pnpm 9 (corepack): `install` → `typecheck` → `build` (FE Vite +
+  BE `tsc`) → unit tests (**Vitest 1/1, Jest 3/3**) → **Playwright E2E 1/1** (against a served
+  build), and ESLint clean for both packages. Tailwind compiles (7 kB CSS bundle in the FE build).
+- `/health` is DB-independent and the BE entry listens before connecting Mongo, so the preview
+  health probe passes even without a database.
+- Playwright pinned to **1.48.2** to match the chromium baked into the sandbox image (phase-10).
+- Design decisions recorded in [`templates/app-skeleton/README.md`](../templates/app-skeleton/README.md):
+  Tailwind **v3** (most-trodden setup), **lockfile-free** template (install resolves fresh; CI uses
+  `--no-frozen-lockfile`), permissive CORS in dev.
+- **CI:** new `skeleton` job (install → lint → typecheck → build → unit → Playwright E2E). **Make:**
+  `skeleton-install|build|test|verify`. **pytest:** `docker` marker registered; the heavy
+  install+build test in `backend/tests/agents/test_skeleton_instantiation.py` is opt-in
+  (`FORGEFLOW_SKELETON_BUILD=1`), the structural/determinism tests always run.
+- **Deferred:** none. (Real Mongo connection is exercised by preview/CI, not the unit suite.)

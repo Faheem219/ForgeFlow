@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+
+# env & secrets (never commit; injected at preview/deploy time)
+.env
+.env.*
+!.env.example
+
+# test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+
+# logs & misc
+*.log
+.DS_Store

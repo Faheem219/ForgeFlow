@@ -4,7 +4,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
 SANDBOX_IMAGE ?= forgeflow-sandbox:latest
 
-.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed sandbox-build sandbox-smoke sandbox-reap-all
+.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -68,3 +68,14 @@ sandbox-reap-all: ## DANGER: remove ALL forgeflow sandbox containers + volumes (
 	@read -p "Type 'yes' to continue: " ans; [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
 	-docker ps -aq --filter "label=forgeflow.managed=true" | xargs -r docker rm -f
 	-docker volume ls -q --filter "label=forgeflow.managed=true" | xargs -r docker volume rm
+
+skeleton-install: ## Install generated-app skeleton deps (pnpm 9 via corepack)
+	cd templates/app-skeleton && corepack enable && $(PNPM) install --no-frozen-lockfile
+
+skeleton-build: ## Typecheck + build the generated-app skeleton (FE + BE)
+	cd templates/app-skeleton && $(PNPM) run typecheck && $(PNPM) run build
+
+skeleton-test: ## Run the generated-app skeleton unit suites (Vitest + Jest)
+	cd templates/app-skeleton && $(PNPM) run test:unit
+
+skeleton-verify: skeleton-install skeleton-build skeleton-test ## Full skeleton check (install + build + unit tests)

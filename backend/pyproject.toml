@@ -39,6 +39,9 @@ pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra"
+markers = [
+    "docker: integration test needing a Docker/Node(pnpm) toolchain (opt-in; skipped by default)",
+]
 
 # ------------------------------------------------------------------ ruff
 [tool.ruff]

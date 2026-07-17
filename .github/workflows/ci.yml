@@ -99,3 +99,41 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  skeleton:
+    name: App skeleton (install + build + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: templates/app-skeleton
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable corepack (pnpm 9)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build FE + BE
+        run: pnpm run build
+
+      - name: Unit tests (Vitest + Jest)
+        run: pnpm run test:unit
+
+      - name: Install Playwright chromium
+        run: pnpm --filter frontend exec playwright install --with-deps chromium
+
+      - name: E2E (Playwright, boots the FE preview)
+        run: pnpm run test:e2e
