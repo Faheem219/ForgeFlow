@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     app_skeleton_dir: str = "templates/app-skeleton"
     tool_output_max_chars: int = 8000  # cap command output fed back to the model (keep the tail)
 
+    # --- Codegen (phase-23) ---
+    # Per-artifact cap on the design/requirements context fed to the codegen agent (cost discipline
+    # — feed only what's needed, never the whole repo).
+    codegen_context_char_budget: int = 6000
+
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"

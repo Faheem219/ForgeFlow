@@ -36,7 +36,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [20](./phase-20-anthropic-client-model-routing.md) | Anthropic client & model routing | 4 · Build | 07 | ✅ |
 | [21](./phase-21-agent-tools-sandbox.md) | Agent tools bound to the sandbox | 4 · Build | 12, 13, 20 | ✅ |
 | [22](./phase-22-app-skeleton-template.md) | Fixed-stack app skeleton template | 4 · Build | 10 | ✅ |
-| [23](./phase-23-codegen-agent-loop.md) | Codegen agent loop | 4 · Build | 15, 19, 21, 22 | ⬜ |
+| [23](./phase-23-codegen-agent-loop.md) | Codegen agent loop | 4 · Build | 15, 19, 21, 22 | ✅ |
 | [24](./phase-24-build-stage-handler-ui.md) | Build stage handler & UI | 4 · Build | 09, 23 | ⬜ |
 | [25](./phase-25-requirements-schema-api.md) | Structured requirements schema & API | 5 · Requirements & Tests | 07 | ⬜ |
 | [26](./phase-26-requirements-ui.md) | Requirements UI (guided form) | 5 · Requirements & Tests | 09, 25 | ⬜ |

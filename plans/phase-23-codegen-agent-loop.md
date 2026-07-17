@@ -70,4 +70,32 @@ The heart of the Build stage (D4). Non-linearity (D12): must work with any subse
 
 ## Status
 
-⬜ todo
+✅ done
+
+### Completion notes
+
+- New [`app/agents/codegen.py`](../backend/app/agents/codegen.py) `CodegenAgent.run(project, run)` drives:
+  **(0)** deterministic skeleton-first — `instantiate_skeleton` + `git_commit("skeleton")` dispatched
+  through the registry so they're the first entries on the `Run` trace (no model tokens spent on the
+  scaffold); **(1)** plan via `MODEL_ROUTING` (Haiku); **(2–3)** implement + verify-boot in one
+  bounded Sonnet `run_tool_loop`; **(4)** a structured `BuildReport`
+  `{boot_status, files_changed, features_built, follow_ups, notes, commit, tests_passed, summary,
+  plan}` persisted as a versioned `code_change` artifact and emitted as a `build.report` event.
+- **Non-linearity (D12):** design and requirements are read independently and tolerated when
+  missing **or** stale — each gap/staleness adds a clear note to the build report (covered by
+  `test_codegen_nonlinear.py`: design-only / requirements-only / neither / stale).
+- **Cost discipline:** plan→Haiku, implement→Sonnet; budget caps + token/₹ accounting come for free
+  from `run_tool_loop`. Context is bounded by `codegen_context_char_budget` (new config field) — only
+  design/requirements summaries + skeleton conventions, never the whole repo.
+- **Idempotency:** a re-run over an already-instantiated workspace skips the copy and notes an
+  incremental build (`test_codegen_skeleton_first.py::test_existing_workspace_is_not_rescaffolded`).
+- **Prompts:** [`app/agents/prompts/codegen.py`](../backend/app/agents/prompts/codegen.py) — plan +
+  implement system/user prompts encoding the skeleton conventions (feature folders, `FORGEFLOW:ROUTES`
+  markers, the typed API client, Zod validation).
+- **Tests:** `test_codegen_smoke.py`, `test_codegen_nonlinear.py`, `test_codegen_skeleton_first.py`
+  drive the loop over a scripted mock model + sandbox fakes (reusing the phase-20/21 harnesses).
+- **Verification:** ruff/black/mypy clean; a pure-logic harness exercised the tracker + boot-status +
+  report assembly + StrEnum→JSON serialization with real objects (the backend pytest suite runs on
+  Linux/CI — native Windows can't import the Unix-only sandbox runtime, same as phase 22).
+- **Out of scope (as planned):** the Build stage handler/UI is phase-24; codegen is a reusable
+  service consumed there and by the eval harness (phase-44).
