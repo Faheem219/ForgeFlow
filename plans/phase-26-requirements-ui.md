@@ -62,4 +62,11 @@ Delivers the "fill-in-the-blanks guide" UX of D6. Structured, low-friction captu
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Implementation notes**
+
+- Backend: added an optional AI-assist endpoint `POST /projects/{id}/requirements/suggest` — [requirements_suggest.py](../backend/app/orchestrator/requirements_suggest.py) routes to `MODEL_ROUTING` (Haiku, `TaskKind.summarize`), best-effort JSON parse, cost-tracked on a `Run`. Ownership-checked; degrades soft (502, never 500) when no model/creds. Schemas (`SuggestRequest`/`SuggestResponse`) in [requirements.py](../backend/app/orchestrator/requirements.py); route in [router.py](../backend/app/orchestrator/router.py).
+- Frontend feature `src/features/requirements/`: `RequirementsForm` (guided multi-feature capture with inputs/behaviors/criteria + `kind` selector, inline validation mirroring the API, per-feature "Suggest (AI)" that **appends** editable proposals), `ReviewSummary` (read view + Edit), `RequirementsPanel` (loads latest spec, review⇄edit toggle, status badge + Proceed/Skip via the conductor, save → on an existing build a `refine` intent stales downstream). Mounted lazily in `StagePanel`.
+- Staleness: a save only fires the downstream-staling `refine` when a build exists **and** requirements is in a reopenable status (`complete`/`skipped`/`stale`) — the conductor rejects a refine otherwise, so we never emit an illegal intent.
+- Tests: `RequirementsForm.test.tsx` (5) + `ReviewSummary.test.tsx` (2) green; backend `test_requirements_suggest.py` (8). Full suites: frontend 94 passed, backend 293 passed (1 docker deselected).

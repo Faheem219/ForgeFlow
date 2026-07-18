@@ -18,7 +18,11 @@ from app.orchestrator.requirements import (
     RequirementSpecInput,
     RequirementSpecPublic,
     RequirementsService,
+    SuggestedCriterionPublic,
+    SuggestRequest,
+    SuggestResponse,
 )
+from app.orchestrator.requirements_suggest import suggest_criteria
 from app.orchestrator.schemas import (
     ArtifactDetail,
     ArtifactDiffResponse,
@@ -117,3 +121,18 @@ async def list_requirement_versions(
     pid = await _owned_project_id(project_id, user_id)
     specs = await RequirementsService().list_versions(pid)
     return [RequirementSpecPublic.of(s) for s in specs]
+
+
+@requirements_router.post("/{project_id}/requirements/suggest", response_model=SuggestResponse)
+async def suggest_requirements(
+    project_id: str,
+    body: SuggestRequest,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> SuggestResponse:
+    """Optional, cheap AI-assist: propose editable acceptance criteria (Haiku)."""
+    pid = await _owned_project_id(project_id, user_id)
+    project = await ProjectService().get_owned(pid, user_id)
+    suggestions = await suggest_criteria(project, body.name, body.description)
+    return SuggestResponse(
+        criteria=[SuggestedCriterionPublic(text=s.text, kind=s.kind) for s in suggestions]
+    )

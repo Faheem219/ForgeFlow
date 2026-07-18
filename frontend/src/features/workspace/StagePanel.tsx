@@ -8,6 +8,13 @@ import { useStage } from './useStage';
 // The design + build panels are heavy (Monaco / xterm) — only pull them in when their stage shows.
 const DesignPanel = lazy(() => import('../design/DesignPanel'));
 const BuildPanel = lazy(() => import('../build/BuildPanel'));
+const RequirementsPanel = lazy(() => import('../requirements/RequirementsPanel'));
+
+const STAGE_PANELS = {
+  design: DesignPanel,
+  build: BuildPanel,
+  requirements: RequirementsPanel,
+} as const;
 
 const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
@@ -16,16 +23,17 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 };
 
 /**
- * Per-stage panel. Design hosts the full design UI; Build hosts the web IDE; the remaining stages
- * (requirements form, test/repair view, deploy topology, data browser) fill in during later epics —
- * for those this scaffold just exposes the refine/skip/proceed affordances and an artifacts area.
+ * Per-stage panel. Design hosts the full design UI; Build hosts the web IDE; Requirements hosts the
+ * guided capture form; the remaining stages (test/repair view, deploy topology, data browser) fill
+ * in during later epics — for those this scaffold just exposes refine/skip/proceed + an artifacts
+ * area.
  */
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);
   const status = stageState?.status ?? 'empty';
 
-  if (stage === 'design' || stage === 'build') {
-    const ActivePanel = stage === 'design' ? DesignPanel : BuildPanel;
+  const ActivePanel = STAGE_PANELS[stage as keyof typeof STAGE_PANELS];
+  if (ActivePanel) {
     return (
       <Suspense
         fallback={

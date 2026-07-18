@@ -41,6 +41,22 @@ class RequirementSpecInput(BaseModel):
     features: list[FeatureInput] = Field(default_factory=list)
 
 
+class SuggestRequest(BaseModel):
+    """Body for the optional AI-assist: propose criteria for one feature (phase-26)."""
+
+    name: str
+    description: str = ""
+
+
+class SuggestedCriterionPublic(BaseModel):
+    text: str
+    kind: CriterionKind
+
+
+class SuggestResponse(BaseModel):
+    criteria: list[SuggestedCriterionPublic]
+
+
 # --------------------------------------------------------------------- output schemas
 
 
@@ -199,4 +215,7 @@ __all__ = [
     "RequirementSpecInput",
     "RequirementSpecPublic",
     "RequirementsService",
+    "SuggestRequest",
+    "SuggestResponse",
+    "SuggestedCriterionPublic",
 ]

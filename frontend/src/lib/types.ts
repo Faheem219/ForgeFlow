@@ -123,3 +123,56 @@ export interface IntentResponse {
   artifacts: ArtifactDto[];
   run_id: string;
 }
+
+// --- Requirements stage (phase-25 schema / phase-26 UI) ---
+
+/** How a criterion is exercised: a unit test, an e2e flow, or (default) either. */
+export type CriterionKind = 'unit' | 'e2e' | 'either';
+
+/** Persisted acceptance criterion — `id` is the stable join key across requirements → tests. */
+export interface CriterionDto {
+  id: string;
+  text: string;
+  kind: CriterionKind;
+}
+
+export interface FeatureDto {
+  name: string;
+  description: string;
+  inputs: string[];
+  expected_behaviors: string[];
+  acceptance_criteria: CriterionDto[];
+}
+
+/** A saved requirements spec version (backend GET /projects/{id}/requirements). */
+export interface RequirementSpecDto {
+  project_id: string;
+  version: number;
+  features: FeatureDto[];
+  created_at: string;
+}
+
+/** Request-body criterion — round-trip `id` to preserve it; omit/null for a new one. */
+export interface CriterionInput {
+  id?: string | null;
+  text: string;
+  kind: CriterionKind;
+}
+
+export interface FeatureInput {
+  name: string;
+  description: string;
+  inputs: string[];
+  expected_behaviors: string[];
+  acceptance_criteria: CriterionInput[];
+}
+
+export interface RequirementSpecInput {
+  features: FeatureInput[];
+}
+
+/** An editable AI proposal from the optional Haiku assist (never auto-applied). */
+export interface SuggestedCriterion {
+  text: string;
+  kind: CriterionKind;
+}
