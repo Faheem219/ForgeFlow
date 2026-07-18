@@ -74,6 +74,14 @@ class TestKind(StrEnum):
     e2e = "e2e"
 
 
+class CriterionKind(StrEnum):
+    """How an acceptance criterion is intended to be verified (phase-25 → test-gen hint)."""
+
+    unit = "unit"
+    e2e = "e2e"
+    either = "either"
+
+
 class TestEnv(StrEnum):
     sandbox = "sandbox"
     live = "live"

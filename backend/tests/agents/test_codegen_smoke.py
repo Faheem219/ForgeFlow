@@ -12,8 +12,8 @@ from app.agents.codegen import CodegenAgent
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.db.models import RequirementSpec, Run
-from app.db.models.enums import ArtifactType, Stage
-from app.db.models.requirement import Feature
+from app.db.models.enums import ArtifactType, CriterionKind, Stage
+from app.db.models.requirement import AcceptanceCriterion, Feature
 from app.design.base import DesignResult
 from app.design.service import DesignService
 from app.orchestrator.artifacts import ArtifactService
@@ -47,7 +47,14 @@ async def test_full_build_reports_healthy_and_persists_artifact(
     )
     await RequirementSpec(
         project_id=project.id,
-        features=[Feature(name="Todos", acceptance_criteria=["can add a todo"])],
+        features=[
+            Feature(
+                name="Todos",
+                acceptance_criteria=[
+                    AcceptanceCriterion(id="ac-1", text="can add a todo", kind=CriterionKind.unit)
+                ],
+            )
+        ],
     ).insert()
 
     ws, exec_, preview = FakeWorkspace(), FakeExec(), FakePreview()

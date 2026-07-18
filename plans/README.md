@@ -38,7 +38,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [22](./phase-22-app-skeleton-template.md) | Fixed-stack app skeleton template | 4 · Build | 10 | ✅ |
 | [23](./phase-23-codegen-agent-loop.md) | Codegen agent loop | 4 · Build | 15, 19, 21, 22 | ✅ |
 | [24](./phase-24-build-stage-handler-ui.md) | Build stage handler & UI | 4 · Build | 09, 23 | ✅ |
-| [25](./phase-25-requirements-schema-api.md) | Structured requirements schema & API | 5 · Requirements & Tests | 07 | ⬜ |
+| [25](./phase-25-requirements-schema-api.md) | Structured requirements schema & API | 5 · Requirements & Tests | 07 | ✅ |
 | [26](./phase-26-requirements-ui.md) | Requirements UI (guided form) | 5 · Requirements & Tests | 09, 25 | ⬜ |
 | [27](./phase-27-test-generation-agent.md) | Test generation agent | 5 · Requirements & Tests | 21, 25 | ⬜ |
 | [28](./phase-28-test-runner-result-parsing.md) | Test runner & result parsing | 5 · Requirements & Tests | 13, 27 | ⬜ |

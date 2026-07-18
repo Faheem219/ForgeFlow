@@ -21,7 +21,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.db.mongo import close_client, init_db
 from app.design.router import router as design_router
-from app.orchestrator.router import intents_router
+from app.orchestrator.router import intents_router, requirements_router
 from app.orchestrator.router import router as artifacts_router
 from app.projects.router import router as projects_router
 from app.realtime.router import router as realtime_router
@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(preview_router)
     app.include_router(artifacts_router)
     app.include_router(intents_router)
+    app.include_router(requirements_router)
     app.include_router(design_router)
 
     @app.get("/health", tags=["health"])

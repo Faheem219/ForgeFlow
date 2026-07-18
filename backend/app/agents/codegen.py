@@ -375,6 +375,9 @@ def _format_features(features: list[Feature]) -> str:
         if feature.expected_behaviors:
             parts.append("Behaviors:\n" + "\n".join(f"- {b}" for b in feature.expected_behaviors))
         if feature.acceptance_criteria:
-            parts.append("Acceptance:\n" + "\n".join(f"- {a}" for a in feature.acceptance_criteria))
+            parts.append(
+                "Acceptance:\n"
+                + "\n".join(f"- {a.text} [{a.kind}]" for a in feature.acceptance_criteria)
+            )
         blocks.append("\n".join(parts))
     return "\n\n".join(blocks)

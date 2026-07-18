@@ -14,6 +14,11 @@ from app.core.errors import NotFoundError
 from app.db.models import Artifact
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.conductor import Conductor
+from app.orchestrator.requirements import (
+    RequirementSpecInput,
+    RequirementSpecPublic,
+    RequirementsService,
+)
 from app.orchestrator.schemas import (
     ArtifactDetail,
     ArtifactDiffResponse,
@@ -25,6 +30,7 @@ from app.projects.service import ProjectService, parse_object_id
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 intents_router = APIRouter(prefix="/projects", tags=["orchestrator"])
+requirements_router = APIRouter(prefix="/projects", tags=["requirements"])
 
 
 async def _owned_artifact(artifact_id: str, user_id: PydanticObjectId) -> Artifact:
@@ -67,3 +73,47 @@ async def submit_intent(
     """Route a user intent through the conductor; detailed progress streams over the WS."""
     intent = Intent.from_request(parse_object_id(project_id), body)
     return await Conductor().handle_intent(user_id, intent)
+
+
+# --------------------------------------------------------------------- requirements (phase-25)
+
+
+async def _owned_project_id(project_id: str, user_id: PydanticObjectId) -> PydanticObjectId:
+    pid = parse_object_id(project_id)
+    await ProjectService().get_owned(pid, user_id)  # 404 if missing / not owned
+    return pid
+
+
+@requirements_router.get("/{project_id}/requirements", response_model=RequirementSpecPublic)
+async def get_requirements(
+    project_id: str, user_id: PydanticObjectId = Depends(get_current_user_id)
+) -> RequirementSpecPublic:
+    pid = await _owned_project_id(project_id, user_id)
+    spec = await RequirementsService().latest(pid)
+    if spec is None:
+        raise NotFoundError("No requirements for this project yet")
+    return RequirementSpecPublic.of(spec)
+
+
+@requirements_router.post("/{project_id}/requirements", response_model=RequirementSpecPublic)
+@requirements_router.put("/{project_id}/requirements", response_model=RequirementSpecPublic)
+async def save_requirements(
+    project_id: str,
+    body: RequirementSpecInput,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> RequirementSpecPublic:
+    """Create/update the spec — a new version only when the content changes (append-only)."""
+    pid = await _owned_project_id(project_id, user_id)
+    spec = await RequirementsService().save(pid, body)
+    return RequirementSpecPublic.of(spec)
+
+
+@requirements_router.get(
+    "/{project_id}/requirements/versions", response_model=list[RequirementSpecPublic]
+)
+async def list_requirement_versions(
+    project_id: str, user_id: PydanticObjectId = Depends(get_current_user_id)
+) -> list[RequirementSpecPublic]:
+    pid = await _owned_project_id(project_id, user_id)
+    specs = await RequirementsService().list_versions(pid)
+    return [RequirementSpecPublic.of(s) for s in specs]
