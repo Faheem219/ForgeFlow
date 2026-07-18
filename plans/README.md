@@ -40,7 +40,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [24](./phase-24-build-stage-handler-ui.md) | Build stage handler & UI | 4 · Build | 09, 23 | ✅ |
 | [25](./phase-25-requirements-schema-api.md) | Structured requirements schema & API | 5 · Requirements & Tests | 07 | ✅ |
 | [26](./phase-26-requirements-ui.md) | Requirements UI (guided form) | 5 · Requirements & Tests | 09, 25 | ✅ |
-| [27](./phase-27-test-generation-agent.md) | Test generation agent | 5 · Requirements & Tests | 21, 25 | ⬜ |
+| [27](./phase-27-test-generation-agent.md) | Test generation agent | 5 · Requirements & Tests | 21, 25 | ✅ |
 | [28](./phase-28-test-runner-result-parsing.md) | Test runner & result parsing | 5 · Requirements & Tests | 13, 27 | ⬜ |
 | [29](./phase-29-failure-analyzer-repair-context.md) | Failure analyzer & minimal repair context | 6 · Repair Loop | 12, 28 | ⬜ |
 | [30](./phase-30-diff-aware-repair-agent.md) | Diff-aware repair agent | 6 · Repair Loop | 21, 29 | ⬜ |

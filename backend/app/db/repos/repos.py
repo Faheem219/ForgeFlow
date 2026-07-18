@@ -31,6 +31,7 @@ from app.db.models.enums import (
     SettingCategory,
     Stage,
     StageStatus,
+    TestKind,
 )
 from app.db.repos.base import BaseRepo
 
@@ -177,11 +178,17 @@ class RequirementSpecRepo(BaseRepo[RequirementSpec]):
         )
 
     async def create_version(
-        self, project_id: PydanticObjectId, features: list[Feature]
+        self,
+        project_id: PydanticObjectId,
+        features: list[Feature],
+        *,
+        inferred: bool = False,
     ) -> RequirementSpec:
         latest = await self.latest(project_id)
         version = (latest.version + 1) if latest is not None else 1
-        spec = RequirementSpec(project_id=project_id, features=features, version=version)
+        spec = RequirementSpec(
+            project_id=project_id, features=features, version=version, inferred=inferred
+        )
         return await spec.insert()
 
 
@@ -191,6 +198,32 @@ class TestSuiteRepo(BaseRepo[TestSuite]):
 
     async def list_for_project(self, project_id: PydanticObjectId) -> list[TestSuite]:
         return await TestSuite.find({"project_id": project_id}).to_list()
+
+    async def latest(self, project_id: PydanticObjectId, kind: TestKind) -> TestSuite | None:
+        return await (
+            TestSuite.find({"project_id": project_id, "kind": kind})
+            .sort("-version")
+            .first_or_none()
+        )
+
+    async def create_version(
+        self,
+        project_id: PydanticObjectId,
+        kind: TestKind,
+        files: list[str],
+        generated_from: list[str],
+    ) -> TestSuite:
+        """Append the next version of a project's ``kind`` suite (unit/e2e), versioned per kind."""
+        latest = await self.latest(project_id, kind)
+        version = (latest.version + 1) if latest is not None else 1
+        suite = TestSuite(
+            project_id=project_id,
+            kind=kind,
+            files=files,
+            generated_from=generated_from,
+            version=version,
+        )
+        return await suite.insert()
 
 
 class TestRunRepo(BaseRepo[TestRun]):

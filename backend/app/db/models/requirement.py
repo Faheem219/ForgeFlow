@@ -39,6 +39,10 @@ class RequirementSpec(Document):
     project_id: PydanticObjectId
     features: list[Feature] = Field(default_factory=list)
     version: int = 1
+    # True when the test-gen agent inferred this spec from design/build artifacts because the
+    # requirements stage was skipped (phase-27, D12) — surfaced so it is never mistaken for a
+    # human-authored spec.
+    inferred: bool = False
     created_at: datetime = Field(default_factory=utcnow)
 
     class Settings:

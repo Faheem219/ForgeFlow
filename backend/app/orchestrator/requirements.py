@@ -92,6 +92,8 @@ class RequirementSpecPublic(BaseModel):
     project_id: str
     version: int
     features: list[FeaturePublic]
+    # True when the test-gen agent inferred this spec (requirements skipped) — labeled for the UI.
+    inferred: bool
     created_at: str
 
     @classmethod
@@ -100,6 +102,7 @@ class RequirementSpecPublic(BaseModel):
             project_id=str(spec.project_id),
             version=spec.version,
             features=[FeaturePublic.of(f) for f in spec.features],
+            inferred=spec.inferred,
             created_at=spec.created_at.isoformat(),
         )
 
@@ -124,16 +127,24 @@ class RequirementsService:
         return await RequirementSpec.find({"project_id": project_id}).sort("+version").to_list()
 
     async def save(
-        self, project_id: PydanticObjectId, spec: RequirementSpecInput
+        self,
+        project_id: PydanticObjectId,
+        spec: RequirementSpecInput,
+        *,
+        inferred: bool = False,
     ) -> RequirementSpec:
         """Validate + persist. A new **version** is created only when the content changes; ids are
-        preserved for criteria that are unchanged (client-provided id, else content match)."""
+        preserved for criteria that are unchanged (client-provided id, else content match).
+
+        ``inferred`` marks a spec the test-gen agent derived from design/build artifacts because the
+        requirements stage was skipped (phase-27); it only applies when creating a version.
+        """
         previous = await self._repo.latest(project_id)
         features = _resolve(spec, previous)  # validates + assigns stable ids
 
         if previous is not None and previous.features == features:
             return previous  # no change → no new version
-        return await self._repo.create_version(project_id, features)
+        return await self._repo.create_version(project_id, features, inferred=inferred)
 
 
 def _resolve(spec: RequirementSpecInput, previous: RequirementSpec | None) -> list[Feature]:

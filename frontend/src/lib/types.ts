@@ -149,6 +149,8 @@ export interface RequirementSpecDto {
   project_id: string;
   version: number;
   features: FeatureDto[];
+  /** True when the test-gen agent inferred the spec because requirements were skipped (phase-27). */
+  inferred?: boolean;
   created_at: string;
 }
 
