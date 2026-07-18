@@ -65,4 +65,42 @@ The measurement layer the repair loop consumes (§9 inputs: "a `TestRun` with �
 
 ## Status
 
-⬜ todo
+✅ done — Executes the unit (Vitest/Jest) + Playwright suites in the sandbox and normalizes all three
+reporters into ONE structured, per-test `TestResult` shape — the measurement layer the repair loop
+(Epic 6) consumes, with the criterion-id join key carried through and referenced source files
+extracted for minimal repair context (phase-29).
+
+- `app/testing/models.py` — the unified `TestResult {name, status, framework, criterion_id?, file?,
+  duration_ms?, failure{message, assertion, stack, files_referenced[]}}` + `summarize()` (green =
+  something passed and nothing failed, so an empty/all-skipped run never advances last-passing) + the
+  API schemas.
+- `app/testing/parsers.py` — pure Vitest/Jest/Playwright JSON → `TestResult[]`. Jest & Vitest share
+  one walk (Vitest emulates Jest's shape); Playwright recurses suites→specs→tests. The **criterion
+  id** is recovered from the test title's `[<id>]` tag (phase-27) and **referenced files** are pulled
+  from failure stacks (node_modules stripped, `/workspace/` prefix normalized). Tolerates garbage
+  JSON (→ `[]`).
+- `app/testing/runner.py` — runs each framework with a JSON reporter writing to a workspace file,
+  reads it back through the FS layer, and parses it. A non-zero exit with no per-test results becomes
+  a **suite-level failure** (compile error/timeout) so the repair loop always sees a failure. Captures
+  combined stdout to one blob; persists a `TestRun` (results/failures as dicts, `suite_refs`,
+  `stdout_ref`); on an all-green run **advances the `last-passing` git ref** (new
+  `WorkspaceService.set_last_passing`) — the anchor for repair diffs; emits per-test + summary
+  `test.result` events. All deps (exec/workspace/blobs) are injected behind Protocols, so the whole
+  orchestration is testable without Docker.
+- `app/testing/router.py` (wired in `app/api/app.py`) — `POST /projects/{id}/tests/run` (scope +
+  filter), `GET …/tests/runs`, `GET …/tests/runs/{id}`, ownership-checked (a run under another
+  project is a 404). New config `test_runner_timeout_s`.
+
+**Acceptance:** suites run in the sandbox with structured, per-test, actionable failures (message,
+assertion, stack, referenced files); `criterion_id` is carried through; an all-green run advances
+`last-passing` (red/empty runs do not); `TestRun`s persist and `test.result` events stream. Covered by
+`tests/testing/` (22): `test_parsers` (three reporters → one shape, criterion + referenced-file
+extraction, garbage tolerance), `test_runner` (scope selection, combine, suite-failure synthesis,
+suite_refs, events, dict round-trip + an opt-in `docker` real-Jest run), `test_last_passing_ref`
+(green advances / red + all-skipped do not), and `test_tests_api` (run wiring + reads + ownership).
+
+**Verification:** ruff/black + mypy clean across the phase-28 surface; testing suite **21 passed / 1
+skipped** (the opt-in docker toolchain run) against a live MongoDB; full backend suite green (the one
+pre-existing env-only `requirements_suggest` SDK-auth failure is unrelated). Live-verified end-to-end
+against MongoDB. `Test*`-named domain/result classes emit the usual harmless pytest collection
+warnings (same as the existing `TestRun`/`TestSuite`/`TestKind` models).

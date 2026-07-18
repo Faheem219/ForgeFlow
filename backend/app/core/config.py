@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     # — feed only what's needed, never the whole repo).
     codegen_context_char_budget: int = 6000
 
+    # --- Test runner (phase-28) ---
+    # Wall-clock bound for a single suite invocation in the sandbox (Playwright can be slow).
+    test_runner_timeout_s: int = 900
+
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"
