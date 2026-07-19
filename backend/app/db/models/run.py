@@ -24,6 +24,10 @@ class Run(Document):
     cost: Cost = Field(default_factory=Cost)
     # One entry per agent tool call (phase-21): {tool, ok, at}. The auditable action trail.
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    # Terminal result of the work this Run bounds — e.g. the repair loop's `fixed`/`escalated`
+    # (phase-31). Left None by runs that have no meaningful terminal state. Read by the eval
+    # harness (D13, phase-44), which treats one Run as one costed unit of work.
+    outcome: str | None = None
     started_at: datetime = Field(default_factory=utcnow)
     finished_at: datetime | None = None
     events_ref: str | None = None

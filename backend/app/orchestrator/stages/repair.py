@@ -1,0 +1,506 @@
+"""Bounded, convergent repair-loop controller (phase-31, §9 steps 4–5).
+
+The defensible contribution (D1/D7). Three invariants are absolute here:
+
+    never loop unbounded · always leave an auditable trail · prefer escalation over silent failure
+
+Each iteration is: assemble the minimal context (phase-29) → one patch attempt (phase-30) → judge.
+The loop stops on the **first** of:
+
+- **green** — every test passes (`outcome=fixed`);
+- **regression guard** — patches introduced regressions twice;
+- **stall** — the failing-test set failed to shrink for ``repair_stall_threshold`` consecutive
+  iterations (an oscillating set that stays the same size counts as not shrinking);
+- **cap** — ``repair_max_iterations`` reached;
+- **budget / cancellation / nothing-safe-to-patch** — halted for a reason worth telling a human.
+
+Every non-green ending is an **escalation**, which is a first-class terminal state rather than an
+error: the stage goes ``awaiting_user`` with a "here's where I'm stuck" payload (the failing tests,
+the diffs already tried, the convergence metrics, and how to resume). Resuming with guidance
+re-enters Build (phase-24), which may then re-run repair.
+
+Thresholds are config-resolved (``admin > env > default``) so the admin dashboard can tune them
+(phase-51/52) and the eval harness can sweep them (phase-44).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+
+from beanie import PydanticObjectId
+
+from app.agents.repair import RepairAgent, RepairResult, test_key
+from app.agents.repair_context import RepairContext, RepairContextAnalyzer
+from app.agents.tools.context import ToolContext
+from app.core.config import get_config
+from app.core.errors import UserError
+from app.db.models import Project, Run, TestRun
+from app.db.models.common import utcnow
+from app.db.models.enums import ArtifactType, RepairOutcome, Stage, StageStatus
+from app.db.repos import RunRepo, StageStateRepo
+from app.orchestrator.artifacts import ArtifactService
+from app.realtime.hub import emit
+from app.testing.models import TestResult, TestStatus
+
+# Terminal loop outcomes (recorded on the Run — the eval unit, D13).
+LOOP_FIXED = "fixed"
+LOOP_ESCALATED = "escalated"
+
+# Why the loop stopped short of green.
+REASON_STALLED = "stalled"
+REASON_REGRESSED = "regressed"
+REASON_CAP = "cap_reached"
+REASON_BUDGET = "budget"
+REASON_BLOCKED = "blocked"
+REASON_CANCELLED = "cancelled"
+
+REPAIR_REPORT_KIND = "repair_report"
+
+# Two regressions is the guard: one may be bad luck, twice is a pattern (§9).
+_MAX_REGRESSIONS = 2
+
+# How the user resumes after an escalation — guidance re-enters Build (phase-24), which may
+# then re-run repair. The controller states the contract; the conductor already implements it.
+RESUME_ACTION = {
+    "stage": str(Stage.build),
+    "action": "refine",
+    "hint": "Describe what to change; the build regenerates and repair can run again.",
+}
+
+_REASON_TEXT = {
+    REASON_STALLED: "the failing tests stopped shrinking",
+    REASON_REGRESSED: "my patches kept breaking tests that were passing",
+    REASON_CAP: "I hit the iteration cap",
+    REASON_BUDGET: "the budget cap halted the run",
+    REASON_BLOCKED: "there was nothing safe for me to patch",
+    REASON_CANCELLED: "the run was cancelled",
+}
+
+
+# --------------------------------------------------------------------- shapes
+
+
+@dataclass
+class ConvergenceMetrics:
+    """What the eval harness (D13) measures: does the loop actually converge, and at what cost."""
+
+    initial_failing: int = 0
+    failing_by_iteration: list[int] = field(default_factory=list)
+    regressions_introduced: int = 0
+    iterations: int = 0
+    tokens_spent: int = 0
+    cost_inr: float = 0.0
+    wall_clock_s: float = 0.0
+
+    @property
+    def final_failing(self) -> int:
+        return self.failing_by_iteration[-1] if self.failing_by_iteration else self.initial_failing
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "initial_failing": self.initial_failing,
+            "final_failing": self.final_failing,
+            "failing_by_iteration": self.failing_by_iteration,
+            "regressions_introduced": self.regressions_introduced,
+            "iterations": self.iterations,
+            "tokens_spent": self.tokens_spent,
+            "cost_inr": round(self.cost_inr, 6),
+            "wall_clock_s": round(self.wall_clock_s, 3),
+        }
+
+
+@dataclass
+class Escalation:
+    """The "here's where I'm stuck" payload handed to a human."""
+
+    reason: str
+    summary: str
+    failing_tests: list[dict[str, Any]]
+    diffs_tried: list[dict[str, Any]]
+    metrics: ConvergenceMetrics
+    resume: dict[str, Any] = field(default_factory=lambda: dict(RESUME_ACTION))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reason": self.reason,
+            "summary": self.summary,
+            "failing_tests": self.failing_tests,
+            "diffs_tried": self.diffs_tried,
+            "metrics": self.metrics.to_dict(),
+            "resume": self.resume,
+        }
+
+
+@dataclass
+class RepairLoopResult:
+    outcome: str  # LOOP_FIXED | LOOP_ESCALATED
+    metrics: ConvergenceMetrics
+    attempts: list[Any] = field(default_factory=list)  # RepairAttempt docs, in order
+    final_run: TestRun | None = None
+    escalation: Escalation | None = None
+
+    @property
+    def fixed(self) -> bool:
+        return self.outcome == LOOP_FIXED
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "metrics": self.metrics.to_dict(),
+            "attempts": [
+                {
+                    "iteration": a.iteration,
+                    "target_files": a.target_files,
+                    "diff_ref": a.diff_ref,
+                    "outcome": str(a.outcome) if a.outcome else None,
+                }
+                for a in self.attempts
+            ],
+            "final_run_id": str(self.final_run.id) if self.final_run else None,
+            "escalation": self.escalation.to_dict() if self.escalation else None,
+        }
+
+
+class PatchAgent(Protocol):
+    """The slice of :class:`~app.agents.repair.RepairAgent` the controller drives."""
+
+    async def run(
+        self,
+        project: Project,
+        run: Run,
+        test_run: TestRun,
+        *,
+        context: RepairContext | None = None,
+        ctx: ToolContext | None = None,
+        channel: str | None = None,
+        iteration: int = 1,
+    ) -> RepairResult: ...
+
+
+class ContextAnalyzer(Protocol):
+    async def analyze(
+        self, project: Project, test_run: TestRun, *, persist: bool = True
+    ) -> RepairContext: ...
+
+
+# --------------------------------------------------------------------- controller
+
+
+class RepairLoopController:
+    def __init__(
+        self,
+        agent: PatchAgent | None = None,
+        analyzer: ContextAnalyzer | None = None,
+        artifacts: ArtifactService | None = None,
+        stages: StageStateRepo | None = None,
+        runs: RunRepo | None = None,
+    ) -> None:
+        self._agent = agent or RepairAgent()
+        self._analyzer = analyzer or RepairContextAnalyzer()
+        self._artifacts = artifacts or ArtifactService()
+        self._stages = stages or StageStateRepo()
+        self._runs = runs or RunRepo()
+
+    async def run(
+        self,
+        project: Project,
+        test_run: TestRun,
+        *,
+        run: Run | None = None,
+        ctx: ToolContext | None = None,
+        channel: str | None = None,
+        cancel: asyncio.Event | None = None,
+    ) -> RepairLoopResult:
+        project_id = project.id
+        if project_id is None:  # pragma: no cover - a persisted project always carries an id
+            raise UserError("Project is not persisted")
+        channel = channel or str(project_id)
+        started = time.monotonic()
+
+        config = get_config()
+        max_iterations = int(config.get("repair_max_iterations"))
+        stall_threshold = int(config.get("repair_stall_threshold"))
+
+        run = run or await self._runs.insert(Run(project_id=project_id, kind="repair:loop"))
+        ctx = ctx or ToolContext.build(project, run, channel=channel)
+
+        current = test_run
+        failing = failing_keys(current)
+        metrics = ConvergenceMetrics(initial_failing=len(failing))
+        attempts: list[Any] = []
+        escalation: Escalation | None = None
+        stall = 0
+        regressions = 0
+
+        if not failing:
+            # Nothing to do — a green run in means a green run out (safe + idempotent).
+            return await self._finish(
+                project_id,
+                run,
+                channel,
+                RepairLoopResult(LOOP_FIXED, metrics, [], current),
+                started,
+            )
+
+        for iteration in range(1, max_iterations + 1):
+            if cancel is not None and cancel.is_set():
+                escalation = self._escalate(REASON_CANCELLED, "", current, attempts, metrics)
+                break
+
+            try:
+                context = await self._analyzer.analyze(project, current)
+                result = await self._agent.run(
+                    project,
+                    run,
+                    current,
+                    context=context,
+                    ctx=ctx,
+                    channel=channel,
+                    iteration=iteration,
+                )
+            except UserError as exc:
+                # Budget caps (and other user-facing halts) end the loop as an escalation, never
+                # as a crash — "prefer escalation over silent failure".
+                escalation = self._escalate(REASON_BUDGET, str(exc), current, attempts, metrics)
+                break
+
+            if result.attempt is None:
+                # The agent had nothing safe to patch (e.g. only test files implicated).
+                escalation = self._escalate(
+                    REASON_BLOCKED, result.note or "", current, attempts, metrics
+                )
+                break
+
+            after = result.test_run or current
+            new_failing = failing_keys(after)
+            shrank = len(new_failing) < len(failing)
+            regressed = bool(result.newly_failing)
+
+            metrics.iterations = iteration
+            metrics.failing_by_iteration.append(len(new_failing))
+            if regressed:
+                regressions += 1
+                metrics.regressions_introduced = regressions
+
+            result.attempt.outcome = _attempt_outcome(result.green, shrank, regressed)
+            await result.attempt.save()
+            attempts.append(result.attempt)
+
+            await emit(
+                channel,
+                "repair.iteration",
+                {
+                    "i": iteration,
+                    "failing_count": len(new_failing),
+                    "regressions": regressions,
+                    "tokens": run.cost.tokens,
+                    "outcome": str(result.attempt.outcome),
+                    "files": result.attempt.target_files,
+                },
+                stage=Stage.test,
+            )
+
+            current = after
+            if result.green:
+                return await self._finish(
+                    project_id,
+                    run,
+                    channel,
+                    RepairLoopResult(LOOP_FIXED, metrics, attempts, current),
+                    started,
+                )
+
+            # Regression guard is checked first: repeatedly breaking working code is a worse
+            # signal than simply not converging, and it names the problem more precisely.
+            if regressions >= _MAX_REGRESSIONS:
+                escalation = self._escalate(REASON_REGRESSED, "", current, attempts, metrics)
+                break
+
+            stall = 0 if shrank else stall + 1
+            if stall >= stall_threshold:
+                escalation = self._escalate(REASON_STALLED, "", current, attempts, metrics)
+                break
+
+            failing = new_failing
+        else:
+            # Ran the full budget of iterations without going green — the hard bound (§9).
+            escalation = self._escalate(REASON_CAP, "", current, attempts, metrics)
+
+        return await self._finish(
+            project_id,
+            run,
+            channel,
+            RepairLoopResult(LOOP_ESCALATED, metrics, attempts, current, escalation),
+            started,
+        )
+
+    # -- terminal handling -----------------------------------------------------------------
+
+    async def _finish(
+        self,
+        project_id: PydanticObjectId,
+        run: Run,
+        channel: str,
+        result: RepairLoopResult,
+        started: float,
+    ) -> RepairLoopResult:
+        result.metrics.wall_clock_s = time.monotonic() - started
+        result.metrics.tokens_spent = run.cost.tokens
+        result.metrics.cost_inr = run.cost.inr
+
+        if result.escalation is not None:
+            result.escalation.metrics = result.metrics
+            # Escalation is a normal terminal state: hand the stage back to the human.
+            await self._stages.set_status(project_id, Stage.test, StageStatus.awaiting_user)
+            await emit(channel, "repair.escalation", result.escalation.to_dict(), stage=Stage.test)
+        else:
+            await emit(
+                channel,
+                "repair.done",
+                {"outcome": result.outcome, "metrics": result.metrics.to_dict()},
+                stage=Stage.test,
+            )
+
+        run.outcome = result.outcome
+        run.finished_at = utcnow()
+        await run.save()
+
+        await self._persist(project_id, result)
+        return result
+
+    def _escalate(
+        self,
+        reason: str,
+        detail: str,
+        current: TestRun,
+        attempts: list[Any],
+        metrics: ConvergenceMetrics,
+    ) -> Escalation:
+        failing = failing_results(current)
+        return Escalation(
+            reason=reason,
+            summary=_stuck_summary(reason, detail, failing, attempts, metrics),
+            failing_tests=[
+                {
+                    "name": f.name,
+                    "criterion_id": f.criterion_id,
+                    "file": f.file,
+                    "message": f.failure.message if f.failure else "",
+                }
+                for f in failing
+            ],
+            diffs_tried=[
+                {
+                    "iteration": a.iteration,
+                    "files": a.target_files,
+                    "diff_ref": a.diff_ref,
+                    "outcome": str(a.outcome) if a.outcome else None,
+                }
+                for a in attempts
+            ],
+            metrics=metrics,
+        )
+
+    async def _persist(self, project_id: PydanticObjectId, result: RepairLoopResult) -> None:
+        """Store the loop report so the UI (phase-32) and eval (phase-44) can read it back."""
+        await self._artifacts.create_version(
+            project_id,
+            Stage.test,
+            ArtifactType.repair_attempt,
+            text=json.dumps(result.to_dict(), indent=2),
+            meta={
+                "kind": REPAIR_REPORT_KIND,
+                "outcome": result.outcome,
+                "iterations": result.metrics.iterations,
+                "final_failing": result.metrics.final_failing,
+                "regressions_introduced": result.metrics.regressions_introduced,
+                "reason": result.escalation.reason if result.escalation else None,
+            },
+        )
+
+
+# --------------------------------------------------------------------- pure helpers
+
+
+def _attempt_outcome(green: bool, shrank: bool, regressed: bool) -> RepairOutcome:
+    """Judge one attempt.
+
+    Regression dominates: an attempt that fixed something *and* broke something is still the
+    dangerous kind. Otherwise progress (green or a smaller failing set) is ``fixed``, and standing
+    still is ``no_progress``.
+    """
+    if regressed:
+        return RepairOutcome.regressed
+    if green or shrank:
+        return RepairOutcome.fixed
+    return RepairOutcome.no_progress
+
+
+def failing_results(test_run: TestRun) -> list[TestResult]:
+    """The run's failing results (``failures`` is pre-filtered; fall back to scanning results)."""
+    raw = test_run.failures or test_run.results
+    out: list[TestResult] = []
+    for item in raw:
+        try:
+            result = TestResult.model_validate(item)
+        except Exception:  # a malformed stored row must not sink the loop
+            continue
+        if result.status is TestStatus.failed:
+            out.append(result)
+    return out
+
+
+def failing_keys(test_run: TestRun) -> set[str]:
+    return {test_key(r) for r in failing_results(test_run)}
+
+
+def _stuck_summary(
+    reason: str,
+    detail: str,
+    failing: list[TestResult],
+    attempts: list[Any],
+    metrics: ConvergenceMetrics,
+) -> str:
+    why = _REASON_TEXT.get(reason, reason)
+    names = ", ".join(f.name for f in failing[:5]) or "none"
+    more = f" (+{len(failing) - 5} more)" if len(failing) > 5 else ""
+    touched = sorted({p for a in attempts for p in a.target_files})
+    tried = ", ".join(touched[:6]) if touched else "no files"
+    trail = " → ".join(str(n) for n in metrics.failing_by_iteration) or "—"
+
+    parts = [
+        f"I stopped after {metrics.iterations} attempt(s) because {why}.",
+        f"{len(failing)} test(s) are still failing: {names}{more}.",
+        f"I patched: {tried}.",
+        f"Failing count per attempt: {trail}.",
+    ]
+    if metrics.regressions_introduced:
+        parts.append(f"{metrics.regressions_introduced} attempt(s) broke previously-passing tests.")
+    if detail:
+        parts.append(detail)
+    parts.append("Tell me what to change and I'll rebuild from your guidance.")
+    return " ".join(parts)
+
+
+__all__ = [
+    "ConvergenceMetrics",
+    "Escalation",
+    "LOOP_ESCALATED",
+    "LOOP_FIXED",
+    "REASON_BLOCKED",
+    "REASON_BUDGET",
+    "REASON_CANCELLED",
+    "REASON_CAP",
+    "REASON_REGRESSED",
+    "REASON_STALLED",
+    "REPAIR_REPORT_KIND",
+    "RESUME_ACTION",
+    "RepairLoopController",
+    "RepairLoopResult",
+    "failing_keys",
+    "failing_results",
+]

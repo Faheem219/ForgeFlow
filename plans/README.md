@@ -44,7 +44,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [28](./phase-28-test-runner-result-parsing.md) | Test runner & result parsing | 5 · Requirements & Tests | 13, 27 | ✅ |
 | [29](./phase-29-failure-analyzer-repair-context.md) | Failure analyzer & minimal repair context | 6 · Repair Loop | 12, 28 | ✅ |
 | [30](./phase-30-diff-aware-repair-agent.md) | Diff-aware repair agent | 6 · Repair Loop | 21, 29 | ✅ |
-| [31](./phase-31-loop-controller.md) | Loop controller (bounded + convergent) | 6 · Repair Loop | 30 | ⬜ |
+| [31](./phase-31-loop-controller.md) | Loop controller (bounded + convergent) | 6 · Repair Loop | 30 | ✅ |
 | [32](./phase-32-repair-test-ui.md) | Repair & test UI | 6 · Repair Loop | 09, 28, 31 | ⬜ |
 | [33](./phase-33-infra-analyzer.md) | Infra analyzer | 7 · Deploy | 12 | ⬜ |
 | [34](./phase-34-secrets-credential-vault.md) | Secrets & credential vault | 7 · Deploy | 03 | ⬜ |
