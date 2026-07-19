@@ -67,4 +67,33 @@ The invariant that defines the crown jewel (D7, §9): *never feed the whole repo
 
 ## Status
 
-⬜ todo
+✅ done
+
+### Completion notes
+
+- **Analyzer** [`app/agents/repair_context.py`](../backend/app/agents/repair_context.py) —
+  `RepairContextAnalyzer.analyze(project, test_run)` assembles
+  `RepairContext{failing_tests, target_files, diff, requirement_snippets, base_sha, head_sha,
+  trimmed, notes, ref}`. Deterministic and **model-free**; its only I/O seam is a
+  `ContextWorkspace` Protocol (read + git_info + diff), so it's fully testable without Docker.
+- **Minimality (the invariant):** candidate files come *only* from each failure's
+  `files_referenced` (phase-28 stack extraction) plus the failing test's own `file`. Nothing else
+  is ever read — an unrelated file cannot enter the context even if it is huge.
+- **Diff anchored on `last-passing`** (not "previous commit"), scoped to the implicated paths, so
+  it reads as "what changed since it worked". Missing ref / `head == base` short-circuit to an
+  empty diff with a note rather than a whole-repo diff.
+- **Traceability:** `criterion_id` (phase-25 → 27 → 28) joins each failure to its acceptance text;
+  only the failing criteria's snippets are pulled in.
+- **Budgeting:** three new config knobs (`repair_context_max_chars`, `..._max_file_chars`,
+  `..._diff_max_chars`). Files are admitted in **failure-frequency** order (ties → first-seen);
+  the diff and oversized files are truncated and everything dropped/shortened is recorded in
+  `trimmed`, so a trimmed context is never silently lossy.
+- **Trace:** the context JSON is stored as a blob and linked to the run via a new
+  `TestRun.repair_context_ref` (additive, defaults `None`) for audit + eval (phase-44).
+- **Also added:** `WorkspaceService.diff()` exposing the phase-12 `WorkspaceGit.diff` primitive.
+- **Verification:** ruff/black/mypy clean; an 18-check harness exercised the pure assembly
+  (frequency ranking + deterministic tie-break, unrelated-file exclusion, truncation, result
+  flattening, malformed-row tolerance, context shape). The three DB/workspace suites
+  (`test_repair_context_minimal|_diff|_budget.py`) run on Linux/CI.
+- **Out of scope (as planned):** the patching agent (phase-30), loop controller (phase-31), UI
+  (phase-32). No code mutation happens here — context assembly only.

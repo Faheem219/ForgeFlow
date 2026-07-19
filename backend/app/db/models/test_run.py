@@ -18,6 +18,9 @@ class TestRun(Document):
     results: list[dict[str, Any]] = Field(default_factory=list)
     failures: list[dict[str, Any]] = Field(default_factory=list)
     stdout_ref: str | None = None
+    # Blob holding the minimal repair context assembled from this run's failures (phase-29) —
+    # the auditable input to the repair agent (phase-30) and the eval harness (phase-44).
+    repair_context_ref: str | None = None
     env: TestEnv = TestEnv.sandbox  # sandbox preview vs live URL (phase-39)
     created_at: datetime = Field(default_factory=utcnow)
 

@@ -169,6 +169,12 @@ class Settings(BaseSettings):
     # --- Repair loop (phase 29-31) ---
     repair_max_iterations: int = 5
     repair_stall_threshold: int = 2
+    # Minimal-context budget (phase-29). The invariant is "never feed the whole repo when a diff
+    # suffices" (§9), so the assembled context is hard-capped: oversized parts are trimmed by
+    # priority (failure frequency) and what was dropped is recorded on the context.
+    repair_context_max_chars: int = 24_000  # whole-context cap
+    repair_context_max_file_chars: int = 8_000  # per-file cap before truncation
+    repair_context_diff_max_chars: int = 8_000  # cap on the since-last-passing diff
 
 
 @runtime_checkable

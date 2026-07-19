@@ -42,7 +42,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [26](./phase-26-requirements-ui.md) | Requirements UI (guided form) | 5 · Requirements & Tests | 09, 25 | ✅ |
 | [27](./phase-27-test-generation-agent.md) | Test generation agent | 5 · Requirements & Tests | 21, 25 | ✅ |
 | [28](./phase-28-test-runner-result-parsing.md) | Test runner & result parsing | 5 · Requirements & Tests | 13, 27 | ✅ |
-| [29](./phase-29-failure-analyzer-repair-context.md) | Failure analyzer & minimal repair context | 6 · Repair Loop | 12, 28 | ⬜ |
+| [29](./phase-29-failure-analyzer-repair-context.md) | Failure analyzer & minimal repair context | 6 · Repair Loop | 12, 28 | ✅ |
 | [30](./phase-30-diff-aware-repair-agent.md) | Diff-aware repair agent | 6 · Repair Loop | 21, 29 | ⬜ |
 | [31](./phase-31-loop-controller.md) | Loop controller (bounded + convergent) | 6 · Repair Loop | 30 | ⬜ |
 | [32](./phase-32-repair-test-ui.md) | Repair & test UI | 6 · Repair Loop | 09, 28, 31 | ⬜ |

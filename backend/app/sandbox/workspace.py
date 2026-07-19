@@ -107,3 +107,10 @@ class WorkspaceService:
         """Advance the ``last-passing`` ref — the anchor the repair loop diffs against."""
         _, git = await self._open(project)
         await git.set_last_passing(sha)
+
+    async def diff(
+        self, project: Project, sha_a: str, sha_b: str, paths: list[str] | None = None
+    ) -> str:
+        """Unified diff between two refs, optionally scoped to ``paths`` (phase-29)."""
+        _, git = await self._open(project)
+        return await git.diff(sha_a, sha_b, paths)
