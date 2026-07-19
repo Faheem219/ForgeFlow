@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
+from app.db.blobs import get_blob_store
 from app.db.models import TestRun
 from app.db.repos import TestRunRepo
 from app.projects.service import ProjectService, parse_object_id
@@ -21,6 +22,7 @@ from app.testing.models import (
     TestResult,
     TestRunPublic,
     TestRunSummaryPublic,
+    TestStdoutPublic,
     summarize,
 )
 from app.testing.runner import TestRunner
@@ -99,3 +101,25 @@ async def get_test_run(
     if run is None or run.project_id != pid:
         raise NotFoundError("Test run not found")
     return _full_public(run)
+
+
+@tests_router.get("/{project_id}/tests/runs/{run_id}/stdout", response_model=TestStdoutPublic)
+async def get_test_stdout(
+    project_id: str,
+    run_id: str,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> TestStdoutPublic:
+    """The run's captured reporter output (phase-32's stdout viewer)."""
+    pid = parse_object_id(project_id)
+    await ProjectService().get_owned(pid, user_id)
+    run = await TestRunRepo().get(parse_object_id(run_id, "Test run"))
+    if run is None or run.project_id != pid:
+        raise NotFoundError("Test run not found")
+
+    stdout = ""
+    if run.stdout_ref:
+        try:
+            stdout = (await get_blob_store().get(run.stdout_ref)).decode("utf-8")
+        except Exception:  # a missing blob is empty output, not an error
+            stdout = ""
+    return TestStdoutPublic(id=str(run.id), stdout=stdout)

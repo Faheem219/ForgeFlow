@@ -151,15 +151,7 @@ class RepairLoopResult:
         return {
             "outcome": self.outcome,
             "metrics": self.metrics.to_dict(),
-            "attempts": [
-                {
-                    "iteration": a.iteration,
-                    "target_files": a.target_files,
-                    "diff_ref": a.diff_ref,
-                    "outcome": str(a.outcome) if a.outcome else None,
-                }
-                for a in self.attempts
-            ],
+            "attempts": [_attempt_public(a) for a in self.attempts],
             "final_run_id": str(self.final_run.id) if self.final_run else None,
             "escalation": self.escalation.to_dict() if self.escalation else None,
         }
@@ -393,15 +385,7 @@ class RepairLoopController:
                 }
                 for f in failing
             ],
-            diffs_tried=[
-                {
-                    "iteration": a.iteration,
-                    "files": a.target_files,
-                    "diff_ref": a.diff_ref,
-                    "outcome": str(a.outcome) if a.outcome else None,
-                }
-                for a in attempts
-            ],
+            diffs_tried=[_attempt_public(a) for a in attempts],
             metrics=metrics,
         )
 
@@ -424,6 +408,17 @@ class RepairLoopController:
 
 
 # --------------------------------------------------------------------- pure helpers
+
+
+def _attempt_public(attempt: Any) -> dict[str, Any]:
+    """One attempt as the UI reads it — ``id`` is what the diff endpoint (phase-32) keys on."""
+    return {
+        "id": str(attempt.id) if attempt.id else None,
+        "iteration": attempt.iteration,
+        "target_files": attempt.target_files,
+        "diff_ref": attempt.diff_ref,
+        "outcome": str(attempt.outcome) if attempt.outcome else None,
+    }
 
 
 def _attempt_outcome(green: bool, shrank: bool, regressed: bool) -> RepairOutcome:

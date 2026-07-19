@@ -113,6 +113,87 @@ export interface DesignProviderInfo {
   capabilities: DesignCapabilities;
 }
 
+// --- Testing + repair (phases 28 / 31 / 32) ---
+
+export type TestStatus = 'passed' | 'failed' | 'skipped';
+export type TestScope = 'unit' | 'e2e' | 'all';
+
+export interface TestFailure {
+  message: string;
+  assertion: string | null;
+  stack: string | null;
+  files_referenced: string[];
+}
+
+export interface TestResultDto {
+  name: string;
+  status: TestStatus;
+  framework: string;
+  /** The acceptance criterion this test verifies (phase-25 → 27 → 28). */
+  criterion_id: string | null;
+  file: string | null;
+  duration_ms: number | null;
+  failure: TestFailure | null;
+}
+
+export interface TestRunDto {
+  id: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  green: boolean;
+  env: string;
+  created_at: string;
+  results: TestResultDto[];
+  failures: TestResultDto[];
+  suite_refs: string[];
+  stdout_ref: string | null;
+}
+
+export interface RepairMetrics {
+  initial_failing: number;
+  final_failing: number;
+  failing_by_iteration: number[];
+  regressions_introduced: number;
+  iterations: number;
+  tokens_spent: number;
+  cost_inr: number;
+  wall_clock_s: number;
+}
+
+export interface RepairAttemptDto {
+  /** The attempt's id — what the diff endpoint keys on. */
+  id: string | null;
+  iteration: number;
+  target_files: string[];
+  diff_ref: string | null;
+  outcome: 'fixed' | 'no_progress' | 'regressed' | null;
+}
+
+export interface RepairEscalation {
+  reason: string;
+  summary: string;
+  failing_tests: Array<{
+    name: string;
+    criterion_id: string | null;
+    file: string | null;
+    message: string;
+  }>;
+  diffs_tried: RepairAttemptDto[];
+  metrics: RepairMetrics;
+  /** How to resume — the controller names the Build/refine contract (phase-31). */
+  resume: { stage: Stage; action: IntentAction; hint: string };
+}
+
+export interface RepairLoopDto {
+  outcome: 'fixed' | 'escalated';
+  metrics: RepairMetrics;
+  attempts: RepairAttemptDto[];
+  final_run_id: string | null;
+  escalation: RepairEscalation | null;
+}
+
 export interface IntentResponse {
   stage: Stage;
   action: IntentAction;

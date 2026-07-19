@@ -30,6 +30,7 @@ from app.sandbox.fs_router import router as workspace_router
 from app.sandbox.manager import get_manager
 from app.sandbox.preview_router import router as preview_router
 from app.sandbox.router import router as sandbox_router
+from app.testing.repair_router import repair_router
 from app.testing.router import tests_router
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(requirements_router)
     app.include_router(design_router)
     app.include_router(tests_router)
+    app.include_router(repair_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

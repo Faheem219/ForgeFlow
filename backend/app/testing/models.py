@@ -93,3 +93,10 @@ class TestRunPublic(TestRunSummaryPublic):
     failures: list[TestResult]
     suite_refs: list[str]
     stdout_ref: str | None
+
+
+class TestStdoutPublic(BaseModel):
+    """A run's captured reporter output, resolved from its blob (phase-32 stdout viewer)."""
+
+    id: str
+    stdout: str

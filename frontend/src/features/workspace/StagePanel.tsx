@@ -9,11 +9,13 @@ import { useStage } from './useStage';
 const DesignPanel = lazy(() => import('../design/DesignPanel'));
 const BuildPanel = lazy(() => import('../build/BuildPanel'));
 const RequirementsPanel = lazy(() => import('../requirements/RequirementsPanel'));
+const TestingPanel = lazy(() => import('../testing/TestingPanel'));
 
 const STAGE_PANELS = {
   design: DesignPanel,
   build: BuildPanel,
   requirements: RequirementsPanel,
+  test: TestingPanel,
 } as const;
 
 const ACTION_LABELS: Record<IntentAction, string> = {

@@ -63,4 +63,39 @@ The loop is the contribution (D1); the UI is how a human *watches, trusts, and s
 
 ## Status
 
-⬜ todo
+✅ done — **completes M3**: requirements → tests → bounded self-healing repair, end to end.
+
+### Completion notes
+
+- **`src/features/testing/`** — four pieces mounted as the Test stage panel (`StagePanel`'s panel
+  registry):
+  - [`ResultsPanel`](../frontend/src/features/testing/ResultsPanel.tsx): per-test results grouped by
+    source file, each tagged with its **criterion id** (traceability all the way back to phase-25),
+    expandable failure detail (message / stack / implicated files), an on-demand reporter-output
+    viewer, and Run-tests controls (scope + name filter).
+  - [`RepairView`](../frontend/src/features/testing/RepairView.tsx): the **failing-count sparkline**
+    foregrounded as the design note asks — it turns green when the trail descends — plus the
+    iteration timeline with per-attempt verdicts, on-demand diffs, regressions, tokens/₹ and wall
+    clock. While the loop runs, live `repair.iteration` events drive the trail; afterwards the
+    persisted report does (so a reload keeps everything).
+  - [`Escalation`](../frontend/src/features/testing/Escalation.tsx): the human-in-the-loop moment —
+    reason, "here's where I'm stuck" summary, still-failing tests, what was already tried, and a
+    guidance composer that submits through the **resume contract the controller itself names**
+    (`escalation.resume` → Build/`refine`), then follows the pipeline to Build.
+  - [`TestingPanel`](../frontend/src/features/testing/TestingPanel.tsx): composes them + stage
+    proceed/skip.
+- **Backend wiring (task 4)** — the UI needed a surface that didn't exist yet, so this phase adds
+  [`app/testing/repair_router.py`](../backend/app/testing/repair_router.py): `POST /repair/run`,
+  `POST /repair/cancel`, `GET /repair/latest`, `GET /repair/attempts/{id}/diff`, plus
+  `GET /tests/runs/{id}/stdout` on the testing router. Phase-31's report now carries each attempt's
+  `id` so the diff endpoint is addressable.
+- **Cancel is real, not cosmetic.** An in-process registry hands the controller an `asyncio.Event`;
+  the loop checks it between iterations, so cancelling takes effect at the next iteration boundary
+  and never mid-patch (which keeps the workspace consistent). Single-instance, same documented
+  caveat as the realtime hub.
+- **Diff rendering decision:** the plan suggested a Monaco diff, but phase-30 stores a **unified
+  diff** (what the agent actually applied). Rendering that directly — line-tinted +/−/@@ — is
+  truer to the artifact and far lighter than reconstructing two documents for a side-by-side editor.
+- **Verification:** frontend **111/111 vitest** (17 new across `ResultsPanel`/`RepairView`/
+  `Escalation`), ESLint + `tsc` clean; backend ruff/black/mypy clean; a route smoke-test confirmed
+  the app boots with all five new endpoints registered and nothing pre-existing clobbered.

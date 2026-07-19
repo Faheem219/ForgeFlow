@@ -45,7 +45,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [29](./phase-29-failure-analyzer-repair-context.md) | Failure analyzer & minimal repair context | 6 · Repair Loop | 12, 28 | ✅ |
 | [30](./phase-30-diff-aware-repair-agent.md) | Diff-aware repair agent | 6 · Repair Loop | 21, 29 | ✅ |
 | [31](./phase-31-loop-controller.md) | Loop controller (bounded + convergent) | 6 · Repair Loop | 30 | ✅ |
-| [32](./phase-32-repair-test-ui.md) | Repair & test UI | 6 · Repair Loop | 09, 28, 31 | ⬜ |
+| [32](./phase-32-repair-test-ui.md) | Repair & test UI | 6 · Repair Loop | 09, 28, 31 | ✅ |
 | [33](./phase-33-infra-analyzer.md) | Infra analyzer | 7 · Deploy | 12 | ⬜ |
 | [34](./phase-34-secrets-credential-vault.md) | Secrets & credential vault | 7 · Deploy | 03 | ⬜ |
 | [35](./phase-35-deploy-provider-adapters.md) | Deploy provider adapters (Vercel + Render) | 7 · Deploy | 33, 34 | ⬜ |
@@ -75,7 +75,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 |-----------|-------|--------|---------|
 | **M1** ✅ | Epics 0–2 | 01–15 | Authenticated workspace + working web IDE / terminal / preview over sandboxes. |
 | **M2** ✅ | Epics 3–4 | 16–24 | Screenshots/text → design → generated **running app** with live code + change requests. |
-| **M3** | Epics 5–6 | 25–32 | Requirements → tests → **bounded self-healing repair loop** (the contribution) working. |
+| **M3** ✅ | Epics 5–6 | 25–32 | Requirements → tests → **bounded self-healing repair loop** (the contribution) working. |
 | **M4** | Epics 7–8 | 33–40 | Dual-mode deploy + visual topology + live validation → **deployed URL delivered & verified**. |
 | **M5** | Epics 9–11 (+12) | 41–52 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, and admin configurability. |
 
