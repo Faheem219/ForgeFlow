@@ -46,7 +46,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [30](./phase-30-diff-aware-repair-agent.md) | Diff-aware repair agent | 6 · Repair Loop | 21, 29 | ✅ |
 | [31](./phase-31-loop-controller.md) | Loop controller (bounded + convergent) | 6 · Repair Loop | 30 | ✅ |
 | [32](./phase-32-repair-test-ui.md) | Repair & test UI | 6 · Repair Loop | 09, 28, 31 | ✅ |
-| [33](./phase-33-infra-analyzer.md) | Infra analyzer | 7 · Deploy | 12 | ⬜ |
+| [33](./phase-33-infra-analyzer.md) | Infra analyzer | 7 · Deploy | 12 | ✅ |
 | [34](./phase-34-secrets-credential-vault.md) | Secrets & credential vault | 7 · Deploy | 03 | ⬜ |
 | [35](./phase-35-deploy-provider-adapters.md) | Deploy provider adapters (Vercel + Render) | 7 · Deploy | 33, 34 | ⬜ |
 | [36](./phase-36-db-provisioning.md) | DB provisioning | 7 · Deploy | 02, 34 | ⬜ |

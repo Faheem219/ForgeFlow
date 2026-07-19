@@ -20,6 +20,7 @@ from app.core.config import get_config
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.db.mongo import close_client, init_db
+from app.deploy.router import infra_router
 from app.design.router import router as design_router
 from app.orchestrator.router import intents_router, requirements_router
 from app.orchestrator.router import router as artifacts_router
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(design_router)
     app.include_router(tests_router)
     app.include_router(repair_router)
+    app.include_router(infra_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

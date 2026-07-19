@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     design_max_images: int = 8
     design_max_image_bytes: int = 5_242_880  # 5 MiB per screenshot
 
+    # --- Infra analyzer (phase-33) ---
+    # The analyzer is static-analysis-first (cheap, deterministic, reproducible for eval), so the
+    # only tuning it needs is how far it will walk a workspace looking for env references.
+    infra_scan_max_files: int = 200
+    infra_scan_max_depth: int = 6
+
     # --- Deploy providers (phase 34/35) ---
     vercel_token: str = ""
     render_api_key: str = ""

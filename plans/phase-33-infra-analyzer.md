@@ -66,4 +66,39 @@ Beginner-safe infra is a secondary differentiator (D1). The analyzer's plan driv
 
 ## Status
 
-⬜ todo
+✅ done — opens **M4** (Epic 7).
+
+### Completion notes
+
+- **Analyzer** [`app/deploy/analyzer.py`](../backend/app/deploy/analyzer.py) —
+  `InfraAnalyzer.analyze(project)` reads the workspace and produces
+  `InfraPlan{fe, be, db, required_secrets, warnings, confidence, notes}`, persisted as a versioned
+  `infra_plan` artifact. Its only seam is a read-only workspace Protocol, so every shape is
+  testable as a dict of files.
+- **Classification (deterministic):** FE = a `package.json` with Vite (skeleton `frontend/` *or* a
+  single-package app at the root) → static, with `outDir` parsed from the Vite config (default
+  `dist`); BE = Express/Fastify/Koa → persistent, with the start command preferred over dev, the
+  build command, and the port read from `process.env.PORT ?? N`; DB = Mongoose **or** a
+  `MONGODB_URI` reference → Mongo/Atlas. Targets come from D11 (Vercel / Render / Atlas).
+- **Env scanning** merges the `.env.example` contract with what the code actually reads
+  (`import.meta.env.X`, `process.env.X`, including bracket access), then partitions it: only
+  `VITE_`-prefixed values reach the frontend, and the backend never sees them.
+- **Security rule worth calling out:** anything `VITE_`-prefixed is compiled into the browser
+  bundle, so it can *never* be a secret. A secret-shaped `VITE_` name is flagged as a leak with the
+  fix ("move it to the backend") rather than being quietly stored in the vault. `required_secrets`
+  matches credential shapes only — `_URI`/KEY/SECRET/TOKEN/PASSWORD/DSN — deliberately **not**
+  `_URL`, since a base URL is public config.
+- **Ambiguity is flagged, never guessed** (D12): missing frontend, a backend with no build script,
+  Mongoose without a connection string, browser-exposed secrets. Warnings lower `confidence`
+  (`high` → `medium`), and nothing recognizable at all yields `low` + `needs_confirmation`.
+- **Haiku fallback deliberately not wired.** The plan allowed an optional model summary for
+  ambiguity; keeping the analyzer fully static preserves reproducibility for the eval harness and
+  costs nothing, and the flags already surface ambiguity honestly. Recorded here as the decision.
+- **API:** `POST /projects/{id}/infra/analyze`, `GET /projects/{id}/infra/plan`
+  ([`app/deploy/router.py`](../backend/app/deploy/router.py), wired in `api/app.py`).
+- **Verification:** ruff/black/mypy clean; a **55-check harness ran the real analyzer** over
+  FE-only, FE+BE and FE+BE+DB plus edge cases (custom `outDir`, missing start/build scripts,
+  non-default port, library-package-is-not-a-service, Mongoose/URI conflicts, undocumented env in
+  code, the browser-secret leak guard, and the unrecognizable-workspace case); a route check
+  confirmed both endpoints register and the app boots. The four DB-backed suites
+  (`tests/deploy/test_analyzer_*.py`) run on Linux/CI.
