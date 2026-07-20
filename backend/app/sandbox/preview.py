@@ -158,11 +158,16 @@ class PreviewService:
         be_port = int(config.get("preview_be_port"))
 
         # The skeleton's env contract (phase-22): BE reads MONGODB_URI/PORT, FE reads
-        # VITE_API_BASE_URL. Real per-project DB provisioning lands in phase-36.
+        # VITE_API_BASE_URL. The MONGODB_URI is the project's isolated database — BYO if the owner
+        # supplied one, else a per-project DB in the shared cluster (phase-36). It's a secret, so
+        # it's injected into the sandbox env and never logged. Imported lazily to keep the sandbox
+        # layer decoupled from the deploy layer.
+        from app.deploy.db_provision import DbProvisioner
+
         be_env = {
             "PORT": str(be_port),
             "NODE_ENV": "development",
-            "MONGODB_URI": f"{config.get('mongodb_uri')}/{project.app_db_name}",
+            "MONGODB_URI": await DbProvisioner().get_app_mongodb_uri(project),
         }
         fe_env = {"NODE_ENV": "development", "VITE_API_BASE_URL": be_url}
 

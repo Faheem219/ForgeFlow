@@ -1,0 +1,205 @@
+"""Per-project database provisioning + URI injection (phase-36, D8).
+
+Every generated app gets an **isolated database**, and ForgeFlow injects its ``MONGODB_URI`` into
+the app for both preview (phase-15) and prod (phase-37). Two modes:
+
+- **Platform** — a per-project *database* (``Project.app_db_name``, a globally-unique
+  ``forgeflow_app_<uuid>``) inside the shared app-data cluster. Distinct database per project is the
+  strongest isolation available on a shared cluster (D8 design note); MongoDB creates it lazily on
+  first write, so "provisioning" is composing the right URI — no admin API call needed. ForgeFlow
+  *manages* these (may drop on delete).
+- **BYO** — a user-supplied ``MONGODB_URI`` from the vault (phase-34). Used verbatim, validated, and
+  **never lifecycle-managed** — ForgeFlow never creates or drops a database it doesn't own.
+
+The composed URI is a **secret** (it can carry cluster credentials): it is returned only to the
+env-injection call sites, never logged and never placed on a client response.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from enum import StrEnum
+
+from app.core.config import get_config
+
+# SystemError shadows the builtin (taxonomy name fixed by the plan); A004 suppressed on-line.
+from app.core.errors import ForbiddenError, SystemError, UserError  # noqa: A004
+from app.db.models import Project
+from app.db.models.enums import CredentialKind, CredentialScope
+from app.deploy.secrets import SecretVault
+
+logger = logging.getLogger(__name__)
+
+_MONGO_SCHEMES = ("mongodb://", "mongodb+srv://")
+
+#: Drops a database on a cluster. Injected so the destructive path is testable without a live one.
+Dropper = Callable[[str, str], Awaitable[None]]
+
+
+class DbMode(StrEnum):
+    platform = "platform"  # per-project DB in the shared cluster; ForgeFlow-managed
+    byo = "byo"  # user-supplied URI; never managed
+
+
+@dataclass(frozen=True)
+class DbInfo:
+    """Secret-safe metadata about a project's database — never carries the URI."""
+
+    mode: DbMode
+    #: The database the app uses. Platform: the project's own ``app_db_name``. BYO: the db named in
+    #: the URI (or a placeholder when the BYO URI pins no database).
+    db_name: str
+    #: True only for platform DBs, which ForgeFlow may create/drop. A BYO DB is never managed.
+    managed: bool
+
+
+def _validate_uri(uri: str) -> str:
+    if not uri.startswith(_MONGO_SCHEMES):
+        raise UserError("A MongoDB URI must start with mongodb:// or mongodb+srv://")
+    return uri
+
+
+def _db_name_from_uri(uri: str) -> str | None:
+    """The database path segment of a Mongo URI, or ``None`` when none is pinned."""
+    for scheme in _MONGO_SCHEMES:
+        if uri.startswith(scheme):
+            rest = uri[len(scheme) :]
+            break
+    else:
+        return None
+    rest = rest.split("?", 1)[0]  # drop the query string
+    slash = rest.find("/")
+    if slash == -1:
+        return None
+    db = rest[slash + 1 :]
+    return db or None
+
+
+def _compose_uri(base: str, db_name: str) -> str:
+    """Point ``base`` (a cluster URI, no database) at ``db_name``, preserving any query string."""
+    base = base.strip()
+    if not base.startswith(_MONGO_SCHEMES):
+        raise SystemError("Configured app-DB cluster URI is not a valid MongoDB URI")
+    head, sep, query = base.partition("?")
+    scheme_end = head.find("://") + 3
+    authority = head[scheme_end:]
+    slash = authority.find("/")
+    authority = authority if slash == -1 else authority[:slash]  # drop any existing db path
+    composed = f"{head[:scheme_end]}{authority}/{db_name}"
+    return f"{composed}{sep}{query}" if sep else composed
+
+
+class DbProvisioner:
+    """Resolves, provisions and (optionally) tears down a project's isolated database."""
+
+    def __init__(self, vault: SecretVault | None = None, dropper: Dropper | None = None) -> None:
+        self._vault = vault or SecretVault()
+        self._dropper = dropper or _default_drop
+
+    # -- mode / metadata --------------------------------------------------------------------
+
+    async def _byo_uri(self, project: Project) -> str | None:
+        """A BYO ``mongo_uri`` for the project owner, if any. Fail-soft (→ platform on error)."""
+        try:
+            return await self._vault.get_credential(
+                project.user_id, CredentialKind.mongo_uri, CredentialScope.byo
+            )
+        except Exception:  # DB/vault trouble must never take preview/deploy down
+            logger.warning("BYO mongo lookup failed; using the platform database", exc_info=True)
+            return None
+
+    async def info(self, project: Project) -> DbInfo:
+        """Secret-safe metadata (mode / db name / managed) — never the URI."""
+        byo = await self._byo_uri(project)
+        if byo:
+            return DbInfo(
+                mode=DbMode.byo,
+                db_name=_db_name_from_uri(byo.strip()) or "(from BYO URI)",
+                managed=False,
+            )
+        return DbInfo(mode=DbMode.platform, db_name=project.app_db_name, managed=True)
+
+    # -- provisioning + injection -----------------------------------------------------------
+
+    async def get_app_mongodb_uri(self, project: Project) -> str:
+        """The app's ``MONGODB_URI`` (**secret** — inject into env only, never log/return).
+
+        BYO wins and is used verbatim (validated); otherwise a per-project database in the shared
+        cluster.
+        """
+        byo = await self._byo_uri(project)
+        if byo:
+            return _validate_uri(byo.strip())
+
+        base = await self._platform_base()
+        if not base:
+            raise SystemError("No MongoDB cluster is configured for generated apps")
+        return _compose_uri(base, project.app_db_name)
+
+    async def _platform_base(self) -> str:
+        """Cluster base for platform DBs: vault override > APP_DB_CLUSTER_URI > MONGODB_URI."""
+        override = await self._vault.platform_secret(CredentialKind.mongo_uri)
+        if override and override.strip():
+            return override.strip()
+        cluster = str(get_config().get("app_db_cluster_uri")).strip()
+        if cluster:
+            return cluster
+        return str(get_config().get("mongodb_uri")).strip()
+
+    async def provision(self, project: Project) -> DbInfo:
+        """Ensure the project has an isolated, reachable database target.
+
+        Platform DBs are created lazily by MongoDB on first write, so this validates that a correct
+        URI can be composed (and validates a BYO URI early) rather than calling any admin API.
+        """
+        await self.get_app_mongodb_uri(project)  # raises on a malformed BYO URI / missing cluster
+        return await self.info(project)
+
+    # -- isolation --------------------------------------------------------------------------
+
+    def assert_owns_db(self, project: Project, db_name: str) -> None:
+        """Guard for the data browser (Epic 9): a project may only reach its own platform database.
+
+        Platform isolation is by distinct database name, so any request must target
+        ``project.app_db_name``. (BYO isolation is delegated to the user-scoped BYO URI itself.)
+        """
+        if db_name != project.app_db_name:
+            raise ForbiddenError("A project may only access its own database")
+
+    # -- lifecycle --------------------------------------------------------------------------
+
+    async def teardown(self, project: Project, *, drop_data: bool = False) -> bool:
+        """Drop a project's **platform** database. Returns ``True`` only when a drop happened.
+
+        Irreversible (destroys data), so it requires ``drop_data=True``. A **BYO** database is never
+        dropped — ForgeFlow does not manage databases it does not own.
+        """
+        info = await self.info(project)
+        if info.mode is DbMode.byo:
+            return False  # never drop a database ForgeFlow doesn't own
+        if not drop_data:
+            return False  # explicit, destructive opt-in required
+        base = await self._platform_base()
+        if not base:  # pragma: no cover - provision() would have failed earlier
+            return False
+        uri = _compose_uri(base, project.app_db_name)
+        await self._dropper(uri, project.app_db_name)
+        logger.info("dropped platform app database", extra={"db": project.app_db_name})
+        return True
+
+
+async def _default_drop(uri: str, db_name: str) -> None:  # pragma: no cover - needs a live cluster
+    from typing import Any
+
+    from motor.motor_asyncio import AsyncIOMotorClient
+
+    client: AsyncIOMotorClient[dict[str, Any]] = AsyncIOMotorClient(uri)
+    try:
+        await client.drop_database(db_name)
+    finally:
+        client.close()
+
+
+__all__ = ["DbInfo", "DbMode", "DbProvisioner"]

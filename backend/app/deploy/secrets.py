@@ -196,6 +196,15 @@ class SecretVault:
             return None
         return str(get_config().get(config_key)) or None
 
+    async def platform_secret(self, kind: CredentialKind) -> str | None:
+        """A platform-scoped secret straight from the vault (no config fallback). Fail-soft.
+
+        Unlike :meth:`resolve`, this never consults ``CONFIG_FALLBACK`` — a caller that wants the
+        platform *vault* value distinct from a config default (e.g. phase-36's app-DB cluster) can
+        layer its own precedence.
+        """
+        return await self._safe_lookup({"kind": kind, "scope": "platform"})
+
     async def _safe_lookup(self, query: dict[str, object]) -> str | None:
         try:
             doc = await Credential.find_one(query)

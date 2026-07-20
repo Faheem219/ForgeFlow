@@ -67,4 +67,43 @@ Implements D8 (one DB per user-project; users may supply their own URI; per-proj
 
 ## Status
 
-⬜ todo
+✅ done — Each project gets an **isolated database** and ForgeFlow injects its `MONGODB_URI` into the
+generated app for preview (and, via the same helper, prod). Implements D8: one DB per user-project,
+per-project isolation, BYO honored.
+
+- `app/deploy/db_provision.py` — `DbProvisioner` with two modes:
+  - **Platform:** a per-project *database* (`Project.app_db_name`, the globally-unique
+    `forgeflow_app_<uuid>`) in the shared cluster. Distinct database per project = strongest
+    isolation on a shared cluster (design note); MongoDB creates it lazily on first write, so
+    "provisioning" is composing the correct URI (no admin API call). ForgeFlow-managed.
+    Base precedence: **vault platform override > `APP_DB_CLUSTER_URI` > `MONGODB_URI`**.
+  - **BYO:** a user-supplied `MONGODB_URI` from the vault (phase-34), validated + used **verbatim**
+    and **never lifecycle-managed**. The lookup is fail-soft (a DB/vault hiccup → platform), so it
+    can sit on the preview/deploy hot path.
+  - `get_app_mongodb_uri(project)` returns the secret URI (env-injection only); `info(project)` is the
+    secret-safe metadata (`mode`/`db_name`/`managed`, never the URI); `assert_owns_db` is the
+    isolation guard the data browser (Epic 9) will use; `teardown(project, drop_data=…)` drops a
+    **platform** DB only, and only with the explicit destructive opt-in — a BYO DB is never dropped.
+- **URI composition** slots the per-project db name into a cluster base while preserving the query
+  string and replacing any stray path (`mongodb+srv://…/?w=majority` → `…/forgeflow_app_x?w=majority`).
+- **Injection** — preview's backend env (`app/sandbox/preview.py`) now sources `MONGODB_URI` from
+  `DbProvisioner.get_app_mongodb_uri` (replacing the phase-15 placeholder), so BYO is honored in
+  preview; phase-37's Render env will call the same helper.
+- **Vault** — small `SecretVault.platform_secret(kind)` (fail-soft platform-scope read, no config
+  fallback) so the app-DB cluster precedence is explicit. New config `app_db_cluster_uri`
+  (+ `.env.example`).
+
+**Acceptance:** two projects never share a database (distinct `app_db_name`); the app connects via the
+injected URI in preview (verified by driving `PreviewService.start` with a recording runtime); a BYO
+URI is honored and never managed; the URI is a secret (never logged — asserted). Covered by
+`tests/deploy/test_db_provision_platform.py` (distinct DBs, platform metadata, cluster-base config,
+isolation guard, teardown opt-in), `test_db_provision_byo.py` (verbatim use, unmanaged, malformed
+rejected, never-dropped), and `test_uri_injection.py` (composition, secret-safety, preview env).
+
+**Verification:** ruff/black + mypy clean across the phase-36 surface; phase-36 suite **16 passed** +
+phase-15 preview regression **7 passed** (the injection change is transparent to the platform path)
+against a live MongoDB; live-verified end-to-end. Full backend suite green apart from the one
+pre-existing env-only `requirements_suggest` SDK-auth failure (unrelated).
+
+**Deferred (as scoped):** Render prod env injection lands with deploy orchestration (phase-37), which
+calls `get_app_mongodb_uri`; the data-browser consumption of `assert_owns_db`/`info` lands in Epic 9.

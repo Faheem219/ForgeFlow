@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"
+    # Shared cluster that hosts generated apps' per-project databases in platform mode (phase-36,
+    # D8). Blank → reuse `mongodb_uri` (fine for local dev). A per-project DB name is appended, so
+    # this is a cluster base URI without a database path. Secret-ish (may carry Atlas creds).
+    app_db_cluster_uri: str = ""
 
     # --- Artifacts & blobs (phase-07) ---
     blob_backend: str = "gridfs"  # gridfs | filesystem
