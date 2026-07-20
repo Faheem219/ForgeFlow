@@ -168,9 +168,17 @@ class Settings(BaseSettings):
     infra_scan_max_depth: int = 6
 
     # --- Deploy providers (phase 34/35) ---
+    # Platform-owned tokens. Per-user BYO tokens live in the encrypted vault (phase-34) and take
+    # precedence; these are the seamless-mode fallback.
     vercel_token: str = ""
     render_api_key: str = ""
     deploy_default_mode: str = "seamless"
+    # Adapter endpoints + call tuning (phase-35). Overridable so the eval harness and tests can
+    # point at a stub without patching code.
+    vercel_api_url: str = "https://api.vercel.com"
+    render_api_url: str = "https://api.render.com"
+    deploy_timeout_s: float = 60.0  # per-call wall clock
+    deploy_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
 
     # --- Repair loop (phase 29-31) ---
     repair_max_iterations: int = 5

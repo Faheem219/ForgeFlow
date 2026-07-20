@@ -8,14 +8,16 @@ each test that touches it gets a freshly generated one.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
+import httpx
 import pytest
 from beanie import PydanticObjectId
 from cryptography.fernet import Fernet
 
 from app.core.config import reset_config
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ProviderError
 from app.db.models import Project
 from app.deploy.secrets import reset_vault
 from app.sandbox.schemas import FileContent, FileNode
@@ -30,6 +32,76 @@ def fernet_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     reset_vault()
     yield key
     reset_vault()
+
+
+# --------------------------------------------------------------------- deploy adapters (phase-35)
+
+Route = tuple[int, Any] | Callable[[httpx.Request], httpx.Response]
+
+
+class FakeDeployApi:
+    """A recording ``httpx.MockTransport``.
+
+    Mocking the *transport* rather than a client keeps the tests honest: the adapter's real URLs,
+    HTTP methods, auth header and JSON bodies all have to be right for a route to match.
+    """
+
+    def __init__(self, routes: dict[tuple[str, str], Route] | None = None) -> None:
+        self.routes: dict[tuple[str, str], Route] = dict(routes or {})
+        self.requests: list[httpx.Request] = []
+        self.bodies: list[Any] = []
+
+    def transport(self) -> httpx.MockTransport:
+        return httpx.MockTransport(self._handle)
+
+    def route(self, method: str, path: str, status: int = 200, payload: Any = None) -> None:
+        self.routes[(method, path)] = (status, payload)
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        body: Any = None
+        if request.content:
+            try:
+                body = json.loads(request.content)
+            except ValueError:
+                body = request.content.decode("utf-8", "replace")
+        self.bodies.append(body)
+
+        # Longest path first so `/v1/services/{id}/deploys` wins over `/v1/services`.
+        for method, path in sorted(self.routes, key=lambda k: len(k[1]), reverse=True):
+            if request.method == method and request.url.path.startswith(path):
+                route = self.routes[(method, path)]
+                if callable(route):
+                    return route(request)
+                status, payload = route
+                return httpx.Response(status, json=payload)
+        return httpx.Response(404, json={"error": f"unrouted {request.method} {request.url.path}"})
+
+    # -- assertions helpers ------------------------------------------------------------------
+
+    def calls(self, method: str, contains: str = "") -> list[httpx.Request]:
+        return [r for r in self.requests if r.method == method and contains in str(r.url)]
+
+    def body_of(self, method: str, contains: str = "") -> Any:
+        for request, body in zip(self.requests, self.bodies, strict=False):
+            if request.method == method and contains in str(request.url):
+                return body
+        return None
+
+    @property
+    def paths(self) -> list[str]:
+        return [r.url.path for r in self.requests]
+
+
+async def no_sleep(_seconds: float) -> None:
+    """Retry backoff stub — keeps retry tests instant."""
+    return None
+
+
+def error_detail(exc: ProviderError) -> dict[str, Any]:
+    """The classified ``{provider, kind, target}`` payload off a deploy error, typed for asserts."""
+    assert isinstance(exc.detail, dict)
+    return exc.detail
 
 
 class FakeAnalyzerWorkspace:

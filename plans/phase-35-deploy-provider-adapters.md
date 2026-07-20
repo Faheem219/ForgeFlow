@@ -64,4 +64,17 @@ Implements D11 dual-mode deploy. **BE never goes to Vercel** (D11/risk §12) —
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Implementation notes**
+
+- **Interface** — [providers/base.py](../backend/app/deploy/providers/base.py): `DeployProvider` Protocol (`deploy`/`set_env`/`status`/`logs`/`destroy`), plus `DeploySpec`, `DeployRef`, `DeployResult`, `DeployState`, `LogLine` and a `BaseDeployProvider` holding the shared credential resolution, HTTP calling, retry and error classification.
+- **BE-never-on-Vercel is structural, not conventional.** Each provider declares a single class-level `target`; `_check_target` rejects a mismatched spec **before any network call**, and `provider_for()` is the only lookup (fe→Vercel, be→Render, no way to add a second). Tested both directions plus the registry.
+- **Vercel** ([vercel.py](../backend/app/deploy/providers/vercel.py)) — FE only. Uploads the *built* SPA inline (`POST /v13/deployments`), so Vercel never needs repo access and what ships is exactly what the repair loop validated. Env vars are **project**-scoped (`/v10/projects/{p}/env`, upsert) while status/logs/destroy are **deployment**-scoped — hence `DeployRef` carrying both id and project. Prefers the production alias over the per-deploy host.
+- **Render** ([render.py](../backend/app/deploy/providers/render.py)) — BE only. Creates a persistent Node `web_service` with build/start commands, then explicitly triggers a deploy so a build is always in flight. `DeployRef.id` is the **service** id (the durable object every later call keys off).
+- **Modes (D11)** — `seamless` resolves the *platform* credential only (vault → config) and never silently spends a user's BYO token; `byo` requires that user's token and fails with an actionable auth error rather than falling back to the platform's. Both directions asserted.
+- **Errors/resilience** — [providers/errors.py](../backend/app/deploy/providers/errors.py): `auth|config|quota|transient|fatal`, each with a `fallback_hint`. `detail` carries `{provider, kind, target}` — that `target` is what lets phase-37 report a *partial* deploy ("FE live, BE failed"). Bounded exponential backoff on transient failures; response bodies are never echoed into errors (they can contain env values).
+- Config: `vercel_api_url`, `render_api_url`, `deploy_timeout_s`, `deploy_max_retries` added to `Settings` + `.env.example`.
+- Tests use `httpx.MockTransport` rather than a mocked client, so the adapters' real URLs, methods, auth headers and JSON bodies must all be correct for a route to match: `test_vercel_adapter.py` (20), `test_render_adapter.py` (19), `test_modes.py` + `test_be_not_on_vercel.py` (19). Backend 456 passed (the 7 failures are the pre-existing Docker-daemon-dependent repair tests, identical at HEAD).
+
+**Not done here (as scoped):** the live smoke path against real Vercel/Render accounts is deferred — it needs real credentials and creates billable provider resources. Everything else is covered by mocked integration. Orchestration/ordering is phase-37.
