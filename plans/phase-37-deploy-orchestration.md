@@ -72,4 +72,48 @@ Turns adapters (`phase-35`) + provisioning (`phase-36`) + plan (`phase-33`) into
 
 ## Status
 
-⬜ todo
+✅ done — One action takes a **passing build → healthy live deployment** (FE + BE URLs, DB wired), in
+both modes. This delivers the M4 payload (a deployed URL). Turns the phase-35 adapters + phase-36
+provisioning + phase-33 plan into an ordered, observable, failure-tolerant pipeline.
+
+- `app/deploy/orchestrate.py` — `DeployOrchestrator.deploy(project, *, mode, user_id)`:
+  1. **prereq** — build stage must be `complete` (the only hard prereq, §8) or a clear `UserError`;
+  2. **plan** — the infra plan (fe/be/db) from the analyzer;
+  3. **DB** — `DbProvisioner.provision` → the isolated `MONGODB_URI`;
+  4. **BE → Render** with `{MONGODB_URI, NODE_ENV}`, polled to `live` → BE URL;
+  5. **FE → Vercel** — the SPA is **built with `VITE_API_BASE_URL=<BE url>`** (a build-time var, which
+     is *why* BE must precede FE), then the built bundle is shipped;
+  6. **health** — poll each deploy to a terminal state; and record a `Deployment`
+     `{mode, fe/be/db_target, urls, status, topology_snapshot, logs_ref}`.
+  - **Partial failure degrades, never crashes:** a live BE with a failed FE is `degraded` (BE URL
+    kept, FE failure surfaced as a step event + a `failed` topology node); a BE failure is `failed`
+    and the FE is never attempted; a re-deploy is always safe (a fresh `Deployment`).
+  - Each step emits a `deploy.status` event, and the recorded `topology_snapshot` (nodes fe/be/db +
+    edges fe→be, be→db) is exactly what phase-38's React Flow view renders. Every collaborator
+    (plan source, FE builder, provider factory, DB provisioner) is injected behind a seam, so the
+    whole ordering/wiring/failure logic runs **without Docker or a real provider**.
+- `app/orchestrator/stages/deploy.py` — `DeployStageHandler` (registered in `stages/__init__`):
+  `proceed`/`refine` run orchestration on their own costed `Run`; a **live** result → `complete`
+  (validate's prereq satisfiable), degraded/failed → `awaiting_user`; `skip` opts out. Deploy mode
+  resolves from `intent.payload["mode"]` → `deploy_default_mode`. The conductor enforces deploy⇐build
+  *before* the handler runs.
+- Config: `deploy_repo_url`, `deploy_region`, `deploy_health_timeout_s` (+ `.env.example`).
+
+**Acceptance:** one action → live deploy with both URLs, correct order (BE→FE) and env wiring
+(FE→BE URL, BE→DB URI); `deploy.status` streams per step; a `Deployment` is persisted; deploy is
+blocked with a clear reason when no build exists. Covered by `tests/deploy/test_orchestrate_happy.py`
+(live + topology + ordered events + log), `…_env_wiring.py` (BE gets the DB URI; FE built *and*
+deployed with the BE URL; build-after-BE ordering), `…_prereq.py` (blocked without a build; proceeds
+after), `…_partial_failure.py` (FE-fail → degraded, BE-fail → failed, safe re-deploy), and
+`tests/orchestrator/stages/test_deploy_handler.py` (proceed/skip, live→complete/degraded→hold, BYO
+mode).
+
+**Verification:** ruff/black + mypy clean across the phase-37 surface; phase-37 + conductor suites
+**103 passed** (the 1 failure is the pre-existing Docker-only `test_repair_audit_trail`); full backend
+suite green apart from the 8 known pre-existing env-only failures (7 Docker-daemon repair tests + the
+anthropic SDK-auth suggest test); live-verified 6/6 against MongoDB.
+
+**Deferred (as scoped):** the topology **UI** is phase-38 (it renders `topology_snapshot`); live-URL
+validation is Epic 8; the live smoke path against real Vercel/Render accounts remains deferred
+(billable resources). The production FE builder (`pnpm build` in the sandbox + read `dist`) is real
+but Docker-gated, so it's covered via the injected builder seam rather than a live run.

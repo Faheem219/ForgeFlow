@@ -34,6 +34,15 @@ def fernet_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     reset_vault()
 
 
+@pytest.fixture
+def blob_env(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> Iterator[None]:
+    """Filesystem blobs so deploy logs never touch the shared meta DB (phase-37)."""
+    monkeypatch.setenv("BLOB_BACKEND", "filesystem")
+    monkeypatch.setenv("BLOB_FS_DIR", str(tmp_path))
+    reset_config()
+    yield
+
+
 # --------------------------------------------------------------------- deploy adapters (phase-35)
 
 Route = tuple[int, Any] | Callable[[httpx.Request], httpx.Response]

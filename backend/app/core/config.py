@@ -183,6 +183,10 @@ class Settings(BaseSettings):
     render_api_url: str = "https://api.render.com"
     deploy_timeout_s: float = 60.0  # per-call wall clock
     deploy_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
+    # --- Deploy orchestration (phase-37) ---
+    deploy_repo_url: str = ""  # git repo Render builds the backend from (blank locally/mocked)
+    deploy_region: str = ""  # optional provider region for the backend service
+    deploy_health_timeout_s: int = 180  # seconds to poll a deploy until it goes live
 
     # --- Repair loop (phase 29-31) ---
     repair_max_iterations: int = 5

@@ -66,10 +66,12 @@ def _register_real_handlers() -> None:
     """Swap real handlers in for their stubs as each stage lands. Imported here (not at top) so a
     handler module can import ``stages.base`` without a circular import through this package."""
     from app.orchestrator.stages.build import BuildStageHandler
+    from app.orchestrator.stages.deploy import DeployStageHandler
     from app.orchestrator.stages.design import DesignStageHandler
 
     register_handler(Stage.design, DesignStageHandler())
     register_handler(Stage.build, BuildStageHandler())
+    register_handler(Stage.deploy, DeployStageHandler())
 
 
 _register_real_handlers()
