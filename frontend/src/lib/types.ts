@@ -259,3 +259,22 @@ export interface SuggestedCriterion {
   text: string;
   kind: CriterionKind;
 }
+
+// --- Credentials (phase-34) ---
+
+export type CredentialKind = 'vercel' | 'render' | 'mongo_uri' | 'stitch' | 'figma';
+
+/** `byo` = this user's own token; `platform` = ForgeFlow's (never managed from the client). */
+export type CredentialScope = 'platform' | 'byo';
+
+/**
+ * Credential **metadata**. There is deliberately no field for the value: the API has no endpoint
+ * that returns a stored secret, so the client can never hold one (phase-34, §7).
+ */
+export interface CredentialDto {
+  kind: CredentialKind;
+  scope: CredentialScope;
+  created_at: string;
+  /** Last four characters, so two tokens can be told apart without revealing either. */
+  last4: string | null;
+}

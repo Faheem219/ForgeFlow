@@ -148,12 +148,12 @@ class FigmaDesignProvider:
 
     async def health(self) -> ProviderHealth:
         # No token → down (not a crash): the stage falls back. There is no quota to degrade on.
-        return ProviderHealth.ok if figma_token_present() else ProviderHealth.down
+        return ProviderHealth.ok if await figma_token_present() else ProviderHealth.down
 
     # -- flows ----------------------------------------------------------------------------
 
     async def generate_from_text(self, prompt: str) -> DesignResult:
-        token = get_figma_token()
+        token = await get_figma_token()
         payload = await self._invoke(lambda t: self._client.text_to_ui(prompt, token=t), token)
         return self._to_result(payload, {"source": "text"})
 
@@ -167,14 +167,14 @@ class FigmaDesignProvider:
         )
 
     async def refine(self, design_ref: str, instruction: str) -> DesignResult:
-        token = get_figma_token()
+        token = await get_figma_token()
         payload = await self._invoke(
             lambda t: self._client.refine(design_ref, instruction, token=t), token
         )
         return self._to_result(payload, {"source": "refine", "refined_from": design_ref})
 
     async def fetch_code(self, design_ref: str) -> DesignCode:
-        token = get_figma_token()
+        token = await get_figma_token()
         payload = await self._invoke(lambda t: self._client.fetch_code(design_ref, token=t), token)
         return DesignCode(html=payload.html, css=payload.css, assets=payload.assets)
 

@@ -177,7 +177,7 @@ class StitchDesignProvider:
 
     async def health(self) -> ProviderHealth:
         # No creds → down (not a crash): the stage falls back to figma/fake.
-        if not stitch_credentials_present():
+        if not await stitch_credentials_present():
             return ProviderHealth.down
         try:
             snap = await self._quota.snapshot()
@@ -190,7 +190,7 @@ class StitchDesignProvider:
     # -- generation flows -----------------------------------------------------------------
 
     async def generate_from_text(self, prompt: str) -> DesignResult:
-        self._require_credentials()
+        await self._require_credentials()
         await self._quota.check_available()
         payload = await self._invoke(lambda token: self._client.text_to_ui(prompt, token=token))
         await self._quota.record_usage()
@@ -199,7 +199,7 @@ class StitchDesignProvider:
     async def generate_from_image(
         self, images: list[DesignImage], prompt: str | None = None
     ) -> DesignResult:
-        self._require_credentials()
+        await self._require_credentials()
         if not images:
             raise stitch_error(StitchErrorKind.fatal, "At least one image is required")
         if len(images) > MAX_IMAGES:
@@ -214,7 +214,7 @@ class StitchDesignProvider:
         return self._to_result(payload, {"source": "image", "images": [i.filename for i in images]})
 
     async def refine(self, design_ref: str, instruction: str) -> DesignResult:
-        self._require_credentials()
+        await self._require_credentials()
         await self._quota.check_available()
         payload = await self._invoke(
             lambda token: self._client.refine(design_ref, instruction, token=token)
@@ -224,14 +224,14 @@ class StitchDesignProvider:
 
     async def fetch_code(self, design_ref: str) -> DesignCode:
         # Metadata read — does not consume a generation.
-        self._require_credentials()
+        await self._require_credentials()
         payload = await self._invoke(lambda token: self._client.fetch_code(design_ref, token=token))
         return DesignCode(html=payload.html, css=payload.css, assets=payload.assets)
 
     # -- internals ------------------------------------------------------------------------
 
-    def _require_credentials(self) -> None:
-        if not stitch_credentials_present():
+    async def _require_credentials(self) -> None:
+        if not await stitch_credentials_present():
             raise stitch_error(StitchErrorKind.auth, "Stitch credentials are not configured")
 
     def _to_result(self, payload: StitchDesignPayload, extra_meta: dict[str, Any]) -> DesignResult:

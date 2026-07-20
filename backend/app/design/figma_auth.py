@@ -1,22 +1,26 @@
 """Figma auth (phase-18) — a single static access token, no OAuth refresh (unlike Stitch).
 
-The token comes from the layered config today; it moves behind the encrypted vault in phase-34.
+Since phase-34 the token is read through the encrypted vault: a platform-scoped vault entry wins
+over the plaintext ``FIGMA_TOKEN`` in config, and the value is decrypted **at call time only**.
 **Never logged.**
 """
 
 from __future__ import annotations
 
-from app.core.config import get_config
+from beanie import PydanticObjectId
+
+from app.db.models.enums import CredentialKind
+from app.deploy.secrets import resolve_secret
 from app.design.figma_errors import FigmaErrorKind, figma_error
 
 
-def figma_token_present() -> bool:
-    return bool(get_config().get("figma_token"))
+async def figma_token_present(user_id: PydanticObjectId | None = None) -> bool:
+    return bool(await resolve_secret(CredentialKind.figma, user_id))
 
 
-def get_figma_token() -> str:
-    """Return the configured Figma token, or raise an auth :class:`ProviderError` if absent."""
-    token = str(get_config().get("figma_token"))
+async def get_figma_token(user_id: PydanticObjectId | None = None) -> str:
+    """Return the effective Figma token (BYO > platform vault > config), or raise an auth error."""
+    token = await resolve_secret(CredentialKind.figma, user_id)
     if not token:
         raise figma_error(FigmaErrorKind.auth, "Figma token is not configured")
     return token

@@ -4,8 +4,10 @@ Stitch access tokens are short-lived, so this holds the platform's client creden
 access token via the client-credentials grant, and **refreshes transparently** before expiry. A
 single-flight lock ensures concurrent callers trigger at most one refresh (no token stampede).
 
-Credentials come from the layered config today; they move behind the encrypted vault in phase-34
-(wire `_fetch_token` to read from the vault then). **Tokens and secrets are never logged.**
+Since phase-34 the **client secret** is read through the encrypted vault (a platform-scoped vault
+entry wins over the plaintext ``STITCH_CLIENT_SECRET`` in config) and is decrypted only at call
+time, inside ``_fetch_token``. The non-secret half of the credentials — client id, token URL —
+stays in layered config. **Tokens and secrets are never logged.**
 """
 
 from __future__ import annotations
@@ -16,8 +18,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import httpx
+from beanie import PydanticObjectId
 
 from app.core.config import get_config
+from app.db.models.enums import CredentialKind
+from app.deploy.secrets import resolve_secret
 from app.design.stitch_errors import StitchErrorKind, stitch_error
 
 # A token fetch returns (access_token, lifetime_seconds).
@@ -31,14 +36,17 @@ class _CachedToken:
     expires_at: float  # wall-clock seconds (clock())
 
 
-def stitch_credentials_present() -> bool:
-    """True when the minimum creds to obtain a token are configured."""
+async def stitch_client_secret(user_id: PydanticObjectId | None = None) -> str | None:
+    """The effective client secret: BYO > platform vault > config (phase-34)."""
+    return await resolve_secret(CredentialKind.stitch, user_id)
+
+
+async def stitch_credentials_present(user_id: PydanticObjectId | None = None) -> bool:
+    """True when the minimum creds to obtain a token are available."""
     config = get_config()
-    return bool(
-        config.get("stitch_client_id")
-        and config.get("stitch_client_secret")
-        and config.get("stitch_token_url")
-    )
+    if not (config.get("stitch_client_id") and config.get("stitch_token_url")):
+        return False
+    return bool(await stitch_client_secret(user_id))
 
 
 class StitchAuth:
@@ -85,14 +93,18 @@ class StitchAuth:
     async def _fetch_token(self) -> tuple[str, float]:
         """Default fetcher: OAuth2 client-credentials grant. Never logs the token or secret."""
         config = get_config()
-        if not stitch_credentials_present():
+        # Decrypt at call time only — the secret lives in this frame and nowhere else.
+        client_secret = await stitch_client_secret()
+        if not (config.get("stitch_client_id") and config.get("stitch_token_url")):
+            raise stitch_error(StitchErrorKind.auth, "Stitch credentials are not configured")
+        if not client_secret:
             raise stitch_error(StitchErrorKind.auth, "Stitch credentials are not configured")
 
         token_url = str(config.get("stitch_token_url"))
         data = {
             "grant_type": "client_credentials",
             "client_id": str(config.get("stitch_client_id")),
-            "client_secret": str(config.get("stitch_client_secret")),
+            "client_secret": client_secret,
         }
         scope = str(config.get("stitch_scope"))
         if scope:

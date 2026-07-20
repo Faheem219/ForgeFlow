@@ -1,19 +1,35 @@
-"""Fixtures for the infra analyzer (phase-33).
+"""Fixtures for the infra analyzer (phase-33) and the credential vault (phase-34).
 
 The analyzer's only seam is a read-only workspace, so each shape (FE-only, FE+BE, FE+BE+DB) is just
-a dict of files — deterministic, and no Docker anywhere.
+a dict of files — deterministic, and no Docker anywhere. The vault needs a real ``FERNET_KEY``, so
+each test that touches it gets a freshly generated one.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 
 import pytest
 from beanie import PydanticObjectId
+from cryptography.fernet import Fernet
 
+from app.core.config import reset_config
 from app.core.errors import NotFoundError
 from app.db.models import Project
+from app.deploy.secrets import reset_vault
 from app.sandbox.schemas import FileContent, FileNode
+
+
+@pytest.fixture
+def fernet_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Install a valid, per-test encryption key (never a fixed one — keys are secrets)."""
+    key = Fernet.generate_key().decode("ascii")
+    monkeypatch.setenv("FERNET_KEY", key)
+    reset_config()
+    reset_vault()
+    yield key
+    reset_vault()
 
 
 class FakeAnalyzerWorkspace:
