@@ -39,6 +39,7 @@ from typing import Any, Literal, Protocol
 from docker.errors import NotFound
 
 # SystemError shadows the builtin (taxonomy name fixed by the plan); A004 suppressed on-line.
+from app.core.config import subprocess_env
 from app.core.errors import SystemError, UserError  # noqa: A004
 
 DOCKER_WORKSPACE = "/workspace"
@@ -333,13 +334,15 @@ class LocalRuntime:
         return os.path.relpath(abs_path, self._root).replace(os.sep, "/")
 
     def run_git(self, args: list[str], stdin: bytes | None = None) -> ExecResult:
-        env = {
-            **os.environ,
-            # Isolate from the host's user/system gitconfig (e.g. commit.gpgsign) for determinism.
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_SYSTEM": os.devnull,
-            "GIT_TERMINAL_PROMPT": "0",
-        }
+        env = subprocess_env(
+            {
+                # Isolate from the host's user/system gitconfig (e.g. commit.gpgsign) for
+                # determinism.
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_CONFIG_SYSTEM": os.devnull,
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+        )
         completed = subprocess.run(  # noqa: S603 - fixed argv (git), no shell
             ["git", *args],
             cwd=self._root,
@@ -359,7 +362,7 @@ class LocalRuntime:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, **(env or {})},
+            env=subprocess_env(env),
             start_new_session=True,  # own process group → killable as a unit
         )
         return LocalExecHandle(proc)
@@ -376,7 +379,7 @@ class LocalRuntime:
                 stdin=slave,
                 stdout=slave,
                 stderr=slave,
-                env={**os.environ, "TERM": "xterm-256color"},
+                env=subprocess_env({"TERM": "xterm-256color"}),
                 start_new_session=True,
             )
         except BaseException:

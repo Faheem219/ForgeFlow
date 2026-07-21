@@ -19,6 +19,7 @@ from app.auth.router import router as auth_router
 from app.core.config import get_config
 from app.core.cost_router import cost_router
 from app.core.errors import register_exception_handlers
+from app.core.limits import BodySizeLimitMiddleware
 from app.core.logging import configure_logging
 from app.core.observability import install_correlation_filter
 from app.data_browser.router import data_router
@@ -84,6 +85,9 @@ def create_app() -> FastAPI:
         version=config.get("app_version"),
         lifespan=lifespan,
     )
+
+    # Outermost: refuse over-sized bodies before anything buffers them (phase-47).
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=int(config.get("max_request_bytes")))
 
     origins = [o.strip() for o in str(config.get("cors_origins")).split(",") if o.strip()]
     allow_all = origins == ["*"]

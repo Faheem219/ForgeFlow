@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.deps import get_current_user_id
 from app.core.config import get_config
+from app.core.limits import expensive_rate_limit
 from app.db.models import Project, User
 from app.db.repos import ProjectRepo
 from app.projects.service import ProjectService, parse_object_id
@@ -53,7 +54,11 @@ class ExecResponse(BaseModel):
     output_ref: str | None
 
 
-@router.post("/projects/{project_id}/exec", response_model=ExecResponse)
+@router.post(
+    "/projects/{project_id}/exec",
+    response_model=ExecResponse,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def run_command(
     project_id: str,
     body: ExecRequest,

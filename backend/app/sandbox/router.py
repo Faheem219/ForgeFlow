@@ -6,6 +6,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends
 
 from app.auth.deps import get_current_user_id
+from app.core.limits import expensive_rate_limit
 from app.db.models import Project
 from app.projects.service import ProjectService, parse_object_id
 from app.sandbox.manager import get_manager
@@ -26,7 +27,7 @@ async def sandbox_status(
     return await get_manager().status(project)
 
 
-@router.post("/ensure", response_model=SandboxInfo)
+@router.post("/ensure", response_model=SandboxInfo, dependencies=[Depends(expensive_rate_limit)])
 async def sandbox_ensure(
     project_id: str, user_id: PydanticObjectId = Depends(get_current_user_id)
 ) -> SandboxInfo:

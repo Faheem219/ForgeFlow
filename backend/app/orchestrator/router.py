@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
+from app.core.limits import expensive_rate_limit
 from app.db.models import Artifact
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.conductor import Conductor
@@ -68,7 +69,11 @@ async def diff_artifacts(
     return ArtifactDiffResponse(a=str(artifact_a.id), b=str(artifact_b.id), diff=diff)
 
 
-@intents_router.post("/{project_id}/intent", response_model=IntentResponse)
+@intents_router.post(
+    "/{project_id}/intent",
+    response_model=IntentResponse,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def submit_intent(
     project_id: str,
     body: IntentRequest,
@@ -123,7 +128,11 @@ async def list_requirement_versions(
     return [RequirementSpecPublic.of(s) for s in specs]
 
 
-@requirements_router.post("/{project_id}/requirements/suggest", response_model=SuggestResponse)
+@requirements_router.post(
+    "/{project_id}/requirements/suggest",
+    response_model=SuggestResponse,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def suggest_requirements(
     project_id: str,
     body: SuggestRequest,

@@ -67,4 +67,25 @@ Directly enforces the §7 security posture and risk §12 ("sandbox security"). I
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Audit results — what was already sound**
+
+The sweep confirmed the earlier phases' guarantees hold as a system: 74 API routes, **every** one carrying an auth dependency except the three deliberately public ones (`/health`, `/auth/register`, `/auth/login`); ownership enforced everywhere with 404-not-403 so existence never leaks; sandbox isolation complete (`network_mode=none`, `cap_drop=[ALL]`, `no-new-privileges`, read-only root, pids/mem/cpu caps, tmpfs); vault encryption + log redaction working; data-browser guards failing closed on an operator allowlist.
+
+**Gaps found and closed**
+
+1. **Subprocess environment inheritance** *(the real finding)*. `LocalRuntime` passed the control plane's entire `os.environ` into child processes — `ANTHROPIC_API_KEY`, `FERNET_KEY`, `SECRET_KEY`, provider tokens. Not a live vulnerability (that runtime is test-only; production always uses `DockerRuntime`), but it was also **failing CI's `config-guard` job**. Replaced with `subprocess_env()` in [config.py](../backend/app/core/config.py) — an allowlist (`PATH`, `HOME`, locale, Windows essentials) that **fails closed**, so a secret added later is withheld without anyone remembering to deny it.
+2. **Rate limits covered only `/auth/*`.** Added [limits.py](../backend/app/core/limits.py): a keyed `RateLimiter` with **separate buckets** — per-IP for unauthenticated endpoints, per-**user** for the 8 expensive ones (intent, suggest, exec, sandbox ensure, tests run, repair run, infra analyze, design images). Keyed by user because that is who incurs the cost; separate buckets so burning the expensive budget cannot lock someone out of logging in. `auth/ratelimit.py` now delegates, so there is one implementation.
+3. **No request-size cap.** `BodySizeLimitMiddleware` refuses over-sized bodies with 413 before buffering; verified it still admits a full design-image batch.
+
+**Deliverables**
+
+- [`docs/threat-model.md`](../docs/threat-model.md) — assets, actors, the three trust boundaries, attack surfaces mapped to mitigations *and the test that proves each*, plus 7 explicitly accepted residual risks (in-process limits, the egress network, `FERNET_KEY` rotation, shared kernel, …) and what is deliberately not defended against.
+- [`docs/hardening-checklist.md`](../docs/hardening-checklist.md) — pre-release checklist marking each item `✅ auto` (a test fails on regression), `✅ CI`, or **manual** (environment posture), with a sign-off block.
+- `backend/tests/security/` — 49 tests. The authz matrix **discovers routes from the live app**, so a future endpoint is swept automatically; shipping an unprotected one requires adding it to `PUBLIC_ROUTES`, which is a reviewable diff.
+- CI `security` job: gitleaks (full history), `infra/scripts/check_no_committed_secrets.sh`, `pip-audit`, `pnpm audit`.
+
+**Verification:** backend 792 passed, ruff/black/mypy clean, both guard scripts pass. The 7 remaining failures are the pre-existing Docker-daemon-dependent repair tests (identical at HEAD — verified against a clean worktree; the 26 pre-existing Windows-only sandbox failures were likewise byte-for-byte unchanged by the subprocess-env fix).
+
+**Deferred:** the `-m docker` container-inspection test and the environment-posture items (§6 of the checklist) need a Docker daemon and a real deployment — they are written and ready to run, not executed here.

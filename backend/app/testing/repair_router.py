@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError, UserError
+from app.core.limits import expensive_rate_limit
 from app.db.blobs import get_blob_store
 from app.db.models import RepairAttempt
 from app.db.models.enums import ArtifactType, Stage, TestEnv
@@ -69,7 +70,11 @@ class CancelRepairPublic(BaseModel):
     cancelling: bool
 
 
-@repair_router.post("/{project_id}/repair/run", response_model=RepairLoopPublic)
+@repair_router.post(
+    "/{project_id}/repair/run",
+    response_model=RepairLoopPublic,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def run_repair(
     project_id: str,
     body: RunRepairRequest,

@@ -16,7 +16,7 @@ allowed place to touch the environment.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
     auth_rate_limit_per_minute: int = 30  # per client IP on /auth/login + /auth/register
+    # Per-user cap on endpoints that cost money or capacity — model calls, sandbox work, deploys
+    # (phase-47). 0 disables. Keyed by user, not IP, so cost lands on whoever incurred it.
+    expensive_rate_limit_per_minute: int = 20
+    # Hard backstop on any single request body (phase-47). Per-route caps stay tighter; this
+    # exists so no request can exhaust process memory. Must exceed the design-image batch
+    # (design_max_images * design_max_image_bytes).
+    max_request_bytes: int = 67_108_864  # 64 MiB
     seed_admin_email: str = ""  # optional dev admin, created by scripts/seed.py when both set
     seed_admin_password: str = ""
 
@@ -282,6 +289,44 @@ class ConfigResolver:
         if key.upper() in os.environ or key.lower() in os.environ:
             return "env"
         return "default"
+
+
+# --------------------------------------------------------------------- subprocess environment
+
+#: The only variables a child process inherits. Everything else — ``ANTHROPIC_API_KEY``,
+#: ``FERNET_KEY``, ``SECRET_KEY``, provider tokens, ``MONGODB_URI`` — is withheld by construction.
+#:
+#: A subprocess started by the control plane may end up running generated code or tooling that
+#: handles it, so inheriting the full environment would hand a `printenv` every platform secret
+#: (phase-47, threat model §5.3). An allowlist fails closed: a newly added secret is withheld
+#: automatically, whereas a denylist would have to be remembered.
+SUBPROCESS_ENV_ALLOWLIST: tuple[str, ...] = (
+    "PATH",  # required to resolve git/node/shell
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    # Windows needs these for CreateProcess and temp-file resolution to work at all.
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+)
+
+
+def subprocess_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """A minimal environment for a child process: allowlisted vars plus explicit ``extra``.
+
+    Lives here because this module is the single place permitted to read ``os.environ``
+    (see the module docstring); callers get a curated mapping instead.
+    """
+    env = {name: os.environ[name] for name in SUBPROCESS_ENV_ALLOWLIST if name in os.environ}
+    if extra:
+        env.update(extra)
+    return env
 
 
 _resolver: ConfigResolver | None = None

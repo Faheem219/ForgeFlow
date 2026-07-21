@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends
 from app.auth.deps import get_current_user_id
 from app.core.config import get_config
 from app.core.errors import UserError
+from app.core.limits import expensive_rate_limit
 from app.db.blobs import get_blob_store
 from app.design.registry import get_active, resolve_active_key
 from app.design.schemas import (
@@ -31,7 +32,11 @@ from app.projects.service import ProjectService, parse_object_id
 router = APIRouter(prefix="/projects", tags=["design"])
 
 
-@router.post("/{project_id}/design/images", response_model=ImageUploadResponse)
+@router.post(
+    "/{project_id}/design/images",
+    response_model=ImageUploadResponse,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def upload_design_images(
     project_id: str,
     body: ImageUploadRequest,

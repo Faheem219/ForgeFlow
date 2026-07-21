@@ -65,6 +65,50 @@ jobs:
       - name: Build image and run Node + Playwright smoke
         run: bash sandbox/smoke/run_smoke.sh
 
+  security:
+    name: Security (secret scan + dependency audit)
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: a secret that was committed and later removed is still leaked.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Committed-secret guard
+        run: bash infra/scripts/check_no_committed_secrets.sh
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Python dependency audit
+        working-directory: backend
+        run: |
+          uv sync --python 3.11
+          uv run --with pip-audit pip-audit --progress-spinner off || \
+            echo "::warning title=pip-audit::Advisories found — triage before release (see docs/hardening-checklist.md §7)"
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable corepack (pnpm 9)
+        run: corepack enable
+
+      - name: Node dependency audit
+        working-directory: frontend
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm audit --audit-level high || \
+            echo "::warning title=pnpm-audit::Advisories found — triage before release (see docs/hardening-checklist.md §7)"
+
   frontend:
     name: Frontend (lint + type + tests + build)
     runs-on: ubuntu-latest

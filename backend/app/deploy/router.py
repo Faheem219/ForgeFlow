@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.auth.deps import get_current_user_id
+from app.core.limits import expensive_rate_limit
 from app.db.models.enums import ArtifactType, Stage
 from app.deploy.analyzer import INFRA_PLAN_KIND, InfraAnalyzer
 from app.orchestrator.artifacts import ArtifactService
@@ -36,7 +37,11 @@ class InfraPlanPublic(BaseModel):
     needs_confirmation: bool = False
 
 
-@infra_router.post("/{project_id}/infra/analyze", response_model=InfraPlanPublic)
+@infra_router.post(
+    "/{project_id}/infra/analyze",
+    response_model=InfraPlanPublic,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def analyze_infra(
     project_id: str, user_id: PydanticObjectId = Depends(get_current_user_id)
 ) -> InfraPlanPublic:

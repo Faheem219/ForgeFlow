@@ -1,36 +1,25 @@
-"""Minimal in-memory per-IP fixed-window rate limiter for the auth endpoints.
+"""Per-IP rate limiting for the unauthenticated auth endpoints.
 
-Sufficient for a single-instance dev/demo. Swap for a Redis-backed limiter behind the same
-``rate_limit`` dependency if horizontal scale is ever needed.
+The counters themselves live in :mod:`app.core.limits` (phase-47) so that the auth limiter and the
+per-user expensive-endpoint limiter share one implementation. This module stays as the auth-facing
+name that :mod:`app.auth.router` depends on.
 """
 
 from __future__ import annotations
 
-import time
-from collections import defaultdict, deque
-
 from fastapi import Request
 
-from app.core.config import get_config
-from app.core.errors import RateLimitError
+from app.core.limits import ip_rate_limit, reset_limits
 
-_hits: dict[str, deque[float]] = defaultdict(deque)
+
+async def rate_limit(request: Request) -> None:
+    """Per-client-IP fixed-window limit on `/auth/register` and `/auth/login`."""
+    await ip_rate_limit(request)
 
 
 def reset_rate_limits() -> None:
     """Clear all counters (test helper)."""
-    _hits.clear()
+    reset_limits()
 
 
-async def rate_limit(request: Request) -> None:
-    limit = int(get_config().get("auth_rate_limit_per_minute"))
-    if limit <= 0:
-        return
-    key = request.client.host if request.client else "unknown"
-    now = time.monotonic()
-    window = _hits[key]
-    while window and now - window[0] > 60.0:
-        window.popleft()
-    if len(window) >= limit:
-        raise RateLimitError("Too many requests; slow down and retry shortly")
-    window.append(now)
+__all__ = ["rate_limit", "reset_rate_limits"]

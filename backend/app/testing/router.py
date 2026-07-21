@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
+from app.core.limits import expensive_rate_limit
 from app.db.blobs import get_blob_store
 from app.db.models import TestRun
 from app.db.repos import TestRunRepo
@@ -67,7 +68,11 @@ def _full_public(run: TestRun) -> TestRunPublic:
     )
 
 
-@tests_router.post("/{project_id}/tests/run", response_model=TestRunPublic)
+@tests_router.post(
+    "/{project_id}/tests/run",
+    response_model=TestRunPublic,
+    dependencies=[Depends(expensive_rate_limit)],
+)
 async def run_tests(
     project_id: str,
     body: RunTestsRequest,
