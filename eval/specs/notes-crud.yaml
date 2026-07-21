@@ -1,0 +1,43 @@
+id: notes-crud
+title: Notes with search
+difficulty: simple
+tags: [crud, search]
+inputs:
+  prompt: >-
+    A notes app. Each note has a title and a body. I want to write notes, edit
+    them later, delete them, and search across them by keyword.
+requirements:
+  features:
+    - name: Manage notes
+      description: Create, edit and delete notes with a title and body.
+      inputs: [title, body]
+      expected_behaviors:
+        - Notes are listed most recently updated first.
+        - Editing a note updates its timestamp.
+      acceptance_criteria:
+        - text: Creating a note with a title and body stores both and lists it.
+          kind: e2e
+        - text: A note without a title is rejected.
+          kind: unit
+        - text: Editing a note's body saves the change and refreshes its updated time.
+          kind: either
+        - text: Notes are ordered by most recently updated first.
+          kind: unit
+    - name: Search notes
+      description: Filter notes by a keyword appearing in the title or body.
+      inputs: [query]
+      expected_behaviors:
+        - Search is case-insensitive and matches partial words.
+        - An empty query shows every note.
+      acceptance_criteria:
+        - text: Searching returns notes whose title or body contains the query.
+          kind: either
+        - text: Search is case-insensitive.
+          kind: unit
+        - text: Clearing the search restores the full list.
+          kind: e2e
+expected_features: [Manage notes, Search notes]
+notes: >-
+  Still single-entity, but search introduces a query path that must agree between
+  the API and the UI — the first place a first-pass build can be subtly wrong
+  while still looking correct.

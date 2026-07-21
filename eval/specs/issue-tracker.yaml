@@ -1,0 +1,73 @@
+id: issue-tracker
+title: Issue tracker
+difficulty: complex
+tags: [relations, workflow, comments, permissions]
+inputs:
+  prompt: >-
+    An issue tracker for a small team. Issues have a status that follows a
+    workflow, an assignee, labels and a comment thread. Closed issues cannot be
+    edited, and I want to filter by assignee and status together.
+requirements:
+  features:
+    - name: Manage issues
+      description: Create and edit issues with a title, body, labels and assignee.
+      inputs: [title, body, labels, assignee]
+      expected_behaviors:
+        - A new issue starts in the open status with no assignee.
+      acceptance_criteria:
+        - text: Creating an issue stores its title, body and labels and opens it.
+          kind: e2e
+        - text: An issue without a title is rejected.
+          kind: unit
+        - text: Assigning an issue to an unknown user is rejected.
+          kind: unit
+        - text: Editing a closed issue is refused with an explanation.
+          kind: unit
+    - name: Status workflow
+      description: Move an issue through open, in progress, resolved and closed.
+      inputs: [issue, status]
+      expected_behaviors:
+        - Only the transitions defined by the workflow are permitted.
+        - Reopening a closed issue returns it to open.
+      acceptance_criteria:
+        - text: An open issue can move to in progress.
+          kind: unit
+        - text: An open issue cannot jump straight to closed.
+          kind: unit
+        - text: A resolved issue can be closed or reopened.
+          kind: unit
+        - text: Each status change is recorded with its timestamp.
+          kind: either
+    - name: Comment thread
+      description: A chronological discussion attached to an issue.
+      inputs: [issue, body]
+      expected_behaviors:
+        - Comments are ordered oldest first.
+        - Deleting an issue deletes its comments.
+      acceptance_criteria:
+        - text: Adding a comment attaches it to the issue and shows it in the thread.
+          kind: e2e
+        - text: An empty comment is rejected.
+          kind: unit
+        - text: Comments are returned oldest first.
+          kind: unit
+        - text: Deleting an issue leaves none of its comments behind.
+          kind: unit
+    - name: Filter issues
+      description: Narrow the issue list by status and assignee together.
+      inputs: [status, assignee]
+      expected_behaviors:
+        - Filters combine — both must match, not either.
+      acceptance_criteria:
+        - text: Filtering by status returns only issues in that status.
+          kind: either
+        - text: Filtering by status and assignee returns only issues matching both.
+          kind: unit
+        - text: A filter matching nothing shows an empty state rather than an error.
+          kind: e2e
+expected_features: [Manage issues, Status workflow, Comment thread, Filter issues]
+notes: >-
+  Four entities with rules that cut across them: an illegal transition, an edit
+  to a closed issue, and orphaned comments are all failures a build can only
+  avoid deliberately. This is where first-pass generation is expected to fall
+  short and the repair loop has to earn its keep.

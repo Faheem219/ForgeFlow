@@ -1,0 +1,55 @@
+id: kanban-board
+title: Kanban board
+difficulty: moderate
+tags: [ordering, drag-and-drop, screenshot-input]
+inputs:
+  prompt: >-
+    A board with three columns — To do, Doing, Done. Cards move between columns
+    and can be reordered within one. The layout should follow the screenshot.
+  screenshots:
+    - assets/kanban-board.png
+requirements:
+  features:
+    - name: Manage cards
+      description: Create, edit and delete cards that live in a column.
+      inputs: [title, description, column]
+      expected_behaviors:
+        - A new card is appended to the end of its column.
+      acceptance_criteria:
+        - text: Creating a card places it in the requested column.
+          kind: e2e
+        - text: A card with an empty title is rejected.
+          kind: unit
+        - text: A card created without a column defaults to the first column.
+          kind: unit
+        - text: Deleting a card removes it from its column.
+          kind: either
+    - name: Move cards between columns
+      description: Move a card to another column, preserving a sensible position.
+      inputs: [card, target column, position]
+      expected_behaviors:
+        - The card leaves its old column when it joins the new one.
+      acceptance_criteria:
+        - text: Moving a card to another column removes it from the original.
+          kind: unit
+        - text: A moved card appears at the requested position in the target column.
+          kind: either
+        - text: Moving a card to a column that does not exist is rejected.
+          kind: unit
+    - name: Reorder within a column
+      description: Change a card's position among its siblings.
+      inputs: [card, position]
+      expected_behaviors:
+        - Positions stay contiguous with no gaps or duplicates after a move.
+      acceptance_criteria:
+        - text: Moving a card up places it before the card that was above it.
+          kind: unit
+        - text: After any reorder the column's positions remain unique and contiguous.
+          kind: unit
+        - text: Reordering persists across a page reload.
+          kind: e2e
+expected_features: [Manage cards, Move cards between columns, Reorder within a column]
+notes: >-
+  The one spec driven by a screenshot as well as a prompt, so the design stage is
+  exercised. Contiguous ordering is the hard invariant: naive implementations
+  leave gaps or duplicate positions after a cross-column move.

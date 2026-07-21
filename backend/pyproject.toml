@@ -18,6 +18,7 @@ dependencies = [
     "passlib[bcrypt]>=1.7",
     "bcrypt>=4.0.1,<4.1",  # passlib 1.7.4 breaks with bcrypt>=4.1 (72-byte self-test)
     "websockets>=12",
+    "pyyaml>=6.0",  # benchmark specs are authored in YAML (phase-43) — prose reads badly as JSON
 ]
 
 [dependency-groups]

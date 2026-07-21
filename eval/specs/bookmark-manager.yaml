@@ -1,0 +1,53 @@
+id: bookmark-manager
+title: Bookmark manager
+difficulty: moderate
+tags: [tags, filtering, many-to-many]
+inputs:
+  prompt: >-
+    Somewhere to keep links. Each bookmark has a URL, a title and any number of
+    tags. I want to filter by tag, and combining tags should narrow the results
+    rather than widen them.
+requirements:
+  features:
+    - name: Save bookmarks
+      description: Store a link with a title and a set of tags.
+      inputs: [url, title, tags]
+      expected_behaviors:
+        - The same URL may be saved only once.
+        - Tags are normalised to lowercase.
+      acceptance_criteria:
+        - text: Saving a bookmark stores its URL, title and tags.
+          kind: e2e
+        - text: Saving a URL that already exists is rejected.
+          kind: unit
+        - text: Tags are stored lowercase regardless of how they were typed.
+          kind: unit
+        - text: A bookmark can be saved with no tags at all.
+          kind: unit
+    - name: Filter by tag
+      description: Narrow the list to bookmarks carrying the selected tags.
+      inputs: [tags]
+      expected_behaviors:
+        - Selecting several tags shows only bookmarks carrying all of them.
+        - Clearing the selection restores the full list.
+      acceptance_criteria:
+        - text: Filtering by one tag returns only bookmarks carrying that tag.
+          kind: either
+        - text: Filtering by two tags returns only bookmarks carrying both, not either.
+          kind: unit
+        - text: Clearing the tag filter restores every bookmark.
+          kind: e2e
+    - name: Tag list
+      description: The set of tags currently in use, with counts.
+      expected_behaviors:
+        - A tag disappears from the list once no bookmark uses it.
+      acceptance_criteria:
+        - text: The tag list shows each tag in use with the number of bookmarks carrying it.
+          kind: unit
+        - text: Removing the last bookmark with a tag removes that tag from the list.
+          kind: either
+expected_features: [Save bookmarks, Filter by tag, Tag list]
+notes: >-
+  "All of these tags" rather than "any of them" is the discriminating criterion —
+  the intuitive-but-wrong implementation passes a single-tag test and fails the
+  two-tag one.

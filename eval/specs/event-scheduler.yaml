@@ -1,0 +1,71 @@
+id: event-scheduler
+title: Event scheduler
+difficulty: complex
+tags: [dates, conflict-detection, capacity, relations]
+inputs:
+  prompt: >-
+    A scheduler for a shared room. Events have a start and end time and a
+    capacity. Two events in the same room must not overlap, people RSVP up to the
+    capacity, and I want to see one day at a time.
+requirements:
+  features:
+    - name: Manage events
+      description: Create and edit events with a room, time range and capacity.
+      inputs: [title, room, starts at, ends at, capacity]
+      expected_behaviors:
+        - An event's end must be strictly after its start.
+      acceptance_criteria:
+        - text: Creating an event stores its room, start, end and capacity.
+          kind: e2e
+        - text: An event ending before it starts is rejected.
+          kind: unit
+        - text: An event with zero or negative capacity is rejected.
+          kind: unit
+        - text: Editing an event's time keeps its existing RSVPs.
+          kind: unit
+    - name: Prevent double booking
+      description: Refuse an event that overlaps another in the same room.
+      expected_behaviors:
+        - Events that merely touch at the boundary do not overlap.
+        - Different rooms may hold events at the same time.
+      acceptance_criteria:
+        - text: An event overlapping an existing one in the same room is refused.
+          kind: unit
+        - text: An event starting exactly when another ends is allowed.
+          kind: unit
+        - text: Overlapping events in different rooms are both allowed.
+          kind: unit
+        - text: Moving an event onto an occupied slot is refused.
+          kind: either
+    - name: RSVP with capacity
+      description: Let people reserve a place, bounded by the event's capacity.
+      inputs: [event, attendee]
+      expected_behaviors:
+        - Cancelling an RSVP frees a place immediately.
+      acceptance_criteria:
+        - text: RSVPing to an event with room available records the attendee.
+          kind: either
+        - text: RSVPing to a full event is refused.
+          kind: unit
+        - text: The same attendee cannot RSVP to one event twice.
+          kind: unit
+        - text: Cancelling an RSVP lets another attendee take the place.
+          kind: unit
+    - name: Day view
+      description: Show the events for a single chosen day, in time order.
+      inputs: [date]
+      expected_behaviors:
+        - An event is shown on the day it starts.
+      acceptance_criteria:
+        - text: The day view lists only events starting on the chosen day.
+          kind: unit
+        - text: Events are listed in ascending start-time order.
+          kind: unit
+        - text: Changing the date reloads the list for that day.
+          kind: e2e
+expected_features: [Manage events, Prevent double booking, RSVP with capacity, Day view]
+notes: >-
+  The hardest seed. Overlap detection has a genuine boundary case (touching is
+  not overlapping) and capacity is a race-prone invariant. Both are the sort of
+  rule a model states correctly in prose and implements incorrectly, which makes
+  this the clearest demonstration of repair-loop value.

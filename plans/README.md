@@ -56,7 +56,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [40](./phase-40-live-failure-repair-path-ui.md) | Live-failure repair path & UI | 8 · Live Validation | 31, 38, 39 | ✅ |
 | [41](./phase-41-per-project-data-api.md) | Per-project data API | 9 · Data Browser | 36 | ✅ |
 | [42](./phase-42-data-browser-ui.md) | Data browser UI | 9 · Data Browser | 09, 41 | ✅ |
-| [43](./phase-43-benchmark-spec-format-seeds.md) | Benchmark spec format & seeds | 10 · Eval | 25 | ⬜ |
+| [43](./phase-43-benchmark-spec-format-seeds.md) | Benchmark spec format & seeds | 10 · Eval | 25 | ✅ |
 | [44](./phase-44-headless-pipeline-runner-metrics.md) | Headless pipeline runner & metrics | 10 · Eval | 23, 28, 31, 37, 43 | ⬜ |
 | [45](./phase-45-results-dashboard-report.md) | Results dashboard/report | 10 · Eval | 44 | ⬜ |
 | [46](./phase-46-observability-cost-tracking.md) | Observability & cost tracking | 11 · Hardening & Demo | 20 | ⬜ |

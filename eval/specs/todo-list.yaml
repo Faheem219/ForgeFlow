@@ -1,0 +1,38 @@
+id: todo-list
+title: Todo list
+difficulty: simple
+tags: [crud, single-entity]
+inputs:
+  prompt: >-
+    A personal todo list. I want to add tasks, tick them off, and delete the ones
+    I no longer need. Show how many are still outstanding.
+requirements:
+  features:
+    - name: Manage todos
+      description: Create, complete and delete tasks from a single list.
+      inputs: [title]
+      expected_behaviors:
+        - A new todo starts incomplete and appears at the top of the list.
+        - Completing a todo keeps it visible but visibly done.
+        - Deleting a todo removes it permanently.
+      acceptance_criteria:
+        - text: Adding a todo with a title stores it and shows it in the list.
+          kind: e2e
+        - text: Adding a todo with an empty title is rejected with a validation error.
+          kind: unit
+        - text: Toggling a todo flips its completed state and persists it.
+          kind: either
+        - text: Deleting a todo removes it from the list and from storage.
+          kind: e2e
+    - name: Outstanding count
+      description: A running count of todos that are not yet complete.
+      expected_behaviors:
+        - The count updates immediately when a todo is added, completed or deleted.
+      acceptance_criteria:
+        - text: The count shows the number of incomplete todos, not the total.
+          kind: unit
+expected_features: [Manage todos, Outstanding count]
+notes: >-
+  The floor of the benchmark. First-pass generation is expected to pass this
+  outright; a failure here indicates a problem in the skeleton or codegen rather
+  than in the difficulty of the task.

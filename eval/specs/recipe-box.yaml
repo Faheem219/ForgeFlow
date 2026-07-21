@@ -1,0 +1,53 @@
+id: recipe-box
+title: Recipe box
+difficulty: moderate
+tags: [nested-data, scaling, filtering]
+inputs:
+  prompt: >-
+    A place for recipes. Each has a list of ingredients with quantities, some
+    steps, and a serving count. I want to scale a recipe to a different number of
+    servings, and find recipes I can make from ingredients I have.
+requirements:
+  features:
+    - name: Manage recipes
+      description: Store a recipe with ingredients, steps and a serving count.
+      inputs: [title, servings, ingredients, steps]
+      expected_behaviors:
+        - Each ingredient has a name, quantity and unit.
+        - Steps keep the order they were entered in.
+      acceptance_criteria:
+        - text: Creating a recipe stores its ingredients with quantities and units.
+          kind: e2e
+        - text: A recipe with no ingredients is rejected.
+          kind: unit
+        - text: Steps are returned in the order they were entered.
+          kind: unit
+        - text: A serving count below one is rejected.
+          kind: unit
+    - name: Scale servings
+      description: Recompute ingredient quantities for a different serving count.
+      inputs: [servings]
+      expected_behaviors:
+        - Scaling does not modify the stored recipe.
+      acceptance_criteria:
+        - text: Doubling the servings doubles every ingredient quantity.
+          kind: unit
+        - text: Scaling leaves the stored recipe unchanged.
+          kind: unit
+        - text: The scaled quantities are shown without saving them.
+          kind: e2e
+    - name: Find by ingredient
+      description: List recipes that use every one of the given ingredients.
+      inputs: [ingredients]
+      expected_behaviors:
+        - Matching is by ingredient name, ignoring quantity and unit.
+      acceptance_criteria:
+        - text: Searching by an ingredient returns recipes containing it.
+          kind: either
+        - text: Searching by two ingredients returns only recipes containing both.
+          kind: unit
+expected_features: [Manage recipes, Scale servings, Find by ingredient]
+notes: >-
+  Nested documents plus a pure computation over them. Scaling must be a view
+  concern, not a write — a build that persists the scaled quantities passes the
+  arithmetic test and fails the immutability one.

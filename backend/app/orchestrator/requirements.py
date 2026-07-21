@@ -147,6 +147,16 @@ class RequirementsService:
         return await self._repo.create_version(project_id, features, inferred=inferred)
 
 
+def validate_features(spec: RequirementSpecInput) -> list[Feature]:
+    """Validate a standalone spec (no project, no persistence) and mint its criterion ids.
+
+    The evaluation harness (phase-43) checks its benchmark specs with **this** function, so a seed
+    the loader accepts is by construction one the requirements API would accept — the schema stays a
+    single source of truth rather than two that drift.
+    """
+    return _resolve(spec, None)
+
+
 def _resolve(spec: RequirementSpecInput, previous: RequirementSpec | None) -> list[Feature]:
     """Validate the input and turn it into persisted ``Feature``s with stable criterion ids."""
     if not spec.features:

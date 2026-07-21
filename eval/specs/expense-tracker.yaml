@@ -1,0 +1,57 @@
+id: expense-tracker
+title: Expense tracker
+difficulty: moderate
+tags: [aggregation, categories, dates]
+inputs:
+  prompt: >-
+    An expense tracker. I log what I spent, how much, on what date and in which
+    category. I want totals per category and a running total for the month I am
+    looking at.
+requirements:
+  features:
+    - name: Record expenses
+      description: Log an expense with an amount, date, category and description.
+      inputs: [amount, date, category, description]
+      expected_behaviors:
+        - Amounts are stored to two decimal places.
+        - Expenses default to today's date when none is given.
+      acceptance_criteria:
+        - text: Recording an expense stores its amount, date, category and description.
+          kind: e2e
+        - text: A zero or negative amount is rejected.
+          kind: unit
+        - text: An expense in an unknown category is rejected.
+          kind: unit
+        - text: Editing an expense's amount updates the stored value.
+          kind: either
+    - name: Manage categories
+      description: A user-defined set of categories that expenses are filed under.
+      inputs: [name]
+      expected_behaviors:
+        - Category names are unique.
+        - A category in use cannot be deleted.
+      acceptance_criteria:
+        - text: Creating a category with a new name succeeds and lists it.
+          kind: either
+        - text: Creating a category with a duplicate name is rejected.
+          kind: unit
+        - text: Deleting a category that has expenses is refused with an explanation.
+          kind: unit
+    - name: Monthly totals
+      description: Totals per category and overall, for a selected month.
+      inputs: [month]
+      expected_behaviors:
+        - Only expenses within the selected month are counted.
+        - A month with no expenses totals zero rather than erroring.
+      acceptance_criteria:
+        - text: The overall total equals the sum of that month's expenses.
+          kind: unit
+        - text: Each category total equals the sum of that category's expenses that month.
+          kind: unit
+        - text: Changing the selected month recalculates the totals shown.
+          kind: e2e
+expected_features: [Record expenses, Manage categories, Monthly totals]
+notes: >-
+  The first spec with derived values. Totals must agree with the stored rows, and
+  the date-window boundary is a classic off-by-one that first-pass builds miss —
+  exactly the kind of failure the repair loop should close.

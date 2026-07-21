@@ -1,0 +1,39 @@
+id: url-shortener
+title: URL shortener
+difficulty: simple
+tags: [redirect, uniqueness]
+inputs:
+  prompt: >-
+    A link shortener. Paste a long URL and get a short code back. Visiting the
+    short code redirects to the original, and I want to see how many times each
+    link has been followed.
+requirements:
+  features:
+    - name: Shorten links
+      description: Turn a long URL into a unique short code.
+      inputs: [url]
+      expected_behaviors:
+        - Each code is unique across all links.
+        - The same URL submitted twice may reuse its existing code.
+      acceptance_criteria:
+        - text: Submitting a valid URL returns a short code and stores the pair.
+          kind: either
+        - text: Submitting a string that is not a URL is rejected with an error.
+          kind: unit
+        - text: Two different URLs never receive the same code.
+          kind: unit
+    - name: Redirect and count
+      description: Resolve a short code to its URL and record the visit.
+      expected_behaviors:
+        - An unknown code returns a not-found response rather than an error page.
+      acceptance_criteria:
+        - text: Visiting a known short code redirects to the original URL.
+          kind: e2e
+        - text: Visiting a code increments that link's visit count by one.
+          kind: either
+        - text: An unknown short code returns 404.
+          kind: unit
+expected_features: [Shorten links, Redirect and count]
+notes: >-
+  Introduces a non-CRUD route (a redirect) and a uniqueness invariant — both
+  things a generated backend can get structurally wrong.
