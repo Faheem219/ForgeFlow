@@ -54,7 +54,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [38](./phase-38-deployment-topology.md) | Visual deployment topology (React Flow) | 7 · Deploy | 05, 37 | ✅ |
 | [39](./phase-39-post-deploy-test-runner.md) | Post-deploy test runner | 8 · Live Validation | 28, 37 | ✅ |
 | [40](./phase-40-live-failure-repair-path-ui.md) | Live-failure repair path & UI | 8 · Live Validation | 31, 38, 39 | ✅ |
-| [41](./phase-41-per-project-data-api.md) | Per-project data API | 9 · Data Browser | 36 | ⬜ |
+| [41](./phase-41-per-project-data-api.md) | Per-project data API | 9 · Data Browser | 36 | ✅ |
 | [42](./phase-42-data-browser-ui.md) | Data browser UI | 9 · Data Browser | 09, 41 | ⬜ |
 | [43](./phase-43-benchmark-spec-format-seeds.md) | Benchmark spec format & seeds | 10 · Eval | 25 | ⬜ |
 | [44](./phase-44-headless-pipeline-runner-metrics.md) | Headless pipeline runner & metrics | 10 · Eval | 23, 28, 31, 37, 43 | ⬜ |

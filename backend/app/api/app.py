@@ -19,6 +19,7 @@ from app.auth.router import router as auth_router
 from app.core.config import get_config
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.data_browser.router import data_router
 from app.db.mongo import close_client, init_db
 from app.deploy.credentials_router import credentials_router
 from app.deploy.deploy_router import deploy_router
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(infra_router)
     app.include_router(deploy_router)
     app.include_router(credentials_router)
+    app.include_router(data_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
