@@ -15,6 +15,8 @@ import { getProject, listStages, submitIntent } from './api';
 
 // xterm is heavy and only needed once the drawer is opened — keep it out of the main chunk.
 const Terminal = lazy(() => import('../ide/Terminal'));
+// Data browsing is a workspace *view*, not a stage — it is available whatever stage you are on.
+const DataBrowser = lazy(() => import('../data/DataBrowser'));
 
 export default function Workspace(): JSX.Element {
   const { id } = useParams();
@@ -26,6 +28,7 @@ export default function Workspace(): JSX.Element {
   const openProject = useWorkspaceStore((s) => s.openProject);
   const storeProjectId = useWorkspaceStore((s) => s.projectId);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [view, setView] = useState<'stage' | 'data'>('stage');
 
   const projectQuery = useQuery({
     queryKey: ['project', projectId],
@@ -115,14 +118,25 @@ export default function Workspace(): JSX.Element {
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setTerminalOpen((open) => !open)}
-          aria-pressed={terminalOpen}
-        >
-          {terminalOpen ? 'Hide terminal' : 'Terminal'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={view === 'data' ? 'primary' : 'secondary'}
+            data-testid="toggle-data"
+            aria-pressed={view === 'data'}
+            onClick={() => setView((v) => (v === 'data' ? 'stage' : 'data'))}
+          >
+            Data
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setTerminalOpen((open) => !open)}
+            aria-pressed={terminalOpen}
+          >
+            {terminalOpen ? 'Hide terminal' : 'Terminal'}
+          </Button>
+        </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
@@ -137,7 +151,19 @@ export default function Workspace(): JSX.Element {
         </Panel>
 
         <div className="min-h-0 overflow-auto">
-          <StagePanel projectId={projectId} stage={activeStage} />
+          {view === 'data' ? (
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center">
+                  <Spinner />
+                </div>
+              }
+            >
+              <DataBrowser projectId={projectId} />
+            </Suspense>
+          ) : (
+            <StagePanel projectId={projectId} stage={activeStage} />
+          )}
         </div>
 
         <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">

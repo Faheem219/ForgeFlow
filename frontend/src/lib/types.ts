@@ -377,3 +377,28 @@ export interface LiveRunDto {
   created_at: string;
   results: TestResultDto[];
 }
+
+// --- Data browser (phase-41 API / phase-42 UI) ---
+
+/** Where a project's data lives. There is deliberately no URI field — it is a secret (§7). */
+export interface DbInfoDto {
+  mode: 'platform' | 'byo';
+  db_name: string;
+  managed: boolean;
+}
+
+export interface CollectionDto {
+  name: string;
+  count: number;
+}
+
+/** A document from a generated app — schema-agnostic, so an open record is the honest type. */
+export type DataDocument = Record<string, unknown>;
+
+export interface DocumentPageDto {
+  documents: DataDocument[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
