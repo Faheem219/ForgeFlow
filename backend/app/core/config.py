@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     live_warmup_interval_s: float = 6.0
     live_test_retries: int = 1  # Playwright's own retry for a flaky first hit over the network
 
+    # --- Observability (phase-46) ---
+    # Warn once spend crosses this fraction of a cap. Approaching a cap silently and then halting
+    # mid-run is the surprise this removes; 0 disables the warning.
+    budget_warn_ratio: float = 0.8
+
     # --- Live-failure repair loop (phase-40) ---
     # The **outer** bound (D7 one level up): how many validate→repair→redeploy→re-validate cycles
     # before escalating. The inner repair loop has its own cap; a broken deploy config must not be

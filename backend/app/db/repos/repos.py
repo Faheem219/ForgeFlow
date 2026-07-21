@@ -272,7 +272,9 @@ class RunRepo(BaseRepo[Run]):
         super().__init__(Run)
 
     async def list_for_project(self, project_id: PydanticObjectId) -> list[Run]:
-        return await Run.find({"project_id": project_id}).sort("-started_at").to_list()
+        # Mongo stores datetimes at millisecond precision, so two runs started in the same
+        # millisecond tie on `started_at`; `_id` is monotonic and breaks it in real order.
+        return await Run.find({"project_id": project_id}).sort("-started_at", "-_id").to_list()
 
 
 class PlatformSettingRepo(BaseRepo[PlatformSetting]):

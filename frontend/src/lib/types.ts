@@ -484,3 +484,39 @@ export interface EvalRunDto {
   legs: string[];
   specs: number;
 }
+
+// --- Cost & observability (phase-46) ---
+
+/** A cap of `null` means unlimited — headroom is then unknown, never 0. */
+export interface BudgetDto {
+  spent_inr: number;
+  cap_inr: number | null;
+  headroom_inr: number | null;
+  used_ratio: number | null;
+  warn_ratio: number;
+  warning: boolean;
+  halted: boolean;
+}
+
+export interface ProjectCostDto {
+  project_id: string;
+  tokens: number;
+  inr: number;
+  runs: number;
+  by_kind: Record<string, { runs: number; tokens: number; inr: number }>;
+  project: BudgetDto;
+  global_budget: BudgetDto;
+}
+
+/** One costed unit of work. `duration_s` is null while a run is still open. */
+export interface RunDto {
+  id: string;
+  kind: string;
+  tokens: number;
+  inr: number;
+  outcome: string | null;
+  tool_calls: number;
+  started_at: string;
+  finished_at: string | null;
+  duration_s: number | null;
+}

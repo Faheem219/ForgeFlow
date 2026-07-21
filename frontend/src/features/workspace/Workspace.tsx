@@ -17,6 +17,8 @@ import { getProject, listStages, submitIntent } from './api';
 const Terminal = lazy(() => import('../ide/Terminal'));
 // Data browsing is a workspace *view*, not a stage — it is available whatever stage you are on.
 const DataBrowser = lazy(() => import('../data/DataBrowser'));
+// Spend is always relevant while work runs, so it sits alongside the stage navigator.
+const CostPanel = lazy(() => import('../cost/CostPanel'));
 
 export default function Workspace(): JSX.Element {
   const { id } = useParams();
@@ -140,15 +142,28 @@ export default function Workspace(): JSX.Element {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
-        <Panel title="Stages" className="overflow-auto">
-          <StageNavigator
-            statusByStage={statusByStage}
-            activeStage={activeStage}
-            onSelect={setActiveStage}
-            onAction={(stage, action) => navAction.mutate({ stage, action })}
-            busy={navAction.isPending}
-          />
-        </Panel>
+        <div className="flex min-h-0 flex-col gap-4 overflow-auto">
+          <Panel title="Stages">
+            <StageNavigator
+              statusByStage={statusByStage}
+              activeStage={activeStage}
+              onSelect={setActiveStage}
+              onAction={(stage, action) => navAction.mutate({ stage, action })}
+              busy={navAction.isPending}
+            />
+          </Panel>
+          <Panel title="Cost">
+            <Suspense
+              fallback={
+                <div className="flex justify-center py-4">
+                  <Spinner />
+                </div>
+              }
+            >
+              <CostPanel projectId={projectId} />
+            </Suspense>
+          </Panel>
+        </div>
 
         <div className="min-h-0 overflow-auto">
           {view === 'data' ? (

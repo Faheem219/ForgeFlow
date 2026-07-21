@@ -29,13 +29,25 @@ SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: Numeric *counts* whose names contain a sensitive substring — ``tokens`` matches ``token``.
+#: Redacting these would blind the cost trail (phase-46) while protecting nothing: a token **count**
+#: is not a credential. The exemption is deliberately narrow — it applies only when the value is
+#: actually a number, so ``tokens="sk-..."`` is still redacted.
+SAFE_COUNT_KEY_RE = re.compile(
+    r"^(total_|input_|output_|prompt_|completion_|cache_\w+_)?tokens(_\w+)?$", re.IGNORECASE
+)
+
 #: Bound on how deep redaction walks nested structures (logs should not be deep).
 _MAX_DEPTH = 4
 
 
+def _is_safe_count(key: str, value: Any) -> bool:
+    return bool(SAFE_COUNT_KEY_RE.match(key)) and isinstance(value, (int, float))
+
+
 def redact(key: str, value: Any, _depth: int = 0) -> Any:
     """Return ``value`` with credential-ish entries replaced by :data:`REDACTED`."""
-    if SENSITIVE_KEY_RE.search(key):
+    if SENSITIVE_KEY_RE.search(key) and not _is_safe_count(key, value):
         return REDACTED
     if _depth >= _MAX_DEPTH:
         return value

@@ -38,6 +38,31 @@ class BudgetSnapshot:
             return "global"
         return None
 
+    def warning_scope(self, ratio: float) -> str | None:
+        """The scope approaching its cap, if any (phase-46).
+
+        Halting at the cap with no prior signal is a surprise; this is the signal. Checked only
+        below the cap — once breached, ``breached_scope`` is the louder and more accurate answer.
+        """
+        if ratio <= 0 or self.breached_scope() is not None:
+            return None
+        if self.project_cap is not None and self.project_inr >= self.project_cap * ratio:
+            return "project"
+        if self.global_cap is not None and self.global_inr >= self.global_cap * ratio:
+            return "global"
+        return None
+
+    def headroom(self) -> dict[str, float | None]:
+        """What is left before each cap — ``None`` where no cap is configured."""
+        return {
+            "project": (
+                None if self.project_cap is None else round(self.project_cap - self.project_inr, 6)
+            ),
+            "global": (
+                None if self.global_cap is None else round(self.global_cap - self.global_inr, 6)
+            ),
+        }
+
     def as_event(self, scope: str) -> dict[str, Any]:
         return {
             "scope": scope,
@@ -69,6 +94,15 @@ async def enforce_budget(
 ) -> BudgetSnapshot:
     """Raise + emit ``budget.halt`` if a cap is reached; otherwise return the snapshot."""
     snapshot = await budget_snapshot(project_id)
+
+    warn_scope = snapshot.warning_scope(float(get_config().get("budget_warn_ratio")))
+    if warn_scope is not None:
+        await emitter(
+            str(project_id),
+            EventType.budget_warning,
+            {**snapshot.as_event(warn_scope), "headroom": snapshot.headroom()},
+        )
+
     scope = snapshot.breached_scope()
     if scope is not None:
         await emitter(str(project_id), EventType.budget_halt, snapshot.as_event(scope))

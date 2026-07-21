@@ -17,8 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
 from app.core.config import get_config
+from app.core.cost_router import cost_router
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.observability import install_correlation_filter
 from app.data_browser.router import data_router
 from app.db.mongo import close_client, init_db
 from app.deploy.credentials_router import credentials_router
@@ -74,6 +76,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     config = get_config()
     configure_logging(config.get("log_level"), config.get("log_json"))
+    # Every log line emitted inside a traced run carries its project/run ids (phase-46).
+    install_correlation_filter()
 
     app = FastAPI(
         title="ForgeFlow Control Plane",
@@ -111,6 +115,7 @@ def create_app() -> FastAPI:
     app.include_router(credentials_router)
     app.include_router(data_router)
     app.include_router(eval_router)
+    app.include_router(cost_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

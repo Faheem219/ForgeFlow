@@ -24,6 +24,7 @@ class EventType(StrEnum):
     sandbox_status = "sandbox.status"
     design_quota = "design.quota"
     budget_halt = "budget.halt"
+    budget_warning = "budget.warning"
     stage_transition = "stage.transition"
     progress = "progress"
     ping = "ping"
