@@ -21,6 +21,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.db.mongo import close_client, init_db
 from app.deploy.credentials_router import credentials_router
+from app.deploy.deploy_router import deploy_router
 from app.deploy.router import infra_router
 from app.design.router import router as design_router
 from app.orchestrator.router import intents_router, requirements_router
@@ -102,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(tests_router)
     app.include_router(repair_router)
     app.include_router(infra_router)
+    app.include_router(deploy_router)
     app.include_router(credentials_router)
 
     @app.get("/health", tags=["health"])

@@ -278,3 +278,55 @@ export interface CredentialDto {
   /** Last four characters, so two tokens can be told apart without revealing either. */
   last4: string | null;
 }
+
+// --- Deploy (phase-37 record / phase-38 topology) ---
+
+export type DeployMode = 'seamless' | 'byo';
+
+/** Overall deployment health: everything live, some target down, or nothing usable. */
+export type DeploymentStatus = 'live' | 'degraded' | 'failed' | 'pending';
+
+export type TopologyNodeId = 'fe' | 'be' | 'db';
+
+/** One box in the graph, as the orchestrator recorded it. Carries a URL, never env values. */
+export interface TopologyNodeDto {
+  id: TopologyNodeId;
+  kind: 'frontend' | 'backend' | 'database';
+  provider: string;
+  url?: string | null;
+  status: string;
+}
+
+/** A wiring edge; `label` is the env **key** that carries the target's URL/URI (never its value). */
+export interface TopologyEdgeDto {
+  source: TopologyNodeId;
+  target: TopologyNodeId;
+  label?: string;
+}
+
+export interface TopologySnapshotDto {
+  nodes: TopologyNodeDto[];
+  edges: TopologyEdgeDto[];
+  status?: string;
+}
+
+/**
+ * A persisted deployment (backend GET /projects/{id}/deploy/latest). There is deliberately no env
+ * field: a deployment records URLs and shape, and secrets never leave the control plane (§7).
+ */
+export interface DeploymentDto {
+  id: string;
+  mode: DeployMode;
+  status: DeploymentStatus;
+  fe_target: string | null;
+  be_target: string | null;
+  db_target: string | null;
+  urls: Partial<Record<TopologyNodeId, string>>;
+  topology_snapshot: TopologySnapshotDto;
+  created_at: string;
+}
+
+export interface DeployLogsDto {
+  deployment_id: string;
+  log: string;
+}

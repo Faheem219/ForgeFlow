@@ -51,7 +51,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [35](./phase-35-deploy-provider-adapters.md) | Deploy provider adapters (Vercel + Render) | 7 · Deploy | 33, 34 | ✅ |
 | [36](./phase-36-db-provisioning.md) | DB provisioning | 7 · Deploy | 02, 34 | ✅ |
 | [37](./phase-37-deploy-orchestration.md) | Deploy orchestration | 7 · Deploy | 35, 36 | ✅ |
-| [38](./phase-38-deployment-topology.md) | Visual deployment topology (React Flow) | 7 · Deploy | 05, 37 | ⬜ |
+| [38](./phase-38-deployment-topology.md) | Visual deployment topology (React Flow) | 7 · Deploy | 05, 37 | ✅ |
 | [39](./phase-39-post-deploy-test-runner.md) | Post-deploy test runner | 8 · Live Validation | 28, 37 | ⬜ |
 | [40](./phase-40-live-failure-repair-path-ui.md) | Live-failure repair path & UI | 8 · Live Validation | 31, 38, 39 | ⬜ |
 | [41](./phase-41-per-project-data-api.md) | Per-project data API | 9 · Data Browser | 36 | ⬜ |

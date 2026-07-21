@@ -5,17 +5,20 @@ import type { IntentAction, Stage } from '../../lib/types';
 import { STAGE_LABELS, STATUS_LABELS, STATUS_TONES } from './stageMeta';
 import { useStage } from './useStage';
 
-// The design + build panels are heavy (Monaco / xterm) — only pull them in when their stage shows.
+// The design + build + deploy panels are heavy (Monaco / xterm / React Flow) — only pull them in
+// when their stage shows.
 const DesignPanel = lazy(() => import('../design/DesignPanel'));
 const BuildPanel = lazy(() => import('../build/BuildPanel'));
 const RequirementsPanel = lazy(() => import('../requirements/RequirementsPanel'));
 const TestingPanel = lazy(() => import('../testing/TestingPanel'));
+const DeployPanel = lazy(() => import('../deploy/DeployPanel'));
 
 const STAGE_PANELS = {
   design: DesignPanel,
   build: BuildPanel,
   requirements: RequirementsPanel,
   test: TestingPanel,
+  deploy: DeployPanel,
 } as const;
 
 const ACTION_LABELS: Record<IntentAction, string> = {
@@ -26,9 +29,9 @@ const ACTION_LABELS: Record<IntentAction, string> = {
 
 /**
  * Per-stage panel. Design hosts the full design UI; Build hosts the web IDE; Requirements hosts the
- * guided capture form; the remaining stages (test/repair view, deploy topology, data browser) fill
- * in during later epics — for those this scaffold just exposes refine/skip/proceed + an artifacts
- * area.
+ * guided capture form; Test hosts the repair loop; Deploy hosts the topology map. The remaining
+ * stages fill in during later epics — for those this scaffold just exposes refine/skip/proceed + an
+ * artifacts area.
  */
 export function StagePanel({ projectId, stage }: { projectId: string; stage: Stage }): JSX.Element {
   const { stageState, artifacts, runAction, isActing } = useStage(projectId, stage);

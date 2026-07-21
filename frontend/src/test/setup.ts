@@ -18,3 +18,18 @@ class SignalTolerantRequest extends OriginalRequest {
   }
 }
 globalThis.Request = SignalTolerantRequest as unknown as typeof Request;
+
+// jsdom implements no layout engine, so the browser APIs React Flow measures with are missing
+// entirely. Without these the topology graph throws on mount instead of rendering its nodes.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+if (!('DOMMatrixReadOnly' in globalThis)) {
+  globalThis.DOMMatrixReadOnly = class {
+    m22 = 1;
+  } as unknown as typeof DOMMatrixReadOnly;
+}
