@@ -31,6 +31,7 @@ from app.db.models.enums import (
     SettingCategory,
     Stage,
     StageStatus,
+    TestEnv,
     TestKind,
 )
 from app.db.repos.base import BaseRepo
@@ -233,8 +234,18 @@ class TestRunRepo(BaseRepo[TestRun]):
     async def list_for_project(self, project_id: PydanticObjectId) -> list[TestRun]:
         return await TestRun.find({"project_id": project_id}).sort("-created_at").to_list()
 
-    async def latest(self, project_id: PydanticObjectId) -> TestRun | None:
-        return await TestRun.find({"project_id": project_id}).sort("-created_at").first_or_none()
+    async def latest(
+        self, project_id: PydanticObjectId, env: TestEnv | None = None
+    ) -> TestRun | None:
+        """The newest run, optionally restricted to one environment.
+
+        Sandbox and live runs (phase-39) share this collection, so callers that mean one of them —
+        the repair loop repairs *workspace* code — must say which.
+        """
+        query: dict[str, Any] = {"project_id": project_id}
+        if env is not None:
+            query["env"] = env
+        return await TestRun.find(query).sort("-created_at").first_or_none()
 
 
 class RepairAttemptRepo(BaseRepo[RepairAttempt]):

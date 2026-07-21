@@ -115,6 +115,28 @@ def build_preview_network_kwargs(name: str) -> dict[str, Any]:
     }
 
 
+def build_egress_network_kwargs(name: str) -> dict[str, Any]:
+    """The ``docker network create`` spec for live validation (phase-39).
+
+    Unlike the preview network this one is **not** ``internal``: it routes out, because live
+    validation drives Playwright against the *deployed public URL* and there is no other way to
+    reach it. That makes this the widest relaxation of the ``network_mode=none`` default in the
+    system, so it is deliberately narrow in time rather than in reach: the sandbox is attached for
+    one live run and detached in a ``finally`` (see :class:`~app.testing.live.LiveTestRunner`), and
+    it is still never the *host* network — generated code gets a routed bridge, not the host
+    namespace. Flagged for the phase-47 hardening review.
+
+    Pure + side-effect free so the isolation properties are unit-testable without a daemon.
+    """
+    return {
+        "name": name,
+        "driver": "bridge",
+        "internal": False,  # the point: live tests must reach the deployed URL
+        "check_duplicate": True,
+        "labels": {LABEL_MANAGED: "true", LABEL_ROLE: "egress"},
+    }
+
+
 class SandboxManager:
     """Owns container lifecycle + idle-activity tracking for all projects on this instance."""
 
@@ -225,6 +247,52 @@ class SandboxManager:
             await asyncio.to_thread(network.disconnect, container.id, force=True)
         except APIError:
             logger.debug("sandbox %s was not on the preview network", project_id, exc_info=True)
+
+    # -- egress network (phase-39) -----------------------------------------------------
+
+    async def ensure_egress_network(self) -> Any:
+        """Get-or-create the routed network live validation borrows."""
+        client = self._client()
+        name = str(get_config().get("egress_network_name"))
+        try:
+            return await asyncio.to_thread(client.networks.get, name)
+        except NotFound:
+            kwargs = build_egress_network_kwargs(name)
+            try:
+                return await asyncio.to_thread(client.networks.create, **kwargs)
+            except APIError as exc:
+                raise SystemError("Failed to create the egress network") from exc
+
+    async def attach_egress_network(self, project_id: str) -> bool:
+        """Give the sandbox a route out for the duration of one live run.
+
+        The caller **must** pair this with :meth:`detach_egress_network` in a ``finally``.
+        """
+        container = await self._get_container(project_id)
+        if container is None:
+            return False
+        network = await self.ensure_egress_network()
+        try:
+            await asyncio.to_thread(network.connect, container.id)
+        except APIError:
+            logger.debug("sandbox %s already has egress", project_id, exc_info=True)
+        return True
+
+    async def detach_egress_network(self, project_id: str) -> None:
+        """Take the route back out — the sandbox returns to its no-network default."""
+        container = await self._get_container(project_id)
+        if container is None:
+            return
+        client = self._client()
+        name = str(get_config().get("egress_network_name"))
+        try:
+            network = await asyncio.to_thread(client.networks.get, name)
+        except NotFound:
+            return
+        try:
+            await asyncio.to_thread(network.disconnect, container.id, force=True)
+        except APIError:
+            logger.debug("sandbox %s had no egress to drop", project_id, exc_info=True)
 
     # -- activity / reaping ------------------------------------------------------------
 

@@ -28,7 +28,7 @@ from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError, UserError
 from app.db.blobs import get_blob_store
 from app.db.models import RepairAttempt
-from app.db.models.enums import ArtifactType, Stage
+from app.db.models.enums import ArtifactType, Stage, TestEnv
 from app.db.repos import RepairAttemptRepo, TestRunRepo
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.stages.repair import REPAIR_REPORT_KIND, RepairLoopController
@@ -85,7 +85,9 @@ async def run_repair(
         if test_run is None or test_run.project_id != pid:
             raise NotFoundError("Test run not found")
     else:
-        test_run = await runs.latest(pid)
+        # Explicitly the *sandbox* run: live runs (phase-39) share this collection, and the repair
+        # loop patches workspace code. Repairing from a live result is phase-40's path.
+        test_run = await runs.latest(pid, env=TestEnv.sandbox)
         if test_run is None:
             raise UserError("Run the tests first — there is no test run to repair.")
 

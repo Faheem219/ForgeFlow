@@ -96,6 +96,17 @@ class Settings(BaseSettings):
     # Wall-clock bound for a single suite invocation in the sandbox (Playwright can be slow).
     test_runner_timeout_s: int = 900
 
+    # --- Live validation (phase-39) ---
+    # Which E2E subset runs against production: "smoke", "critical", "both", or "all" (everything).
+    # Ignored when the suite carries no tags — an untagged suite runs in full rather than empty.
+    live_test_selection: str = "both"
+    live_test_timeout_s: int = 600  # wall clock for the live Playwright invocation
+    # Render's free tier sleeps; the first request wakes it and can take ~a minute. Probe until the
+    # site answers so results reflect real failures, not spin-up.
+    live_warmup_attempts: int = 10
+    live_warmup_interval_s: float = 6.0
+    live_test_retries: int = 1  # Playwright's own retry for a flaky first hit over the network
+
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"
@@ -137,6 +148,8 @@ class Settings(BaseSettings):
     preview_be_health_path: str = "/health"
     # Dedicated *internal* docker network for preview: sandbox↔proxy only, never the host (§7).
     preview_network_name: str = "forgeflow-preview"
+    # Routed network the sandbox joins *only* for a live validation run (phase-39), then leaves.
+    egress_network_name: str = "forgeflow-egress"
     preview_base_domain: str = (
         ""  # set in prod → https://<project>.<domain>; else *.preview.localhost
     )

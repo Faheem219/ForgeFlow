@@ -41,9 +41,10 @@ from app.testing.parsers import extract_referenced_files, parse
 # Where each reporter writes its JSON (relative to the package cwd the command runs in).
 _VITEST_REPORT = "vitest-report.json"
 _JEST_REPORT = "jest-report.json"
-_PLAYWRIGHT_REPORT = "playwright-report.json"
+# Public: the live runner (phase-39) reuses the same Playwright invocation shape.
+PLAYWRIGHT_REPORT = "playwright-report.json"
 
-_FE_DIR = "frontend"
+FE_DIR = "frontend"
 _BE_DIR = "backend"
 
 # How much captured stdout to keep on a suite-level failure (a crashed run has no per-test JSON).
@@ -94,7 +95,7 @@ def _plan_invocations(scope: TestScope, name_filter: str | None) -> list[_Invoca
             vitest += ["-t", name_filter]
             jest += ["-t", name_filter]
         invocations.append(
-            _Invocation(FRAMEWORK_VITEST, _FE_DIR, vitest, f"{_FE_DIR}/{_VITEST_REPORT}")
+            _Invocation(FRAMEWORK_VITEST, FE_DIR, vitest, f"{FE_DIR}/{_VITEST_REPORT}")
         )
         invocations.append(_Invocation(FRAMEWORK_JEST, _BE_DIR, jest, f"{_BE_DIR}/{_JEST_REPORT}"))
     if scope in ("e2e", "all"):
@@ -104,10 +105,10 @@ def _plan_invocations(scope: TestScope, name_filter: str | None) -> list[_Invoca
         invocations.append(
             _Invocation(
                 FRAMEWORK_PLAYWRIGHT,
-                _FE_DIR,
+                FE_DIR,
                 pw,
-                f"{_FE_DIR}/{_PLAYWRIGHT_REPORT}",
-                env={"PLAYWRIGHT_JSON_OUTPUT_NAME": _PLAYWRIGHT_REPORT},
+                f"{FE_DIR}/{PLAYWRIGHT_REPORT}",
+                env={"PLAYWRIGHT_JSON_OUTPUT_NAME": PLAYWRIGHT_REPORT},
             )
         )
     return invocations
