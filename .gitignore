@@ -113,3 +113,7 @@ infra/caddy/data/
 infra/caddy/config/
 # Claude Code personal settings
 .claude/settings.local.json
+
+# --- ForgeFlow: eval run artifacts (phase-44) ---
+# Reports are generated measurement output, not source. Phase-45 reads whatever is here.
+eval/results/*.json
