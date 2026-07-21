@@ -35,6 +35,7 @@ from app.sandbox.preview_router import router as preview_router
 from app.sandbox.router import router as sandbox_router
 from app.testing.repair_router import repair_router
 from app.testing.router import tests_router
+from app.testing.validate_router import validate_router
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(design_router)
     app.include_router(tests_router)
     app.include_router(repair_router)
+    app.include_router(validate_router)
     app.include_router(infra_router)
     app.include_router(deploy_router)
     app.include_router(credentials_router)

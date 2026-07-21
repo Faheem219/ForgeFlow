@@ -330,3 +330,50 @@ export interface DeployLogsDto {
   deployment_id: string;
   log: string;
 }
+
+// --- Live validation (phase-40) ---
+
+export type ValidationOutcome = 'validated' | 'escalated';
+
+/** Why validation stopped short of a verified deployment. */
+export type ValidationReason = 'cycle_cap' | 'env_config' | 'repair_escalated' | 'redeploy_failed';
+
+/** How a live failure was classified: a bug the repair loop can fix, or an env/config problem. */
+export type LiveDiagnosis = 'code' | 'env';
+
+/** One pass of the outer validate→repair→redeploy→re-validate loop. */
+export interface ValidationCycleDto {
+  index: number;
+  live_run_id: string | null;
+  failing: number;
+  green: boolean;
+  diagnosis: LiveDiagnosis | null;
+  repair_outcome: string | null;
+  redeploy_status: string | null;
+  note: string | null;
+}
+
+export interface ValidationReportDto {
+  outcome: ValidationOutcome;
+  /** The final live link — the whole point of M4. */
+  url: string | null;
+  cycles: ValidationCycleDto[];
+  live_run_id: string | null;
+  reason: ValidationReason | null;
+  summary: string;
+  failing_tests: TestResultDto[];
+  /** Present only when the *inner* repair loop escalated, so its UI can be reused as-is. */
+  repair_escalation: RepairEscalation | null;
+  wall_clock_s: number;
+}
+
+/** The newest run made against the deployed URL (never a sandbox run). */
+export interface LiveRunDto {
+  id: string;
+  total: number;
+  passed: number;
+  failed: number;
+  green: boolean;
+  created_at: string;
+  results: TestResultDto[];
+}

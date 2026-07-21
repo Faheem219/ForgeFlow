@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     live_warmup_interval_s: float = 6.0
     live_test_retries: int = 1  # Playwright's own retry for a flaky first hit over the network
 
+    # --- Live-failure repair loop (phase-40) ---
+    # The **outer** bound (D7 one level up): how many validate→repair→redeploy→re-validate cycles
+    # before escalating. The inner repair loop has its own cap; a broken deploy config must not be
+    # able to drive infinite redeploys.
+    validate_max_cycles: int = 2
+
     # --- MongoDB ---
     mongodb_uri: str = "mongodb://localhost:27017"
     forgeflow_meta_db: str = "forgeflow_meta"

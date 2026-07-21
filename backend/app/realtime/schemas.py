@@ -20,6 +20,7 @@ class EventType(StrEnum):
     preview_status = "preview.status"
     test_result = "test.result"
     deploy_status = "deploy.status"
+    validate_status = "validate.status"
     sandbox_status = "sandbox.status"
     design_quota = "design.quota"
     budget_halt = "budget.halt"

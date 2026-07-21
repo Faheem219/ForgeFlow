@@ -12,6 +12,7 @@ const BuildPanel = lazy(() => import('../build/BuildPanel'));
 const RequirementsPanel = lazy(() => import('../requirements/RequirementsPanel'));
 const TestingPanel = lazy(() => import('../testing/TestingPanel'));
 const DeployPanel = lazy(() => import('../deploy/DeployPanel'));
+const Validate = lazy(() => import('../deploy/Validate'));
 
 const STAGE_PANELS = {
   design: DesignPanel,
@@ -19,6 +20,7 @@ const STAGE_PANELS = {
   requirements: RequirementsPanel,
   test: TestingPanel,
   deploy: DeployPanel,
+  validate: Validate,
 } as const;
 
 const ACTION_LABELS: Record<IntentAction, string> = {

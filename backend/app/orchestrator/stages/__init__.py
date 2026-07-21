@@ -68,10 +68,12 @@ def _register_real_handlers() -> None:
     from app.orchestrator.stages.build import BuildStageHandler
     from app.orchestrator.stages.deploy import DeployStageHandler
     from app.orchestrator.stages.design import DesignStageHandler
+    from app.orchestrator.stages.validate import ValidateStageHandler
 
     register_handler(Stage.design, DesignStageHandler())
     register_handler(Stage.build, BuildStageHandler())
     register_handler(Stage.deploy, DeployStageHandler())
+    register_handler(Stage.validate, ValidateStageHandler())
 
 
 _register_real_handlers()

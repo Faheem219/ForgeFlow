@@ -64,4 +64,57 @@ The full "deployed URL delivered, and *verified*" promise (D1, M4). Reuses the b
 
 ## Status
 
-⬜ todo
+✅ done — **M4 is complete**: a deployed URL is no longer just delivered, it is *verified*. A live
+failure re-enters Build instead of being a dead end (D12), and the loop that does it is bounded at
+both levels.
+
+- `app/orchestrator/stages/validate.py` — `LiveValidationController.run(project, *, mode)`:
+
+      validate (phase-39) → diagnose → repair (phase-31) → redeploy (phase-37) → re-validate
+
+  Green on any cycle ⇒ `validated` + the final live URL. Each step emits `validate.status`, and a
+  `ValidationReport` (outcome, cycle timeline, URL, reason, failing tests, the inner escalation) is
+  persisted as a versioned artifact so the panel hydrates after a reload and eval (phase-44) can
+  read it.
+- **Bounded outer loop.** `validate_max_cycles` caps repair→redeploy→re-validate. The inner repair
+  loop already caps *its* iterations; without this second cap a repair that keeps "succeeding"
+  against a deployment that keeps failing would redeploy forever — the never-unbounded invariant
+  (D7) applied one level up. Verified exactly: N cycles, N redeploys, then escalation.
+- **Diagnosis (pure, `diagnose()`).** Live failures are classified **code** vs **env** from the
+  failure text, the deployment status and the deploy log. An env verdict (connection refused, 5xx,
+  a degraded deployment, a suite that could not run) escalates immediately with the evidence and
+  **zero repair iterations** — a code patch cannot fix a missing env var, and pretending otherwise
+  burns budget and time. The signal list is deliberately conservative: misreading a real bug as an
+  env problem would skip a repair the loop could have made.
+- **Faithful composition.** The repair loop is seeded with the *live* `TestRun`, so the agent works
+  from production failures (the phase-39 `env=sandbox` guard keeps the two straight). A repair that
+  escalates never redeploys; a redeploy that comes back degraded is not re-validated, because that
+  would only produce noise; a `ProviderError` mid-redeploy is reported, not raised.
+- `app/testing/validate_router.py` — `GET /validate/latest` (the report) and `GET /validate/live-run`
+  (per-test production results, never a sandbox run). Read-only: validation runs through the
+  conductor, so validate⇐deploy stays enforced in one place.
+- `features/deploy/Validate.tsx` — mounted lazily as the Validate stage panel: a prominent **final
+  live link** on success, the cycle timeline (failures → diagnosis → repair → redeploy), per-test
+  live results with their criteria, live `validate.status` progress, and an escalation card whose
+  reason is spelled out. When the *inner* loop escalated, phase-32's `Escalation` component is reused
+  as-is so the resume-through-Build contract stays in one place.
+- Config: `validate_max_cycles`; new `EventType.validate_status`.
+
+**Acceptance:** an induced live failure triggers repair → redeploy → re-validate and the UI delivers
+the final live link; the outer loop is bounded and escalates on cap with a clear summary; env/config
+failures are distinguished from code failures and handled differently. Covered by
+`test_validate_success.py` (5), `test_validate_repair_cycle.py` (6), `test_validate_outer_bound.py`
+(9, incl. the pure diagnosis cases), `test_validate_router.py` (6) and `Validate.test.tsx` (9).
+
+**Verification:** ruff/black/mypy clean across the phase-40 surface; backend **634 passed** (+26)
+with the 8 known pre-existing env-only failures unchanged; frontend lint/typecheck/format clean with
+**150 passed** (+9) and the panel code-split into its own chunk. Live-verified **9/9** against real
+MongoDB: green→verified; failure→`validating → diagnosed → repairing → redeploying → validating →
+validated` in 2 cycles; repair seeded with the live run; env→escalated with 0 repair iterations;
+never-green→bounded at the cap; **through the real conductor** validate/proceed → `complete` with the
+link surfaced, and validate-before-deploy still refused; both read endpoints serving the panel.
+
+**Deferred (as scoped):** no new repair or deploy mechanics were written — both are reused. The eval
+harness is Epic 10. A genuinely induced *live* failure against real Vercel/Render resources remains
+deferred (billable); the cycle is proven end-to-end against real MongoDB with the three heavy
+subsystems injected.
