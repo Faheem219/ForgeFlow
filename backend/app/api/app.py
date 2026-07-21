@@ -25,6 +25,7 @@ from app.deploy.credentials_router import credentials_router
 from app.deploy.deploy_router import deploy_router
 from app.deploy.router import infra_router
 from app.design.router import router as design_router
+from app.eval.router import eval_router
 from app.orchestrator.router import intents_router, requirements_router
 from app.orchestrator.router import router as artifacts_router
 from app.projects.router import router as projects_router
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(deploy_router)
     app.include_router(credentials_router)
     app.include_router(data_router)
+    app.include_router(eval_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

@@ -402,3 +402,85 @@ export interface DocumentPageDto {
   limit: number;
   pages: number;
 }
+
+// --- Evaluation harness (phase-44 records / phase-45 dashboard) ---
+
+export type EvalOutcome = 'delivered' | 'escalated' | 'failed';
+
+/** Passing criteria out of the total. `rate` is null when nothing ran — never a fabricated 0. */
+export interface EvalPassRate {
+  total: number;
+  passed: number;
+  failed: number;
+  rate: number | null;
+}
+
+/** One spec's run, as phase-44's runner recorded it. */
+export interface EvalRecordDto {
+  spec_id: string;
+  title: string;
+  difficulty: string;
+  outcome: EvalOutcome;
+  first_pass: EvalPassRate;
+  post_repair: EvalPassRate;
+  repair_delta: number | null;
+  repaired?: boolean;
+  repair_iterations: number;
+  repair_outcome: string | null;
+  regressions: number;
+  tokens: number;
+  inr_cost: number;
+  screenshot_to_url_seconds: number | null;
+  wall_clock_seconds: number;
+  live_url: string | null;
+  error: string | null;
+}
+
+/** A numeric summary; every field is null when nothing was measured. */
+export interface EvalDistribution {
+  count: number;
+  mean: number | null;
+  median: number | null;
+  min: number | null;
+  max: number | null;
+  values: number[];
+}
+
+export interface EvalSummary {
+  specs: number;
+  scored: number;
+  outcomes: Record<EvalOutcome, number>;
+  first_pass: EvalDistribution;
+  post_repair: EvalDistribution;
+  repair_delta: EvalDistribution;
+  repair_iterations: EvalDistribution;
+  tokens: EvalDistribution;
+  inr_cost: EvalDistribution;
+  screenshot_to_url_seconds: EvalDistribution;
+  wall_clock_seconds: EvalDistribution;
+  specs_improved_by_repair: number;
+  specs_unchanged_by_repair: number;
+  green_first_pass: number;
+  green_post_repair: number;
+  total_regressions: number;
+  by_difficulty: Record<
+    string,
+    { specs: number; first_pass_mean: number | null; post_repair_mean: number | null }
+  >;
+}
+
+/** `available: false` before the harness has ever run. */
+export interface EvalSummaryDto {
+  available: boolean;
+  summary?: EvalSummary;
+  records?: EvalRecordDto[];
+  source?: string | null;
+}
+
+export interface EvalRunDto {
+  source: string;
+  started_at: string | null;
+  finished_at: string | null;
+  legs: string[];
+  specs: number;
+}

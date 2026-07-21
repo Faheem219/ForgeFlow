@@ -18,6 +18,7 @@ const rtDot: Record<string, string> = {
 
 const nav = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/eval', label: 'Evaluation', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 
