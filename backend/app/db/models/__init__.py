@@ -5,6 +5,7 @@ from __future__ import annotations
 from beanie import Document
 
 from app.db.models.artifact import Artifact
+from app.db.models.config_audit import ConfigAudit
 from app.db.models.credential import Credential
 from app.db.models.deployment import Deployment
 from app.db.models.design_quota import DesignQuota
@@ -23,6 +24,7 @@ from app.db.models.user import User
 ALL_DOCUMENT_MODELS: list[type[Document]] = [
     User,
     Credential,
+    ConfigAudit,
     Project,
     StageState,
     Message,
@@ -40,6 +42,7 @@ ALL_DOCUMENT_MODELS: list[type[Document]] = [
 __all__ = [
     "ALL_DOCUMENT_MODELS",
     "Artifact",
+    "ConfigAudit",
     "Cost",
     "Credential",
     "Deployment",

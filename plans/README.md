@@ -64,7 +64,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [48](./phase-48-resilience-error-handling.md) | Resilience & error handling | 11 · Hardening & Demo | 08, 20, 35 | ✅ |
 | [49](./phase-49-pwa-finalize.md) | PWA finalize | 11 · Hardening & Demo | 04 | ✅ |
 | [50](./phase-50-demo-scenario-seed.md) | Demo scenario & seed | 11 · Hardening & Demo | all prior | ✅ |
-| [51](./phase-51-layered-config-service.md) | Layered configuration service & platform settings store | 12 · Admin & Config ✚ | 01, 02, 03 | ⬜ |
+| [51](./phase-51-layered-config-service.md) | Layered configuration service & platform settings store | 12 · Admin & Config ✚ | 01, 02, 03 | ✅ |
 | [52](./phase-52-admin-dashboard-ui.md) | Admin dashboard UI | 12 · Admin & Config ✚ | 03, 04, 51 | ⬜ |
 
 ✚ *Epic 12 (phases 51–52) was added per the user's directive — see "Additions beyond the roadmap" below.*

@@ -15,8 +15,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin.config_router import config_router
 from app.auth.router import router as auth_router
 from app.core.config import get_config
+from app.core.config_db import install_db_provider
 from app.core.cost_router import cost_router
 from app.core.errors import register_exception_handlers
 from app.core.limits import BodySizeLimitMiddleware
@@ -53,6 +55,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await init_db()
     except Exception:
         logger.warning("init_db failed at startup; continuing degraded", exc_info=True)
+
+    # Prepend the admin (DB) config layer so PlatformSetting overrides win over env/default
+    # (phase-51). Fail-soft: if the DB is unavailable, config still resolves from env/default.
+    try:
+        await install_db_provider()
+    except Exception:
+        logger.warning(
+            "config: DB layer not installed at startup; using env/default", exc_info=True
+        )
 
     manager = get_manager()
     # Adopt any surviving sandbox containers / clear stale mappings. Best-effort: a control
@@ -120,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(data_router)
     app.include_router(eval_router)
     app.include_router(cost_router)
+    app.include_router(config_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

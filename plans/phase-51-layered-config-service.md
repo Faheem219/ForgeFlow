@@ -74,4 +74,16 @@ Implements the **user directive**: *all settings (model name, provider, base URL
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Implementation notes**
+
+- **DB layer** — [config_db.py](../backend/app/core/config_db.py): `DbSettingProvider` is prepended to the resolver chain (`admin(DB) > env > default`). The crux: `ConfigResolver.get` is **synchronous** but reading a `PlatformSetting` is **async**, so the provider keeps a **sync-readable cache** that async code refreshes — `load()` at startup + after every admin write (→ visible immediately, no restart), `ensure_fresh(ttl)` on admin reads for out-of-band edits. **Fail-soft:** `load()` never raises; a DB outage leaves the last-known cache (empty at worst) so config still resolves from env/default. Wired into the app lifespan; `add_provider` made idempotent so it re-attaches cleanly after `reset_config()`.
+- **Registry** — [config_registry.py](../backend/app/core/config_registry.py): the **allowlist** of 18 admin-editable keys across all 7 categories (`models`/`providers`/`deploy`/`sandbox`/`budget`/`repair`/`feature_flags` — added `repair` to the enum), each with `{type, description, sensitive, restart_required, choices, min/max, nullable}` and per-write coercion+validation. **Sensitive keys** (`anthropic_api_key`) are listed but read-only — a write is refused, pointing at the vault (§7). Type/range/enum/nullable/JSON validation returns `UserError` with detail.
+- **Admin API** — [config_router.py](../backend/app/api/admin/config_router.py) (`require_admin`): `GET /admin/config` (catalog + effective value + **source** per key, sensitive masked), `GET /admin/config/effective`, `GET/PUT/DELETE /admin/config/{key}`. Writes go through [config_admin.py](../backend/app/core/config_admin.py): validate → upsert `PlatformSetting` → refresh the sync cache → **audit**. `DELETE` reverts to env/default.
+- **Audit** — new `ConfigAudit` model (key, action, before, after, updated_by, ts); every update/delete is recorded, and a *rejected* write records nothing.
+- **Consumers** verified: a `PUT model_routing` is reflected by `agents.models.route()` live; the same mechanism covers design provider, budgets, sandbox limits and repair thresholds (all read through the resolver). All 18 registry keys already have `.env.example` fallbacks.
+
+**Tests** — `tests/config/` (36): `test_precedence` (db > env > default, delete reverts, typed values), `test_reload_no_restart` (write live via the router, survives a fresh load), `test_admin_authz` (401/403 across every route + a static require_admin guard), `test_validation` (range/enum/bool/json/nullable/sensitive + API 400 with detail), `test_db_unavailable_fallback` (load never raises, keeps last-known cache, safe before Mongo is up), `test_audit` (before/after/actor; rejected write leaves no audit). The phase-47 authz matrix auto-discovered the new admin routes and confirms they're gated.
+
+**Verification:** backend 868 passed, ruff/black/mypy clean. The 7 remaining failures are the pre-existing Docker-dependent repair tests (identical at HEAD). No frontend — the admin dashboard is `phase-52`.

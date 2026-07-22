@@ -104,4 +104,5 @@ class SettingCategory(StrEnum):
     deploy = "deploy"
     sandbox = "sandbox"
     budget = "budget"
+    repair = "repair"  # repair-loop thresholds (phase-51 admin config)
     feature_flags = "feature_flags"

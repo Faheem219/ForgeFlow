@@ -11,6 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.auth.ratelimit import reset_rate_limits
 from app.core.config import get_config, reset_config
+from app.core.config_db import reset_db_provider
 from app.db.models import ALL_DOCUMENT_MODELS
 from app.design.registry import reset_registry
 from app.realtime.hub import reset_hub
@@ -24,6 +25,7 @@ from app.sandbox.workspace import reset_runtime_provider
 def _reset_state() -> Iterator[None]:
     """Fresh config + rate limits + hub + sandbox manager/runtime/exec/preview + design registry."""
     reset_config()
+    reset_db_provider()
     reset_rate_limits()
     reset_hub()
     reset_manager()
@@ -33,6 +35,7 @@ def _reset_state() -> Iterator[None]:
     reset_registry()
     yield
     reset_config()
+    reset_db_provider()
     reset_rate_limits()
     reset_hub()
     reset_manager()

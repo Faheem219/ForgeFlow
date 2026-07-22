@@ -267,8 +267,12 @@ class ConfigResolver:
         return self._settings
 
     def add_provider(self, provider: SettingProvider) -> None:
-        """Register a higher-priority override source. Used by phase-51 (DB/admin layer)."""
-        self._providers.insert(0, provider)
+        """Register a higher-priority override source (idempotent). Used by phase-51 (DB layer)."""
+        if provider not in self._providers:
+            self._providers.insert(0, provider)
+
+    def has_provider(self, provider: SettingProvider) -> bool:
+        return provider in self._providers
 
     def reload(self) -> None:
         """Rebuild the env/default snapshot (called after admin writes, phase-51)."""
