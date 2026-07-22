@@ -2,8 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge, Button, EmptyState, Input, Spinner } from '../../components/ui';
-import { ApiError } from '../../lib/apiClient';
-import { toast } from '../../lib/stores/toastStore';
+import { toastError } from '../../lib/errors';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
@@ -89,13 +88,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['design-provider', projectId] });
     },
-    onError: (err) => {
-      const description =
-        err instanceof ApiError
-          ? [err.message, err.fallbackHint].filter(Boolean).join(' — ')
-          : 'Design action failed';
-      toast({ title: 'Design action failed', description, variant: 'error' });
-    },
+    onError: (err) => toastError(err, 'Design action failed'),
   });
 
   const uploadAndGenerate = useMutation({
@@ -119,10 +112,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['design-provider', projectId] });
     },
-    onError: (err) => {
-      const description = err instanceof ApiError ? err.message : 'Upload failed';
-      toast({ title: 'Upload failed', description, variant: 'error' });
-    },
+    onError: (err) => toastError(err, 'Upload failed'),
   });
 
   const busy = intent.isPending || uploadAndGenerate.isPending;

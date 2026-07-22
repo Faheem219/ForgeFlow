@@ -202,6 +202,12 @@ async def test_refine_after_completion_marks_downstream_stale(design_env: None) 
 async def test_provider_error_propagates_with_a_fallback_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """At the dead end — no fallback candidates left — the error still carries its actionable hint.
+
+    Phase-48 adds automatic provider fallback, so a failure now propagates only once *every*
+    candidate is exhausted. Here the fallback chain is disabled, making the failing provider the
+    sole candidate, which restores the single-provider "surface the hint" contract this guards.
+    """
     from app.core.config import reset_config
 
     class FailingProvider:
@@ -229,6 +235,7 @@ async def test_provider_error_propagates_with_a_fallback_hint(
 
     register_provider(FailingProvider())
     monkeypatch.setenv("DESIGN_PROVIDER", "failing")
+    monkeypatch.setenv("DESIGN_FALLBACK_CHAIN", "")  # no substitutes → the failure must surface
     reset_config()
 
     user = PydanticObjectId()

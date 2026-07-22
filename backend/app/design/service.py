@@ -21,6 +21,7 @@ from app.db.models import Artifact, Project
 from app.db.models.enums import ArtifactType, Stage
 from app.design.base import DesignImage, DesignResult
 from app.design.registry import get_active
+from app.design.resilient import DesignCapability, invoke_with_fallback
 from app.orchestrator.artifacts import ArtifactService
 
 # meta keys (kept as constants — phase-19/23 read these back)
@@ -102,16 +103,20 @@ class DesignService:
         prompt = prompt.strip()
         if not prompt:
             raise UserError("A prompt is required")
-        result = await get_active(project).generate_from_text(prompt)
-        return await self.save_result(_project_id(project), result, source="text")
+        outcome = await invoke_with_fallback(
+            project, DesignCapability.from_text, lambda p: p.generate_from_text(prompt)
+        )
+        return await self.save_result(_project_id(project), outcome.result, source="text")
 
     async def generate_from_images(
         self, project: Project, images: list[DesignImage], prompt: str | None = None
     ) -> Artifact:
         if not images:
             raise UserError("At least one image is required")
-        result = await get_active(project).generate_from_image(images, prompt)
-        return await self.save_result(_project_id(project), result, source="image")
+        outcome = await invoke_with_fallback(
+            project, DesignCapability.from_image, lambda p: p.generate_from_image(images, prompt)
+        )
+        return await self.save_result(_project_id(project), outcome.result, source="image")
 
     async def refine(self, project: Project, instruction: str) -> Artifact:
         """Refine the latest design into a **new version** that references the prior one."""

@@ -28,6 +28,7 @@ from app.db.blobs import get_blob_store
 from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.design.base import DesignImage, DesignResult
 from app.design.registry import get_active
+from app.design.resilient import DesignCapability, invoke_with_fallback
 from app.design.schemas import DesignImageRef, DesignIntake
 from app.design.service import META_EXTERNAL_REF, DesignService, design_artifact_fields
 from app.orchestrator.schemas import (
@@ -93,13 +94,29 @@ class DesignStageHandler:
             summary = "Imported your design."
         elif intake.image_refs:
             images = await self._load_images(intake.image_refs)
-            result = await get_active(project).generate_from_image(images, intake.text)
+            outcome = await invoke_with_fallback(
+                project,
+                DesignCapability.from_image,
+                lambda p: p.generate_from_image(images, intake.text),
+            )
+            result = outcome.result
             text, meta = design_artifact_fields(result, source="image")
-            summary = f"Generated a design from {len(images)} screenshot(s) via {result.provider}."
+            summary = _summary(
+                f"Generated a design from {len(images)} screenshot(s) via {result.provider}.",
+                outcome.note(),
+            )
         elif intake.text and intake.text.strip():
-            result = await get_active(project).generate_from_text(intake.text.strip())
+            prompt = intake.text.strip()
+            outcome = await invoke_with_fallback(
+                project,
+                DesignCapability.from_text,
+                lambda p: p.generate_from_text(prompt),
+            )
+            result = outcome.result
             text, meta = design_artifact_fields(result, source="text")
-            summary = f"Generated a design from your prompt via {result.provider}."
+            summary = _summary(
+                f"Generated a design from your prompt via {result.provider}.", outcome.note()
+            )
         else:
             # No new intake → refine the latest design via the provider, using the chat instruction.
             instruction = (intent.message or "").strip()
@@ -144,6 +161,11 @@ class DesignStageHandler:
             data = await blobs.get(ref.ref)
             images.append(DesignImage(filename=ref.filename, media_type=ref.media_type, data=data))
         return images
+
+
+def _summary(base: str, note: str | None) -> str:
+    """Fold an optional fallback note into the assistant's summary line."""
+    return f"{base} (Note: {note})" if note else base
 
 
 def _project_id(ctx: StageContext) -> PydanticObjectId:

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { Toaster } from '../components/ui';
 
 const queryClient = new QueryClient({
@@ -12,7 +13,8 @@ const queryClient = new QueryClient({
 export function Providers({ children }: { children: ReactNode }): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      {/* App-wide safety net: a render crash shows a recoverable screen, not a white page. */}
+      <ErrorBoundary>{children}</ErrorBoundary>
       <Toaster />
     </QueryClientProvider>
   );

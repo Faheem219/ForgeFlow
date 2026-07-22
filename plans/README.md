@@ -61,7 +61,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [45](./phase-45-results-dashboard-report.md) | Results dashboard/report | 10 · Eval | 44 | ✅ |
 | [46](./phase-46-observability-cost-tracking.md) | Observability & cost tracking | 11 · Hardening & Demo | 20 | ✅ |
 | [47](./phase-47-security-sandbox-hardening.md) | Security & sandbox hardening pass | 11 · Hardening & Demo | 11, 34 | ✅ |
-| [48](./phase-48-resilience-error-handling.md) | Resilience & error handling | 11 · Hardening & Demo | 08, 20, 35 | ⬜ |
+| [48](./phase-48-resilience-error-handling.md) | Resilience & error handling | 11 · Hardening & Demo | 08, 20, 35 | ✅ |
 | [49](./phase-49-pwa-finalize.md) | PWA finalize | 11 · Hardening & Demo | 04 | ⬜ |
 | [50](./phase-50-demo-scenario-seed.md) | Demo scenario & seed | 11 · Hardening & Demo | all prior | ⬜ |
 | [51](./phase-51-layered-config-service.md) | Layered configuration service & platform settings store | 12 · Admin & Config ✚ | 01, 02, 03 | ⬜ |

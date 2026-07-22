@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
@@ -177,7 +178,10 @@ export default function Workspace(): JSX.Element {
               <DataBrowser projectId={projectId} />
             </Suspense>
           ) : (
-            <StagePanel projectId={projectId} stage={activeStage} />
+            // A crash in one stage panel stays contained + clears when you switch stages.
+            <ErrorBoundary resetKey={activeStage}>
+              <StagePanel projectId={projectId} stage={activeStage} />
+            </ErrorBoundary>
           )}
         </div>
 

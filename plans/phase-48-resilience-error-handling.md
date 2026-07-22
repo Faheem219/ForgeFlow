@@ -67,4 +67,20 @@ Implements §7 error taxonomy + resilience and risk §12 (Stitch quota, cost, no
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Audit — what earlier phases already made resilient**
+
+Timeouts + cancellation exist per op (exec `asyncio.timeout` + kill, agent-client retries, deploy/design HTTP timeouts, bounded repair loop); container-crash recovery is inherent in `SandboxManager.ensure` (workspace on a named volume that outlives the container); provider errors are already classified `ProviderError` + `fallback_hint`; resumability is the realtime hub's seq + replay ring. This phase verifies those together and closes the one real gap.
+
+**Gap closed — automatic design-provider fallback** (the headline). Previously `get_active(project)` picked one provider and a Stitch quota error dead-ended with a hint the user had to act on manually. New [resilient.py](../backend/app/design/resilient.py): a **generate** call tries the active provider, then a configured chain (`figma → fake`), capability-filtered (Figma can't do screenshots) and deduped, and reports which provider actually served so the stage tells the user ("stitch quota is exhausted — generated via figma instead"). Boundaries: `refine` stays single-provider (its `external_ref` is provider-specific); a `fatal` (bad-input) error never falls back. Wired into the design **stage handler** (conductor path) and `DesignService`; config `design_fallback_chain` (default `figma,fake`, `""` disables).
+
+**User-facing error UX** (frontend):
+- [errors.ts](../frontend/src/lib/errors.ts) — the taxonomy → actionable-message mapper (`toActionableError`): title / description / hint / retryable per envelope `type`, with a provider's `fallback_hint` winning over the default, network `TypeError`s recognised, and a `toastError()` one-liner panels use in `onError` for consistent toasts. Wired into `DesignPanel` as the reference integration.
+- [ErrorBoundary.tsx](../frontend/src/components/ErrorBoundary.tsx) — a global React boundary (branded, recoverable "Try again"/"Reload", `resetKey` clears a crash on navigation) mounted in `providers.tsx`, plus a per-stage boundary in `Workspace` so one panel's crash stays contained.
+
+**Fault-injection harness** (`tests/resilience/conftest.py`, test-only per the design note): scripted design providers that fail on a chosen error kind, and an in-memory hanging exec runtime (no pty/killpg → cross-platform).
+
+**Tests** — backend `tests/resilience/` 29 (provider fallback incl. end-to-end via the conductor; container recovery from volume; timeout + cancel + concurrency cap; reconnect-resume from seq); frontend `errors.test.ts` (11) + `ErrorBoundary.test.tsx` (6). One phase-19 test updated: `test_provider_error_propagates_with_a_fallback_hint` now disables the chain so it still guards the dead-end contract (a failure surfaces its hint) under the new fallback model.
+
+**Verification:** backend 821 passed, ruff/black/mypy clean; frontend 236 passed (my 17 new all green), tsc/eslint/prettier clean, `vite build` succeeds. Remaining reds are pre-existing and unrelated: 7 Docker-daemon repair tests (identical at HEAD), 26 Windows-only sandbox tests, and one phase-45 chart test that assumes US number grouping (fails only under this machine's `en-IN` locale). Deferred (need a real daemon/browser): the live Stitch-429 / container-kill / reconnect manual walkthroughs.

@@ -192,6 +192,10 @@ class Settings(BaseSettings):
     figma_timeout_s: float = 60.0  # per-call wall clock
     figma_max_retries: int = 2  # extra attempts on transient errors
     design_provider: str = "stitch"
+    # Automatic fallback order when the active provider fails recoverably — quota/auth/transient
+    # (phase-48, D10). Tried after the active provider, deduped, capability-filtered. "fake" last
+    # so a design can always be produced rather than dead-ending. Empty disables auto-fallback.
+    design_fallback_chain: str = "figma,fake"
     # Design intake (phase-19): screenshot upload caps.
     design_max_images: int = 8
     design_max_image_bytes: int = 5_242_880  # 5 MiB per screenshot
