@@ -2,10 +2,22 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
+import {
+  PRECACHE_GLOBS,
+  PRECACHE_IGNORES,
+  buildRuntimeCaching,
+  navigateFallbackDenylist,
+} from './src/pwa/caching';
 import { pwaManifest } from './src/pwa/manifest';
+
+const appVersion = process.env.npm_package_version ?? '0.0.0';
 
 // https://vitejs.dev/config/ — Vitest config lives under `test`.
 export default defineConfig({
+  define: {
+    // Surfaced in the UI so a user can tell which build they're running (phase-49 update flow).
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -14,15 +26,16 @@ export default defineConfig({
       manifest: pwaManifest,
       includeAssets: ['favicon.svg', 'apple-touch-icon-180.png'],
       workbox: {
-        // App-shell offline fallback; conservative caching (phase-49 hardens this).
+        // The app shell is served offline; live data is not (see src/pwa/caching.ts).
         navigateFallback: 'index.html',
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        // Keep Monaco out of the precache. Its language workers are large (ts.worker alone is
-        // ~6 MB — it's the TypeScript compiler), and the IDE can't work offline regardless: it
-        // reads and writes the sandbox over the API. Precaching it would make the service-worker
-        // install cost megabytes for no offline benefit, so these chunks load on demand instead.
-        // The app shell stays precached, which is where the offline value actually is.
-        globIgnores: ['**/*.worker-*.js', '**/Ide-*.js'],
+        navigateFallbackDenylist,
+        globPatterns: PRECACHE_GLOBS,
+        globIgnores: PRECACHE_IGNORES,
+        // Network-first/only for the API origin — a builder must never show stale project state.
+        runtimeCaching: buildRuntimeCaching(process.env.VITE_API_BASE_URL),
+        // A new SW takes over only when the user accepts the update prompt (registerType: prompt).
+        clientsClaim: false,
+        skipWaiting: false,
       },
     }),
   ],

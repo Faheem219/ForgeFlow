@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
+    "check:pwa": "node scripts/check-pwa.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

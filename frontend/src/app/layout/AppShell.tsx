@@ -66,6 +66,14 @@ export function AppShell(): JSX.Element {
             </NavLink>
           ))}
         </nav>
+        {/* Build version — lets a user confirm an update actually took effect (phase-49). */}
+        <div
+          className="px-4 py-2 text-xs text-slate-600"
+          title={`ForgeFlow v${__APP_VERSION__}`}
+          data-testid="app-version"
+        >
+          {collapsed ? `v` : `v${__APP_VERSION__}`}
+        </div>
       </aside>
 
       <div className="flex flex-1 flex-col">

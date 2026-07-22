@@ -144,6 +144,9 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: PWA installability + caching check
+        run: pnpm run check:pwa
+
   skeleton:
     name: App skeleton (install + build + tests)
     runs-on: ubuntu-latest
