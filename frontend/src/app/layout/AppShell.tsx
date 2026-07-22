@@ -16,10 +16,18 @@ const rtDot: Record<string, string> = {
   closed: 'bg-slate-600',
 };
 
-const nav = [
+interface NavItem {
+  to: string;
+  label: string;
+  end: boolean;
+  adminOnly?: boolean;
+}
+
+const nav: NavItem[] = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/eval', label: 'Evaluation', end: false },
   { to: '/settings', label: 'Settings', end: false },
+  { to: '/admin', label: 'Admin', end: false, adminOnly: true },
 ];
 
 export function AppShell(): JSX.Element {
@@ -50,7 +58,9 @@ export function AppShell(): JSX.Element {
           {!collapsed ? <span className="font-semibold text-slate-100">ForgeFlow</span> : null}
         </div>
         <nav className="flex-1 space-y-1 px-2 py-2">
-          {nav.map((item) => (
+          {nav
+            .filter((item) => !item.adminOnly || user?.role === 'admin')
+            .map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

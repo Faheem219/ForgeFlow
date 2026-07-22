@@ -21,6 +21,9 @@ from app.db.repos import PlatformSettingRepo
 
 MASK = "••••••"
 
+# Cap on the audit read (the dashboard shows recent history, not the full log).
+_AUDIT_LIMIT = 200
+
 
 class SettingView(BaseModel):
     """What the dashboard shows for one key — never a raw secret."""
@@ -37,10 +40,29 @@ class SettingView(BaseModel):
     source: str  # db | env | default
 
 
+class ConfigAuditView(BaseModel):
+    """One audited config change for the admin audit view (phase-52). Secrets stay masked."""
+
+    key: str
+    action: str  # update | delete
+    before: Any = None
+    after: Any = None
+    updated_by: str | None = None
+    created_at: str
+
+
 def _mask(entry: ConfigKey, value: Any) -> Any:
     if not entry.sensitive:
         return value
     return MASK if value not in (None, "") else ""
+
+
+def _mask_audit(key: str, value: Any) -> Any:
+    """Never surface a value for a sensitive key in the audit view, even historically."""
+    entry = REGISTRY.get(key)
+    if entry is not None and entry.sensitive and value not in (None, ""):
+        return MASK
+    return value
 
 
 def _view(entry: ConfigKey) -> SettingView:
@@ -100,6 +122,22 @@ class ConfigAdminService:
         await _audit(key, "update", before, value, admin_id)
         return _view(entry)
 
+    async def list_audit(self, limit: int = _AUDIT_LIMIT) -> list[ConfigAuditView]:
+        """Recent config changes, newest first. Sensitive keys are masked defensively (a secret can
+        never actually be written, but the view never risks leaking one either)."""
+        docs = await ConfigAudit.find().sort("-created_at").limit(limit).to_list()
+        return [
+            ConfigAuditView(
+                key=doc.key,
+                action=doc.action,
+                before=_mask_audit(doc.key, doc.before),
+                after=_mask_audit(doc.key, doc.after),
+                updated_by=str(doc.updated_by) if doc.updated_by is not None else None,
+                created_at=doc.created_at.isoformat(),
+            )
+            for doc in docs
+        ]
+
     async def delete(self, key: str, admin_id: PydanticObjectId | None) -> SettingView:
         """Remove the override → the key reverts to env/default."""
         entry = get_registered(key)
@@ -120,4 +158,4 @@ async def _audit(
     ).insert()
 
 
-__all__ = ["ConfigAdminService", "SettingView"]
+__all__ = ["ConfigAdminService", "ConfigAuditView", "SettingView"]

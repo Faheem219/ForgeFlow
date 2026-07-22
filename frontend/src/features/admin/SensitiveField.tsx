@@ -1,0 +1,108 @@
+import { useState } from 'react';
+
+import { Badge } from '../../components/ui';
+
+/**
+ * A masked, write-only field for a secret (§7 secret handling).
+ *
+ * The current value is NEVER rendered — the backend only ever returns a mask (`••••••`) or an empty
+ * string, and this component treats even that as opaque: it shows "set" / "not set", never the
+ * characters. Editing is a fresh password input; the typed value only leaves the component via
+ * `onSubmit`, and is not persisted in the DOM after.
+ *
+ * In the config dashboard, sensitive keys are refused by the phase-51 API on purpose (secrets live
+ * in the encrypted vault, not `PlatformSetting`), so `readOnly` renders the masked state with a
+ * vault note and no editor. The component is still a genuine write-only input for any surface that
+ * does route to the vault.
+ */
+export function SensitiveField({
+  isSet,
+  readOnly = false,
+  note,
+  onSubmit,
+}: {
+  /** Whether a secret is currently stored (derived from the mask, never the value itself). */
+  isSet: boolean;
+  readOnly?: boolean;
+  note?: string;
+  onSubmit?: (secret: string) => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const status = (
+    <span className="flex items-center gap-2">
+      <span data-testid="sensitive-status" className="font-mono text-sm text-slate-400">
+        {isSet ? '••••••' : 'not set'}
+      </span>
+      <Badge tone={isSet ? 'success' : 'neutral'}>{isSet ? 'stored' : 'unset'}</Badge>
+    </span>
+  );
+
+  if (readOnly) {
+    return (
+      <div className="space-y-1" data-testid="sensitive-field">
+        {status}
+        {note ? <p className="text-xs text-slate-500">{note}</p> : null}
+      </div>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2" data-testid="sensitive-field">
+        {status}
+        <button
+          type="button"
+          data-testid="sensitive-edit"
+          onClick={() => setEditing(true)}
+          className="rounded px-2 py-1 text-xs text-brand-300 hover:bg-slate-800"
+        >
+          {isSet ? 'Replace' : 'Set'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="flex items-center gap-2"
+      data-testid="sensitive-field"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (draft) onSubmit?.(draft);
+        setDraft('');
+        setEditing(false);
+      }}
+    >
+      <input
+        type="password"
+        autoComplete="new-password"
+        aria-label="New secret value"
+        data-testid="sensitive-input"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="enter new value"
+        className="w-48 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+      />
+      <button
+        type="submit"
+        data-testid="sensitive-save"
+        disabled={!draft}
+        className="rounded bg-brand-600 px-2 py-1 text-xs text-white disabled:opacity-50"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setDraft('');
+          setEditing(false);
+        }}
+        className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
+      >
+        Cancel
+      </button>
+    </form>
+  );
+}

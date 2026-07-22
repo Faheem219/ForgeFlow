@@ -66,3 +66,18 @@ async def test_a_rejected_write_leaves_no_audit(db_provider: DbSettingProvider) 
         await ConfigAdminService().set("repair_max_iterations", 999, admin_id=None)
 
     assert await _audits("repair_max_iterations") == []
+
+
+async def test_list_audit_returns_changes_newest_first(db_provider: DbSettingProvider) -> None:
+    """The phase-52 audit view reads the history newest-first, with the actor id as a string."""
+    admin_id = PydanticObjectId()
+    service = ConfigAdminService()
+    await service.set("repair_max_iterations", 8, admin_id=admin_id)
+    await service.set("repair_stall_threshold", 3, admin_id=None)
+
+    entries = await service.list_audit()
+
+    assert [e.key for e in entries[:2]] == ["repair_stall_threshold", "repair_max_iterations"]
+    assert entries[1].updated_by == str(admin_id)
+    assert (entries[1].before, entries[1].after) == (5, 8)
+    assert entries[0].updated_by is None  # a system write has no actor

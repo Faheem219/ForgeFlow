@@ -65,7 +65,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [49](./phase-49-pwa-finalize.md) | PWA finalize | 11 · Hardening & Demo | 04 | ✅ |
 | [50](./phase-50-demo-scenario-seed.md) | Demo scenario & seed | 11 · Hardening & Demo | all prior | ✅ |
 | [51](./phase-51-layered-config-service.md) | Layered configuration service & platform settings store | 12 · Admin & Config ✚ | 01, 02, 03 | ✅ |
-| [52](./phase-52-admin-dashboard-ui.md) | Admin dashboard UI | 12 · Admin & Config ✚ | 03, 04, 51 | ⬜ |
+| [52](./phase-52-admin-dashboard-ui.md) | Admin dashboard UI | 12 · Admin & Config ✚ | 03, 04, 51 | ✅ |
 
 ✚ *Epic 12 (phases 51–52) was added per the user's directive — see "Additions beyond the roadmap" below.*
 
@@ -77,7 +77,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | **M2** ✅ | Epics 3–4 | 16–24 | Screenshots/text → design → generated **running app** with live code + change requests. |
 | **M3** ✅ | Epics 5–6 | 25–32 | Requirements → tests → **bounded self-healing repair loop** (the contribution) working. |
 | **M4** ✅ | Epics 7–8 | 33–40 | Dual-mode deploy + visual topology + live validation → **deployed URL delivered & verified**. |
-| **M5** | Epics 9–11 (+12) | 41–52 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, and admin configurability. |
+| **M5** ✅ | Epics 9–11 (+12) | 41–52 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, and admin configurability. |
 
 ## Additions beyond the roadmap (user directive)
 

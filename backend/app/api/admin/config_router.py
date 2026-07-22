@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.auth.deps import require_admin
-from app.core.config_admin import ConfigAdminService, SettingView
+from app.core.config_admin import ConfigAdminService, ConfigAuditView, SettingView
 from app.db.models import User
 
 config_router = APIRouter(prefix="/admin/config", tags=["admin-config"])
@@ -43,6 +43,13 @@ async def list_config(_admin: User = Depends(require_admin)) -> list[SettingView
 @config_router.get("/effective", response_model=dict[str, Any])
 async def effective_config(_admin: User = Depends(require_admin)) -> dict[str, Any]:
     return await ConfigAdminService().effective()
+
+
+# Declared before ``/{key}`` so "audit" is a literal route, not captured as a config key.
+@config_router.get("/audit", response_model=list[ConfigAuditView])
+async def config_audit(_admin: User = Depends(require_admin)) -> list[ConfigAuditView]:
+    """Recent config changes (who/what/when, before→after) for the admin audit view."""
+    return await ConfigAdminService().list_audit()
 
 
 @config_router.get("/{key}", response_model=SettingView)

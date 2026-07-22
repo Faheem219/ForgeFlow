@@ -71,4 +71,46 @@ The user-facing half of the **user directive**: *settings must be configurable v
 
 ## Status
 
-⬜ todo
+✅ done — **completes M5 and the full 52-phase roadmap.**
+
+### Completion notes
+
+- **Admin area** `src/features/admin/` behind `/admin/:section?`, wrapped in `RequireAdmin`
+  (phase-03); an **Admin** nav link in `AppShell` shows only for `role === 'admin'`. Sidebar
+  sections: Models, Providers, Deploy, Sandbox, Budget & Pricing, Repair Loop, Feature Flags,
+  Observability, Audit.
+- **`SettingsForm`** renders the phase-51 catalog (`GET /admin/config`) grouped by category. Each
+  row shows the key, description, **effective value + `SourceBadge` (`admin`/`env`/`default`)**, a
+  `restart required` badge, a type-aware editor (text/number/toggle/enum/json), the code default,
+  **Save → `PUT`** and **Reset → `DELETE`** (reset enabled only for a `db` override), with
+  validation errors surfaced **inline** from the API envelope. Model id / provider / base URL are
+  ordinary registry keys, so the Models + Providers sections *are* the model/provider quick-config
+  (AC1).
+- **`SensitiveField`** — masked, write-only: the current value is **never rendered** (the API only
+  ever returns `••••••`), the editor is a `type=password` that starts empty, and the typed value
+  leaves only via `onSubmit` and isn't left in the DOM. In the config panel, sensitive keys
+  (`anthropic_api_key`) are read-only with a "managed in the vault" note, because the phase-51 API
+  deliberately refuses secret writes (§7).
+- **`AuditView`** reads a **new backend endpoint** — `GET /admin/config/audit` (added to
+  `config_router` + `ConfigAdminService.list_audit` + `ConfigAuditView`, sensitive values masked
+  defensively) — and renders who/what/when, before→after, newest first (AC5). This was the one gap:
+  phase-51 wrote audits but exposed no read.
+- **`Observability`** embeds global spend + budget (`GET /admin/cost`, phase-46) with a link to the
+  eval evidence (phase-45).
+- **Guarding** — `/admin` is `RequireAdmin` (unauth → `/login`, non-admin → `/`); every
+  `/admin/config/*` + `/admin/cost` route is `require_admin` server-side (AC3).
+- **Scope decisions (documented):** (1) the design-provider *live health/quota indicator* (task 3,
+  not an AC) needs a project context / a global endpoint that doesn't exist — the provider is
+  editable as a config enum, and health remains visible in the per-project design stage (phase-19).
+  (2) A *platform*-scope credential write path doesn't exist (the vault is per-user BYO, phase-34,
+  and out of scope here), so sensitive config keys are presented masked/read-only rather than wiring
+  a new secret-write backend — faithful to AC4's "never displayed".
+- **Tests:** `SettingsForm.test.tsx` (catalog + source badges, edit→PUT, numeric coercion,
+  reset→DELETE, reset disabled when not overridden, inline validation error, sensitive masked/no
+  editor), `adminGuard.test.tsx` (unauth→login, non-admin→home, admin through), `SensitiveField.test.tsx`
+  (masked, write-only, value never rendered, cleared after submit), `AuditView.test.tsx` (history +
+  empty state). New backend `test_audit.py::test_list_audit_returns_changes_newest_first`.
+- **Verification:** frontend **16 new admin tests pass**, ESLint + `tsc` clean; the full suite is
+  267/268 (the 1 failure is the pre-existing phase-45 `eval/charts` geometry test, untouched here and
+  identical at HEAD). Backend ruff/black/mypy clean; the `/admin/config/audit` route registers and
+  the app boots. Backend `tests/config` run on Linux/CI.
