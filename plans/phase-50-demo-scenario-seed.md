@@ -63,4 +63,16 @@ The demo is the deliverable that proves the whole thesis (D1): the full non-line
 
 ## Status
 
-⬜ todo
+✅ done
+
+**Implementation notes**
+
+- **Hero scenario** — [eval/specs/hero-todo.yaml](../eval/specs/hero-todo.yaml): a relatable todo app (validated by the product's own loader) engineered with a discriminating criterion — the **"Clear completed"** bulk action, which first-pass generation tends to get subtly wrong (clears the whole list, or only hides completed rows). Those two criteria are the scripted repair moment. Prompt-driven; the live demo drags in screenshots at the design stage (documented, not fabricated as a fake asset).
+- **Smoke test** — [tests/demo/test_hero_smoke.py](../backend/tests/demo/test_hero_smoke.py): drives the **real** hero spec through the **real** `EvalRunner`/conductor with only the costly legs (model/sandbox/live deploy) injected as fakes, and asserts every milestone — skeleton instantiated, genuine first-pass failure (2 of 7 criteria), repair fixes it (`outcome=="fixed"`, post-repair green, positive delta), deploy healthy with a live URL + screenshot→URL time, live validation ran, outcome `delivered`, resources torn down. Plus a free-legs-only variant (the CI-cheap path still shows the contribution) and a clean-first-pass sanity check (`not_needed`, not a fake win).
+- **Seed & reset** — [scripts/demo.py](../backend/scripts/demo.py) (`seed`/`reset`/`status`): pre-creates the demo account + a "Hero Demo" project with the hero requirements captured and marked complete, so a run starts at design/build; `reset` cascades each project's data and best-effort reaps its sandbox + app DB. The DB cores (`seed_demo`/`reset_demo`) are split from connection lifecycle so they're tested against a disposable DB ([test_demo_seed.py](../backend/tests/demo/test_demo_seed.py), 6 tests). Refuses to seed without an explicit `DEMO_PASSWORD` (§7). Makefile: `demo-seed`/`demo-reset`/`demo-status`/`demo-rehearse`.
+- **Runbook** — [docs/demo-runbook.md](../docs/demo-runbook.md): the click-path with timings, the exact line to say at the repair moment, a T-30 checklist, and a **fallback table** for every risky stage (Stitch quota → auto Figma/fake; model hiccup → bounded retry/escalation *shown as a feature*; live deploy flaky → pre-warmed URL; sandbox → volume recovery; all-infra-down → narrate the headless rehearsal).
+- Config keys `demo_email`/`demo_password` added to `Settings` + `.env.example` (password ships blank); hero seed listed in the specs `schema.md`.
+
+**Verification:** backend 832 passed (11 new demo tests green), ruff/black/mypy clean, the hero spec validates through `specs_loader`. The 7 remaining failures are the pre-existing Docker-daemon repair tests (identical at HEAD). No frontend changes — the demo drives the existing UI.
+
+**Deferred (need live infra/an audience):** the three manual walkthroughs (clean-state runbook to a live URL, triggering each fallback, and a full live rehearsal) — the headless smoke covers the pipeline *logic*; the checklist covers the live legs it deliberately mocks.

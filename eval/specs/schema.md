@@ -64,6 +64,7 @@ measure nothing.
 
 | ID | Difficulty | What it is meant to catch |
 |---|---|---|
+| `hero-todo` | moderate | The **demo hero** (phase-50): a relatable todo app whose "Clear completed" bulk action first-pass tends to get wrong — the scripted repair moment. See [`docs/demo-runbook.md`](../../docs/demo-runbook.md). |
 | `todo-list` | simple | The floor — establishes that the pipeline works at all. |
 | `notes-crud` | simple | A query path that must agree between API and UI. |
 | `url-shortener` | simple | A non-CRUD route (redirect) and a uniqueness invariant. |

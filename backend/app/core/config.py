@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     max_request_bytes: int = 67_108_864  # 64 MiB
     seed_admin_email: str = ""  # optional dev admin, created by scripts/seed.py when both set
     seed_admin_password: str = ""
+    # Demo account seeded by scripts/demo.py (phase-50). Password blank → the script refuses to
+    # seed rather than shipping a known credential; set it explicitly for a rehearsal.
+    demo_email: str = "demo@forgeflow.dev"
+    demo_password: str = ""
 
     # --- Realtime (phase-05) ---
     realtime_ring_size: int = 256  # per-project replay ring buffer size

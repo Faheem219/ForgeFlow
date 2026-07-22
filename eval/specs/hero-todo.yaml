@@ -1,0 +1,57 @@
+id: hero-todo
+title: Hero demo — Todo app
+difficulty: moderate
+tags: [hero, demo, crud, bulk-action]
+inputs:
+  prompt: >-
+    A clean personal todo app. I can add tasks, tick them off, and delete ones I
+    no longer need. Show how many are still outstanding, and give me a single
+    "Clear completed" button that tidies up the done ones in one click.
+  # The live demo drives design from screenshots (dragged in at the design stage — see
+  # docs/demo-runbook.md). The headless smoke test drives this spec through the pipeline with the
+  # costly legs mocked, so no screenshot asset is required here.
+requirements:
+  features:
+    - name: Manage todos
+      description: Create, complete and delete tasks from a single list.
+      inputs: [title]
+      expected_behaviors:
+        - A new todo starts incomplete and appears at the top of the list.
+        - Completing a todo keeps it visible but visibly done.
+        - Deleting a todo removes it permanently.
+      acceptance_criteria:
+        - text: Adding a todo with a title stores it and shows it in the list.
+          kind: e2e
+        - text: Adding a todo with an empty or whitespace-only title is rejected with a validation error.
+          kind: unit
+        - text: Toggling a todo flips its completed state and persists it across a reload.
+          kind: either
+        - text: Deleting a todo removes it from the list and from storage.
+          kind: e2e
+    - name: Outstanding count
+      description: A running count of todos that are not yet complete.
+      expected_behaviors:
+        - The count updates immediately when a todo is added, completed or deleted.
+      acceptance_criteria:
+        - text: The count shows the number of incomplete todos, not the total.
+          kind: unit
+    - name: Clear completed
+      description: A single action that removes every completed todo at once, leaving the rest.
+      expected_behaviors:
+        - Clicking "Clear completed" removes all done todos in one step.
+        - Incomplete todos are never touched by "Clear completed".
+      acceptance_criteria:
+        # The engineered repair moment (see notes): a plausible-but-wrong build clears the whole
+        # list, or leaves completed rows behind. Both fail this pair.
+        - text: Clear completed removes every completed todo from the list and from storage.
+          kind: e2e
+        - text: Clear completed leaves all incomplete todos untouched, even when some are complete.
+          kind: unit
+expected_features: [Manage todos, Outstanding count, Clear completed]
+notes: >-
+  The demo hero (phase-50). Deliberately one step past the `todo-list` floor: the "Clear completed"
+  bulk action is the kind of thing first-pass generation often gets subtly wrong — clearing the
+  entire list, or only hiding completed rows rather than deleting them — so the two Clear-completed
+  criteria are the moment the bounded repair loop visibly earns its keep. Kept relatable (a todo app)
+  on purpose: the audience should follow the app instantly and watch the *process* — design refine,
+  build on the skeleton, a real test failure, the repair fix, deploy, live validation.
