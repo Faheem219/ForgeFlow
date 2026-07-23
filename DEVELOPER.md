@@ -126,20 +126,27 @@ unavailable (see §1.1). To turn them on, give the control plane a reachable Doc
   mongo/web/proxy in compose:
   ```bash
   make down
-  cd backend && uv run uvicorn app.api.app:app --reload --port 8000
+  cd backend && uv run --env-file ../.env uvicorn app.api.app:app --reload --port 8000
   # host Docker (Colima) is reachable → sandboxes work; mongo stays at localhost:27017
   ```
-  Cleaner privilege boundary; costs you a second terminal.
+  `--env-file ../.env` matters: `.env` lives at the repo **root**, and a bare `uv run` from `backend/`
+  would look for `backend/.env` and load nothing. Cleaner privilege boundary; costs a second terminal.
 
 Either way, build the sandbox image once first: `make sandbox-build`.
 
 ### Pieces individually (no Docker needed for API+web, but you need a MongoDB)
 
+`.env` lives at the repo **root**; from `backend/` pass it explicitly with `--env-file ../.env`
+(a bare `uv run` there would look for `backend/.env` and load nothing — see §9).
+
 ```bash
 # start a throwaway mongo however you like, e.g. via docker: docker run -p 27017:27017 mongo:7
-cd backend && uv run uvicorn app.api.app:app --reload      # → :8000
-cd frontend && corepack enable && pnpm install && pnpm dev  # → :5173
+cd backend && uv run --env-file ../.env uvicorn app.api.app:app --reload   # → :8000
+cd frontend && corepack enable && pnpm install && pnpm dev                 # → :5173
 ```
+
+> `make` targets (`seed`, `demo-seed`, …) already pass `--env-file` for you — this note is only for
+> running `uv run …` by hand.
 
 ### The generated-app sandbox image
 
@@ -280,9 +287,26 @@ post-repair pass rate, repair iterations, regressions, tokens/₹, wall clock) p
 **1 — CLI:** the runner prints a per-spec table + headline summary as it finishes.
 
 **2 — Web dashboard:** open **`/eval`** (nav: "Evaluation"). It charts the newest report by default —
-first-pass → post-repair dumbbell, distributions, outcomes. *(The API reads files from
-`eval/results/`, so run the harness on the same host as the API — with `make dev`, run it from a shell
-into the api container or point the API at the same directory.)*
+first-pass → post-repair dumbbell, distributions, outcomes.
+
+> **⚠️ The dashboard only sees results on the API's own filesystem.** The `/eval` API reads
+> `eval/results/*.json` relative to *where the API process runs*. `eval/` lives at the repo root and
+> is **not** mounted into the `api` container (only `backend/` is), so:
+>
+> | You run the API via… | You run the harness on… | Dashboard sees the results? |
+> |---|---|---|
+> | `make dev` (containerized API) | your **host** terminal | **No** — the container reads its own empty `/eval/results` |
+> | **host** (`uv run … uvicorn`) | your **host** terminal | **Yes** — same `eval/results/` |
+>
+> So if you `make dev` and run `uv run python -m app.eval.runner …` in your terminal, the dashboard
+> stays empty. Two fixes:
+> - **Recommended — run the backend on the host for eval work** (the harness needs host Docker anyway,
+>   §3.1 option B): `cd backend && uv run --env-file ../.env uvicorn app.api.app:app --reload`. Now the
+>   harness and the API share `eval/results/`.
+> - **Or** mount the results into the container: add `- ../eval:/eval` to the `api` service's `volumes`
+>   in [`infra/docker-compose.yml`](./infra/docker-compose.yml), then `make down && make dev`.
+>
+> (The CSV/MD/API endpoints in option 3 below read the same files, so the same rule applies to them.)
 
 **3 — HTTP API** (any authenticated user; `?source=<filename>` to pick a run, default newest):
 
@@ -344,7 +368,8 @@ make help          # the authoritative, self-documenting list
 | Startup log `sandbox reconcile skipped — Docker unavailable`, or a stage errors `Sandbox runtime unavailable` | Expected under plain `make dev` — the `api` container has no Docker daemon. The app is fine; to enable build/test/deploy, wire Docker in via §3.1. Non-sandbox features (§1.1) work regardless. |
 | `make dev` can't reach Docker at all (`colima` not running) | `colima start` (Docker via Colima is the host runtime) |
 | pnpm errors like `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | you're on a global pnpm 11 — use `corepack enable` (pins pnpm 9 for Node 20) |
-| Demo won't seed (`refusing to seed`) | set `DEMO_PASSWORD` in the environment / `.env` |
+| `demo-seed` says `refusing to seed` / `demo-status` says `password UNSET` even though it's set in `.env` | `.env` must be at the repo **root** (not `backend/.env`), and host scripts read it via `--env-file` — update to the current `Makefile` (it passes `--env-file` for you) and `make demo-seed` again. Running the script by hand? add `uv run --env-file ../.env …`. |
+| Demo won't seed (`refusing to seed`), `.env` genuinely blank | set `DEMO_PASSWORD=…` in the repo-root `.env` |
 | `'Hero Demo' already present` | `make demo-reset` first, then `make demo-seed` |
 | `/eval` shows "no data" | run the harness (§6); the API reads `eval/results/*.json` |
 | Build/test can't start a sandbox | `make sandbox-build`; if stale, `make sandbox-reap-all` then retry |

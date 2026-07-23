@@ -34,6 +34,10 @@ services:
         condition: service_healthy
     volumes:
       - ../backend:/app # hot reload; venv lives at /opt/venv (UV_PROJECT_ENVIRONMENT), not /app/.venv
+      # eval/ lives at the repo root (outside the backend mount). Mount it read-only so the /eval
+      # dashboard + API can read host-generated eval/results/*.json (phase-44/45). In-container
+      # RESULTS_DIR resolves to /eval/results, which this maps onto the host's eval/results.
+      - ../eval:/eval:ro
     ports:
       - "8000:8000"
 

@@ -4,6 +4,13 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
 SANDBOX_IMAGE ?= forgeflow-sandbox:latest
 
+# Host-run scripts read config from the repo-root .env (docker-compose loads it into the container
+# itself; a bare `uv run` from backend/ would look for backend/.env and find nothing). We pass the
+# root file explicitly via uv's --env-file, as an absolute path so it survives the `cd backend`.
+# Only passed when the file exists, so a fresh clone without a .env still runs on code defaults.
+DOTENV := $(wildcard $(CURDIR)/.env)
+ENV_FILE_ARG := $(if $(DOTENV),--env-file $(DOTENV),)
+
 .PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
 
 help: ## Show this help
@@ -54,16 +61,16 @@ check-env: ## Verify no direct os.environ reads outside the config layer
 	@bash infra/scripts/check_no_os_environ.sh
 
 seed: ## Ensure indexes + seed default platform settings (needs MongoDB)
-	cd backend && uv run python -m scripts.seed
+	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.seed
 
 demo-seed: ## Seed the hero-demo account + project (needs MongoDB + DEMO_PASSWORD)
-	cd backend && uv run python -m scripts.demo seed
+	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.demo seed
 
 demo-reset: ## Return the demo to a clean pre-demo state (deletes demo projects)
-	cd backend && uv run python -m scripts.demo reset
+	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.demo reset
 
 demo-status: ## Show what hero-demo state is currently seeded
-	cd backend && uv run python -m scripts.demo status
+	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.demo status
 
 demo-rehearse: ## Run the headless hero-path rehearsal smoke test (no live infra)
 	cd backend && uv run pytest tests/demo -q
