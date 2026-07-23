@@ -19,6 +19,7 @@ import os
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.errors import SystemError
@@ -84,6 +85,18 @@ class Settings(BaseSettings):
     model_routing: str = "claude-haiku-4-5-20251001"
     budget_cap_inr_per_project: float | None = None
     budget_cap_inr_global: float | None = None
+
+    @field_validator("budget_cap_inr_per_project", "budget_cap_inr_global", mode="before")
+    @classmethod
+    def _blank_cap_means_uncapped(cls, value: object) -> object:
+        """A blank cap means *uncapped*, not an error. `.env.example` ships these blank, and
+        docker-compose's `env_file` passes a blank key through as an empty-string env var (it does
+        not omit it) — so `float | None` would otherwise choke on `""`. Only whitespace/empty is
+        remapped; a real non-numeric value (e.g. a stray inline comment) still fails loudly."""
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
     # Agent client tuning (phase-20).
     anthropic_max_output_tokens: int = 4096
     anthropic_max_tool_turns: int = 16  # safety bound on the tool-use loop
@@ -91,6 +104,20 @@ class Settings(BaseSettings):
     # Per-model pricing (₹ per 1M tokens) as JSON: {"<model>": {"input": .., "output": ..}}.
     # Blank → the built-in defaults in app/agents/pricing.py. Admin-editable (phase-51/52).
     model_pricing_json: str = ""
+
+    # --- LLM provider (phase-53) ---
+    # Which chat backend the agents talk to: "anthropic" (default, Claude Messages API) or "openai"
+    # (any OpenAI-*compatible* Chat Completions endpoint — OpenAI, Azure OpenAI, Together, Groq,
+    # OpenRouter, vLLM, Ollama, …). The agent loop, tools, routing and cost accounting are
+    # provider-agnostic; only the transport differs (app/agents/anthropic_client.py). When set to
+    # "openai", point MODEL_CODEGEN / MODEL_ROUTING at that provider's model ids and price them via
+    # MODEL_PRICING_JSON.
+    llm_provider: str = "anthropic"
+    openai_api_key: str = ""
+    # Blank → the OpenAI SDK default (https://api.openai.com/v1). Set to any compatible base URL,
+    # e.g. http://localhost:11434/v1 (Ollama) or https://openrouter.ai/api/v1.
+    openai_base_url: str = ""
+    openai_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
 
     # --- Agent tools (phase-21) ---
     # Prebuilt generated-app skeleton copied into /workspace by instantiate_skeleton (phase-22/23).

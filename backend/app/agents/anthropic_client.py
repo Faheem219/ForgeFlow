@@ -1,9 +1,17 @@
-"""Claude client (phase-20): async Messages, streaming, and a bounded tool-use loop, with per-call
-cost accounting and budget guardrails baked in.
+"""Agent client (phase-20; multi-provider since phase-53): async streaming and a bounded tool-use
+loop, with per-call cost accounting and budget guardrails baked in.
 
-The transport (the thing that actually talks to Anthropic) sits behind a :class:`Transport` Protocol
-so the whole loop is testable against a scripted fake — the concrete SDK transport is lazy-imported
-(the ``anthropic`` package is only needed for real calls) and never touched by tests.
+The transport (the thing that actually talks to a model provider) sits behind a :class:`Transport`
+Protocol so the whole loop is testable against a scripted fake. Two concrete transports ship, both
+lazy-imported (their SDKs are only needed for real calls) and never touched by the loop tests:
+
+* :class:`SdkTransport` — Anthropic Messages API (the default).
+* :class:`OpenAITransport` — any OpenAI-*compatible* Chat Completions endpoint (OpenAI, Azure,
+  Together, Groq, OpenRouter, vLLM, Ollama, …), selected with ``LLM_PROVIDER=openai``.
+
+The loop's internal message vocabulary is Anthropic-native (content blocks, ``tool_use`` /
+``tool_result``); :class:`OpenAITransport` is a pure adapter at the edge that translates that shape
+to and from Chat Completions, so no other module changes when the provider does.
 
 Flow per turn: enforce budget → stream the turn (text deltas → ``agent.token`` events) → record cost
 on the ``Run`` → enforce budget again → if the model called tools, dispatch them and feed results
@@ -13,6 +21,7 @@ back, else return. The loop is bounded by ``anthropic_max_tool_turns``.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -24,7 +33,7 @@ from app.agents.budget import enforce_budget
 from app.agents.cost import Usage, record_cost
 from app.agents.models import TaskKind, route
 from app.core.config import get_config
-from app.core.errors import ProviderError, UserError
+from app.core.errors import ProviderError, SystemError, UserError  # noqa: A004 - taxonomy name
 from app.db.models import Run
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
@@ -100,7 +109,9 @@ class AnthropicClient:
         *,
         emitter: Emitter = emit,
     ) -> None:
-        self._transport = transport if transport is not None else SdkTransport()
+        # No explicit transport → pick one from config (Anthropic by default; OpenAI-compatible when
+        # LLM_PROVIDER=openai). Tests always inject a fake, so this branch is production-only.
+        self._transport = transport if transport is not None else default_transport()
         self._emit = emitter
 
     def _config_int(self, key: str) -> int:
@@ -170,7 +181,7 @@ class AnthropicClient:
             else:
                 turn = event
         if turn is None:
-            raise ProviderError("Anthropic stream ended without a completion")
+            raise ProviderError("The model stream ended without a completion")
         return turn
 
 
@@ -262,3 +273,247 @@ class SdkTransport:
                     raise ProviderError("Anthropic request failed after retries") from exc
                 await asyncio.sleep(min(20.0, 0.5 * 2**attempt) + random.uniform(0, 0.25))
         raise ProviderError("Anthropic request failed")  # unreachable
+
+
+# --------------------------------------------------------------------- OpenAI-compatible transport
+
+
+def _import_openai() -> Any:  # pragma: no cover - only exercised with the SDK installed
+    try:
+        import openai
+    except ModuleNotFoundError as exc:
+        raise ProviderError(
+            "The 'openai' package is not installed; run `uv sync --extra openai` "
+            "(or `pip install openai`) to use LLM_PROVIDER=openai"
+        ) from exc
+    return openai
+
+
+#: OpenAI ``finish_reason`` → the internal (Anthropic-style) stop reason. Informational: the loop
+#: decides whether to continue from the presence of tool calls, not this string.
+_STOP_REASONS = {
+    "tool_calls": "tool_use",
+    "stop": "end_turn",
+    "length": "max_tokens",
+    "content_filter": "content_filter",
+}
+
+
+def _to_openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Anthropic tool schema (``name``/``description``/``input_schema``) → OpenAI function tools."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "parameters": tool.get("input_schema") or {"type": "object", "properties": {}},
+            },
+        }
+        for tool in tools
+    ]
+
+
+def _tool_result_text(content: Any) -> str:
+    """A ``tool_result`` payload as a plain string (Chat Completions tool messages are text)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):  # Anthropic allows a list of blocks; keep the text parts
+        return "".join(
+            block.get("text", "") for block in content if isinstance(block, dict)
+        ) or json.dumps(content)
+    return json.dumps(content)
+
+
+def _to_openai_messages(system: str | None, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translate the loop's Anthropic-shaped transcript into OpenAI Chat Completions messages.
+
+    ``system`` becomes a leading system message; assistant ``tool_use`` blocks become
+    ``tool_calls``; user ``tool_result`` blocks become ``role="tool"`` messages (emitted in order,
+    so each follows the assistant turn that requested it, as Chat Completions requires).
+    """
+    out: list[dict[str, Any]] = []
+    if system:
+        out.append({"role": "system", "content": system})
+
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+
+        if isinstance(content, str):
+            out.append({"role": role, "content": content})
+            continue
+
+        blocks = content or []
+        if role == "assistant":
+            text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+            tool_calls = [
+                {
+                    "id": b["id"],
+                    "type": "function",
+                    "function": {"name": b["name"], "arguments": json.dumps(b.get("input") or {})},
+                }
+                for b in blocks
+                if b.get("type") == "tool_use"
+            ]
+            assistant: dict[str, Any] = {"role": "assistant", "content": text or None}
+            if tool_calls:
+                assistant["tool_calls"] = tool_calls
+            out.append(assistant)
+        else:  # user turn: tool results (each its own message) and/or plain text
+            text_parts: list[str] = []
+            for b in blocks:
+                if b.get("type") == "tool_result":
+                    out.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": b.get("tool_use_id"),
+                            "content": _tool_result_text(b.get("content")),
+                        }
+                    )
+                elif b.get("type") == "text":
+                    text_parts.append(b.get("text", ""))
+            if text_parts:
+                out.append({"role": "user", "content": "".join(text_parts)})
+    return out
+
+
+def _parse_tool_args(raw: str) -> dict[str, Any]:
+    """The accumulated tool-call argument JSON as a dict. Empty → ``{}``; malformed is a fault."""
+    raw = raw.strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProviderError(f"Model returned invalid tool-call arguments: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ProviderError("Model tool-call arguments were not a JSON object")
+    return parsed
+
+
+async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
+    """Fold an OpenAI streaming response into text deltas + one :class:`TurnComplete`.
+
+    Chat Completions streams tool calls in fragments keyed by ``index`` (id/name arrive once, the
+    argument JSON dribbles in across chunks), and reports usage on a trailing choice-less chunk when
+    ``stream_options.include_usage`` is set — both are reassembled here. Kept as a module function,
+    independent of the SDK, so the reassembly is unit-tested with scripted chunks.
+    """
+    text_parts: list[str] = []
+    frags: dict[int, dict[str, str]] = {}
+    usage = Usage()
+    stop_reason = "end_turn"
+
+    async for chunk in chunks:
+        reported = getattr(chunk, "usage", None)
+        if reported is not None:
+            usage = Usage(
+                int(getattr(reported, "prompt_tokens", 0) or 0),
+                int(getattr(reported, "completion_tokens", 0) or 0),
+            )
+        choices = getattr(chunk, "choices", None) or []
+        if not choices:
+            continue
+        choice = choices[0]
+
+        delta = getattr(choice, "delta", None)
+        if delta is not None:
+            piece = getattr(delta, "content", None)
+            if piece:
+                text_parts.append(piece)
+                yield TextDelta(piece)
+            for call in getattr(delta, "tool_calls", None) or []:
+                index = int(getattr(call, "index", 0) or 0)
+                frag = frags.setdefault(index, {"id": "", "name": "", "args": ""})
+                if getattr(call, "id", None):
+                    frag["id"] = call.id
+                fn = getattr(call, "function", None)
+                if fn is not None:
+                    if getattr(fn, "name", None):
+                        frag["name"] = fn.name
+                    if getattr(fn, "arguments", None):
+                        frag["args"] += fn.arguments
+
+        finish = getattr(choice, "finish_reason", None)
+        if finish:
+            stop_reason = _STOP_REASONS.get(finish, finish)
+
+    tool_uses = [
+        ToolUse(
+            id=frags[i]["id"] or f"call_{i}",
+            name=frags[i]["name"],
+            input=_parse_tool_args(frags[i]["args"]),
+        )
+        for i in sorted(frags)
+    ]
+    yield TurnComplete(
+        text="".join(text_parts), tool_uses=tool_uses, usage=usage, stop_reason=stop_reason
+    )
+
+
+class OpenAITransport:
+    """Transport over any OpenAI-compatible Chat Completions endpoint (phase-53).
+
+    A pure adapter: it translates the loop's Anthropic-shaped request into Chat Completions params,
+    streams, and folds the response back into the loop's :class:`StreamEvent`s. Like
+    :class:`SdkTransport`, the real network path is lazy-imported and not exercised by tests; the
+    translation and stream-reassembly helpers it delegates to are.
+    """
+
+    async def stream(  # pragma: no cover - real network path
+        self, request: MessageRequest
+    ) -> AsyncIterator[StreamEvent]:
+        openai = _import_openai()
+        config = get_config()
+        base_url = str(config.get("openai_base_url")) or None
+        client = openai.AsyncOpenAI(api_key=str(config.get("openai_api_key")), base_url=base_url)
+
+        params: dict[str, Any] = {
+            "model": request.model,
+            "max_tokens": request.max_tokens,
+            "messages": _to_openai_messages(request.system, request.messages),
+            "stream": True,
+            # Ask for usage on a trailing chunk; servers that ignore it just leave us at 0.
+            "stream_options": {"include_usage": True},
+        }
+        if request.tools:
+            params["tools"] = _to_openai_tools(request.tools)
+
+        raw = await self._with_retries(lambda: client.chat.completions.create(**params))
+        async for event in _accumulate(raw):
+            yield event
+
+    async def _with_retries(self, make_call: Callable[[], Any]) -> Any:  # pragma: no cover
+        openai = _import_openai()
+        retryable = (
+            openai.APIConnectionError,
+            openai.RateLimitError,
+            openai.InternalServerError,
+        )
+        attempts = int(get_config().get("openai_max_retries"))
+        for attempt in range(attempts + 1):
+            try:
+                return await make_call()
+            except retryable as exc:
+                if attempt >= attempts:
+                    raise ProviderError("OpenAI request failed after retries") from exc
+                await asyncio.sleep(min(20.0, 0.5 * 2**attempt) + random.uniform(0, 0.25))
+        raise ProviderError("OpenAI request failed")  # unreachable
+
+
+# --------------------------------------------------------------------- provider selection
+
+
+def default_transport() -> Transport:
+    """The transport for the configured provider (``LLM_PROVIDER``). Anthropic is the default."""
+    provider = str(get_config().get("llm_provider")).strip().lower()
+    if provider in ("", "anthropic"):
+        return SdkTransport()
+    if provider == "openai":
+        return OpenAITransport()
+    raise SystemError(f"Unknown LLM_PROVIDER {provider!r}; expected 'anthropic' or 'openai'")
+
+
+#: The agent client is provider-agnostic; the historical name is kept for its many call sites.
+AgentClient = AnthropicClient

@@ -66,8 +66,9 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [50](./phase-50-demo-scenario-seed.md) | Demo scenario & seed | 11 · Hardening & Demo | all prior | ✅ |
 | [51](./phase-51-layered-config-service.md) | Layered configuration service & platform settings store | 12 · Admin & Config ✚ | 01, 02, 03 | ✅ |
 | [52](./phase-52-admin-dashboard-ui.md) | Admin dashboard UI | 12 · Admin & Config ✚ | 03, 04, 51 | ✅ |
+| [53](./phase-53-openai-compatible-provider.md) | OpenAI-compatible LLM provider | 12 · Admin & Config ✚ | 20, 01, 51 | ✅ |
 
-✚ *Epic 12 (phases 51–52) was added per the user's directive — see "Additions beyond the roadmap" below.*
+✚ *Epic 12 (phases 51–53) was added per the user's directive — see "Additions beyond the roadmap" below.*
 
 ## Milestone map (from `IMPLEMENTATION_PLAN.md` §11)
 
@@ -77,13 +78,15 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | **M2** ✅ | Epics 3–4 | 16–24 | Screenshots/text → design → generated **running app** with live code + change requests. |
 | **M3** ✅ | Epics 5–6 | 25–32 | Requirements → tests → **bounded self-healing repair loop** (the contribution) working. |
 | **M4** ✅ | Epics 7–8 | 33–40 | Dual-mode deploy + visual topology + live validation → **deployed URL delivered & verified**. |
-| **M5** ✅ | Epics 9–11 (+12) | 41–52 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, and admin configurability. |
+| **M5** ✅ | Epics 9–11 (+12) | 41–53 | Data browser, evaluation evidence, hardening, PWA polish, **hero demo**, admin configurability, and multi-provider LLM support. |
 
 ## Additions beyond the roadmap (user directive)
 
-Two capabilities were requested that Section 10 did not enumerate. They are handled as follows:
+Three capabilities were requested that Section 10 did not enumerate. They are handled as follows:
 
 1. **Runtime-configurable platform settings via an admin dashboard** (model name, provider, base URL, budgets, sandbox limits, repair thresholds, feature flags), with precedence **admin panel > env > default**. → New **Epic 12**: [`phase-51`](./phase-51-layered-config-service.md) (layered config service + platform settings store + admin API) and [`phase-52`](./phase-52-admin-dashboard-ui.md) (admin dashboard UI). The resolver *seam* is pre-built in `phase-01`, with the `PlatformSetting` collection in `phase-02` and the `admin` role in `phase-03`, so 51/52 are additive and low-risk. Sensitive keys (API tokens) route through the encrypted vault (`phase-34`), not plain settings.
 2. **A pre-built React + Tailwind frontend template, always reused for every generated app** (so the LLM never rescaffolds the frontend, saving tokens). → Woven into [`phase-22`](./phase-22-app-skeleton-template.md) (the skeleton ships a complete Tailwind-configured FE + BE; instantiated by deterministic copy, never generated) and [`phase-23`](./phase-23-codegen-agent-loop.md) (codegen's first step is `instantiate_skeleton`; the agent writes only feature code), with an `instantiate_skeleton` tool in [`phase-21`](./phase-21-agent-tools-sandbox.md).
 
-Both are recorded under **Design notes** in their phase files and remain faithful to the locked decisions (fixed generated-app stack, cost discipline, secret handling).
+3. **Run the control-plane agents against OpenAI-compatible APIs/base URLs/models**, not only Anthropic. → New [`phase-53`](./phase-53-openai-compatible-provider.md): a second `Transport` (a pure OpenAI Chat Completions adapter) selected by `LLM_PROVIDER`, reusing the phase-20 seam so no agent/tool/cost code changes and Anthropic stays the default. This extends the §1 "anthropic SDK" decision, so it is documented rather than applied silently; every other locked decision (generated-app stack, bounded repair, cost discipline, secret handling) is preserved.
+
+All three are recorded under **Design notes** in their phase files and remain faithful to the locked decisions (fixed generated-app stack, cost discipline, secret handling).

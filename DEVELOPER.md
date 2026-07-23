@@ -10,29 +10,76 @@ For *what* is being built see [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.m
 
 | Tool | Why | Notes |
 |---|---|---|
-| **Docker** via **Colima** | `make dev`, sandboxes, deploy | `colima start` before anything Docker-backed |
-| **[uv](https://docs.astral.sh/uv/)** | backend (Python 3.11 is fetched by uv) | `uv sync` in `backend/` |
-| **Node 20 + pnpm 9** | frontend | pnpm is pinned via corepack — `corepack enable` once. **Do not** use a global pnpm 11 (breaks on Node 20's `node:sqlite`). |
+| **[uv](https://docs.astral.sh/uv/)** | backend (Python 3.11 is fetched by uv) | required · `uv sync` in `backend/` |
+| **Node 20 + pnpm 9** | frontend | required · pnpm is pinned via corepack — `corepack enable` once. **Do not** use a global pnpm 11 (breaks on Node 20's `node:sqlite`). |
+| **Docker** via **Colima** | the `make dev` stack + sandbox stages | launches the container stack, and runs build/preview/test/repair/deploy — see §1.1 · `colima start` |
 
-> The whole quality suite (`make test`, `make lint`) runs **without Docker** — only the live stack,
-> sandboxes, and deploy need Colima.
+### 1.1 What needs Docker — and what doesn't
+
+The ForgeFlow **app** (backend + frontend) runs fine without Docker — you can serve it host-side with
+a standalone MongoDB (see "Pieces individually" in §3). Docker is needed to **(a)** launch the
+`make dev` container stack, and **(b)** run the stages that execute generated code inside a
+per-project sandbox. When the control plane has no reachable daemon, the sandbox stages report
+**"Sandbox runtime unavailable"** and everything else works normally.
+
+| Works **without** Docker | **Requires** Docker (a reachable daemon) |
+|---|---|
+| The web app, auth, projects, chat | **Build** (codegen writes + boots code in the sandbox) |
+| Requirements capture & editing | **Preview** (live dev server in the sandbox) |
+| Design stage (Stitch/Figma/`fake`) | **Test + self-healing repair loop** |
+| Data browser, Eval dashboard (`/eval`) | **Deploy** & **live validation** |
+| Admin (`/admin`), cost panel | The hero demo end-to-end (§4) — it drives those stages |
+| `make test`, `make lint`, `make seed` | `make sandbox-build`, `make sandbox-smoke` |
+
+> **Note on `make dev`:** the stack boots even when the `api` **container** can't reach a Docker
+> daemon — on startup you'll see one INFO line, `sandbox reconcile skipped — Docker unavailable`,
+> which is expected, not an error. To actually enable the sandbox stages, wire Docker into the control
+> plane (§3.1). Deploy additionally needs `VERCEL_TOKEN` / `RENDER_API_KEY` (§5).
 
 ---
 
-## 2. First-time setup
+## 2. First-time setup — full ordered sequence
+
+Follow these in order. This takes you from a fresh clone to a booted, seeded app.
 
 ```bash
-cp .env.example .env          # safe defaults for local; fill in what you need (§5)
-make install                  # backend (uv sync) + frontend (pnpm install)
-```
+# 1. Start the Docker runtime (required for `make dev`, sandboxes, deploy).
+colima start                             # verify: docker info
 
-Generate the secrets that have no safe default:
+# 2. Enable the pinned pnpm (once per machine). Do NOT use a global pnpm 11.
+corepack enable
 
-```bash
-# Credential-vault key (phase-34). Losing/rotating this invalidates every stored provider token.
+# 3. Create your .env from the authoritative template.
+cp .env.example .env                     # safe local defaults; every var documented in §5
+
+# 4. Generate the one secret with no safe default and paste it into .env → FERNET_KEY=
+#    (credential-vault key, phase-34; rotating it invalidates every stored provider token).
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# → paste into FERNET_KEY in .env
+
+# 5. (Optional but recommended) set these in .env:
+#      ANTHROPIC_API_KEY=sk-...           # required for the build/repair legs to actually run
+#      DEMO_PASSWORD=<something>           # required only if you want the hero demo seed (§4)
+#      SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD  # to get an /admin login
+
+# 6. Install dependencies (backend uv sync + frontend pnpm install).
+make install
+
+# 7. Boot the stack (api + web + mongo + proxy).
+make dev                                 # leave running; watch for "Uvicorn running on :8000"
+
+# 8. In a SECOND terminal, create indexes + seed default platform settings (once).
+make seed
+
+# 9. Verify.
+curl -s localhost:8000/health            # → {"status":"ok",...}
+open http://localhost:5173               # the web app
 ```
+
+> **⚠️ If you copied `.env` before 2026‑07‑23, re-copy it** (`cp .env.example .env`, then re-add your
+> `FERNET_KEY`/keys). Older `.env.example` had trailing `# comments` on the same line as values, which
+> docker-compose's `env_file` parser folded into the value and crashed the API on boot with a
+> `ValidationError` on `budget_cap_inr_*`. Both the template and the config loader are now hardened
+> (see §9), but an already-copied `.env` still carries the old inline comments.
 
 ---
 
@@ -50,11 +97,7 @@ make dev        # boots api + web + mongo + proxy via infra/docker-compose.yml (
 | API | http://localhost:8000 · health: http://localhost:8000/health |
 | Proxy (Caddy — straddles host + sandbox networks) | http://localhost (:80) |
 
-Then, once (creates indexes + seeds default platform settings):
-
-```bash
-make seed
-```
+(First boot only: run `make seed` once in a second terminal — see §2 step 8.)
 
 Stop / inspect:
 
@@ -62,6 +105,33 @@ Stop / inspect:
 make down       # stop + remove the stack
 make logs       # tail all stack logs
 ```
+
+### 3.1 Enabling the sandbox stages (build/test/deploy)
+
+With plain `make dev`, the `api` **container** has no Docker daemon, so sandbox stages stay
+unavailable (see §1.1). To turn them on, give the control plane a reachable Docker daemon — either:
+
+- **Option A — mount the host Docker socket into the `api` service.** Keeps the single `make dev`
+  workflow. Add one line to the `api` service in [`infra/docker-compose.yml`](./infra/docker-compose.yml):
+  ```yaml
+      volumes:
+        - ../backend:/app
+        - /var/run/docker.sock:/var/run/docker.sock   # Colima: if this path is absent on your
+                                                       # host, use ${HOME}/.colima/default/docker.sock
+  ```
+  Then `make down && make dev`. Trade-off: the container gains full host-Docker (≈root) access —
+  acceptable for local dev, **not** for anything shared or production.
+
+- **Option B — run the backend on the host** (where Colima's Docker already works), and keep only
+  mongo/web/proxy in compose:
+  ```bash
+  make down
+  cd backend && uv run uvicorn app.api.app:app --reload --port 8000
+  # host Docker (Colima) is reachable → sandboxes work; mongo stays at localhost:27017
+  ```
+  Cleaner privilege boundary; costs you a second terminal.
+
+Either way, build the sandbox image once first: `make sandbox-build`.
 
 ### Pieces individually (no Docker needed for API+web, but you need a MongoDB)
 
@@ -145,13 +215,36 @@ Highlights you'll likely touch:
 | Variable | For |
 |---|---|
 | `FERNET_KEY` | credential-vault encryption — generate it (§2), back it up |
-| `ANTHROPIC_API_KEY` | codegen/repair; blank → those legs can't run |
-| `MODEL_CODEGEN` / `MODEL_ROUTING` | Sonnet for real work, Haiku for routing/summaries |
+| `LLM_PROVIDER` | `anthropic` (default) \| `openai` — see §5.1 |
+| `ANTHROPIC_API_KEY` | codegen/repair (when provider=anthropic); blank → those legs can't run |
+| `MODEL_CODEGEN` / `MODEL_ROUTING` | model ids for real work / routing (provider-appropriate) |
 | `BUDGET_CAP_INR_PER_PROJECT` / `_GLOBAL` | spend caps; blank = uncapped |
 | `BUDGET_WARN_RATIO` (0.8) | emit a `budget.warning` at this fraction of a cap before halting |
 | `DEMO_PASSWORD` | required to seed the demo (§4) |
 | `DESIGN_PROVIDER` | `stitch` (default) \| `figma` \| `fake`; blank creds auto-fall-back |
 | `VERCEL_TOKEN` / `RENDER_API_KEY` | deploy targets (FE→Vercel, BE→Render — **never** BE→Vercel) |
+
+### 5.1 Running against an OpenAI-compatible provider (phase-53)
+
+The control-plane agents run against Anthropic by default, or **any OpenAI-compatible Chat
+Completions endpoint** (OpenAI, Azure OpenAI, Together, Groq, OpenRouter, vLLM, Ollama, …). Switch
+with config only — no code changes:
+
+```bash
+# 1. Install the optional SDK once:
+cd backend && uv sync --extra openai        # (or: pip install openai)
+
+# 2. In .env:
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...                        # or any key the endpoint wants ("ollama" for local)
+OPENAI_BASE_URL=                             # blank = api.openai.com; e.g. http://localhost:11434/v1
+MODEL_CODEGEN=gpt-4o                         # set to the target provider's model ids
+MODEL_ROUTING=gpt-4o-mini
+MODEL_PRICING_JSON={"gpt-4o":{"input":210,"output":840}}   # optional; unlisted models cost ₹0
+```
+
+Anthropic remains the default and is unchanged if you leave `LLM_PROVIDER` unset. An unknown provider
+or a missing `openai` package fails with a clear error rather than silently misbehaving.
 
 ---
 
@@ -247,7 +340,9 @@ make help          # the authoritative, self-documenting list
 
 | Symptom | Fix |
 |---|---|
-| `make dev` can't reach Docker | `colima start` (Docker via Colima is the runtime) |
+| API boot crash: `ValidationError … budget_cap_inr_per_project … unable to parse string as a number` (input like `'# blank = uncapped'` or `''`) | Your `.env` predates the 2026‑07‑23 fix — re-copy it: `cp .env.example .env`, then re-add `FERNET_KEY`/keys. Root cause + fix in §9 note above. |
+| Startup log `sandbox reconcile skipped — Docker unavailable`, or a stage errors `Sandbox runtime unavailable` | Expected under plain `make dev` — the `api` container has no Docker daemon. The app is fine; to enable build/test/deploy, wire Docker in via §3.1. Non-sandbox features (§1.1) work regardless. |
+| `make dev` can't reach Docker at all (`colima` not running) | `colima start` (Docker via Colima is the host runtime) |
 | pnpm errors like `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | you're on a global pnpm 11 — use `corepack enable` (pins pnpm 9 for Node 20) |
 | Demo won't seed (`refusing to seed`) | set `DEMO_PASSWORD` in the environment / `.env` |
 | `'Hero Demo' already present` | `make demo-reset` first, then `make demo-seed` |

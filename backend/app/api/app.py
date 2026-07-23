@@ -20,7 +20,7 @@ from app.auth.router import router as auth_router
 from app.core.config import get_config
 from app.core.config_db import install_db_provider
 from app.core.cost_router import cost_router
-from app.core.errors import register_exception_handlers
+from app.core.errors import SystemError, register_exception_handlers  # noqa: A004 - taxonomy name
 from app.core.limits import BodySizeLimitMiddleware
 from app.core.logging import configure_logging
 from app.core.observability import install_correlation_filter
@@ -70,8 +70,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # plane without a reachable Docker daemon still serves everything except sandbox ops.
     try:
         await manager.reconcile()
+    except SystemError as exc:
+        # Expected when the control plane can't reach a Docker daemon (e.g. the api container has no
+        # docker socket mounted). Sandbox-backed stages (build/preview/test/deploy) are unavailable;
+        # everything else serves normally. A designed soft-fail — one line, no alarming stack trace.
+        logger.info("sandbox reconcile skipped — Docker unavailable (%s)", exc)
     except Exception:
-        logger.info("sandbox reconcile skipped (docker unavailable)", exc_info=True)
+        logger.warning("sandbox reconcile failed unexpectedly", exc_info=True)
 
     stop_event = asyncio.Event()
     reaper_task = asyncio.create_task(manager.run_reaper(stop_event=stop_event))

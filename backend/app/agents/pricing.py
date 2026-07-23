@@ -26,6 +26,10 @@ class ModelPrice:
 DEFAULT_PRICING: dict[str, ModelPrice] = {
     "claude-sonnet-5": ModelPrice(250.0, 1250.0),
     "claude-haiku-4-5-20251001": ModelPrice(70.0, 350.0),
+    # OpenAI-compatible placeholders (phase-53). Countless compatible ids exist, so an unlisted
+    # one prices at ₹0 until MODEL_PRICING_JSON supplies its rate (the operator-priced path above).
+    "gpt-4o": ModelPrice(210.0, 840.0),
+    "gpt-4o-mini": ModelPrice(12.0, 50.0),
 }
 
 

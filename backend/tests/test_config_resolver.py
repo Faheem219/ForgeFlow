@@ -64,3 +64,29 @@ def test_provider_wins_over_env_and_default(monkeypatch: pytest.MonkeyPatch) -> 
     # Keys the provider does not supply still fall through to env/default.
     assert resolver.get("forgeflow_env") == "local"
     assert resolver.source_of("forgeflow_env") == "default"
+
+
+# --- blank budget caps ------------------------------------------------------------------------
+# `.env.example` ships the caps blank, and docker-compose's `env_file` passes a blank key through as
+# a real empty-string env var (it does not omit it). A `float | None` would choke on `""`, so a
+# validator remaps blank -> None (uncapped). Regression guard for the `make dev` boot crash.
+
+
+@pytest.mark.parametrize("field", ["BUDGET_CAP_INR_PER_PROJECT", "BUDGET_CAP_INR_GLOBAL"])
+def test_blank_budget_cap_env_means_uncapped(field: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(field, "")  # exactly what docker-compose injects for a blank key
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert getattr(settings, field.lower()) is None
+
+
+def test_numeric_budget_cap_still_parses() -> None:
+    settings = Settings(_env_file=None, budget_cap_inr_per_project="100")  # type: ignore[call-arg]
+    assert settings.budget_cap_inr_per_project == 100.0
+
+
+def test_a_non_numeric_cap_still_fails_loudly() -> None:
+    """The blank exemption must not swallow a genuinely wrong value (e.g. a stray comment)."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, budget_cap_inr_global="# blank = uncapped")  # type: ignore[call-arg]

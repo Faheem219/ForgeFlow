@@ -21,6 +21,11 @@ dependencies = [
     "pyyaml>=6.0",  # benchmark specs are authored in YAML (phase-43) — prose reads badly as JSON
 ]
 
+[project.optional-dependencies]
+# Only needed when LLM_PROVIDER=openai (phase-53). Kept optional so the default (Anthropic) install
+# is unchanged. Install with `uv sync --extra openai` (or `pip install openai`).
+openai = ["openai>=1.40"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.2",
