@@ -18,18 +18,14 @@ layer off-loads them via :func:`asyncio.to_thread`.
 
 from __future__ import annotations
 
-import fcntl
 import io
 import os
 import posixpath
-import pty
 import queue
 import shutil
 import signal
-import struct
 import subprocess
 import tarfile
-import termios
 import threading
 import time
 from collections.abc import Iterator
@@ -44,6 +40,17 @@ from app.core.errors import SystemError, UserError  # noqa: A004
 
 DOCKER_WORKSPACE = "/workspace"
 _PRUNE_DIRS = {"node_modules", ".git"}
+
+if os.name == "nt":
+    fcntl = None
+    pty = None
+    struct = None
+    termios = None
+else:
+    import fcntl
+    import pty
+    import struct
+    import termios
 
 
 @dataclass(frozen=True)
@@ -147,6 +154,8 @@ def _pump_pipe(fd: int, name: StreamName, sink: queue.Queue[ExecChunk | None]) -
 
 
 def _set_winsize(fd: int, cols: int, rows: int) -> None:
+    if fcntl is None or struct is None or termios is None:
+        raise SystemError("PTY resize is not supported on Windows")
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
 
@@ -370,6 +379,8 @@ class LocalRuntime:
     def start_tty(
         self, argv: list[str], cwd: str = "", cols: int = 80, rows: int = 24
     ) -> TtyHandle:
+        if pty is None:
+            raise SystemError("Local interactive terminals are not supported on Windows")
         master, slave = pty.openpty()
         _set_winsize(master, cols, rows)
         try:
