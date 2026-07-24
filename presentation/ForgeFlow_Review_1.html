@@ -1,0 +1,1029 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgeFlow — B.Tech Project Review 1</title>
+<style>
+  /* ============ shell ============ */
+  html, body { margin:0; padding:0; height:100%; background:#0e0e10; overflow:hidden; }
+  * { box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  body.cursorhide, body.cursorhide * { cursor:none !important; }
+
+  :root{
+    --ink:#1a1a1a; --ink2:#52514e; --ink3:#898781;
+    --hair:#e3e1da; --hair2:#eeece6;
+    --paper:#ffffff; --paper2:#faf9f7;
+    --red:#C11B24; --red-dk:#9d1219; --red-tint:#fdf3f3;
+    --indigo:#4338CA; --indigo-tint:#eef0fb; --indigo-dk:#332a99;
+    --blue:#2a78d6; --blue-250:#86b6ef; --blue-350:#5598e7; --blue-550:#1c5cab; --blue-650:#104281;
+    --bad:#d03b3b; --good:#0ca30c; --half:#b45309;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  #deck { position:absolute; left:50%; top:50%; width:1280px; height:720px; }
+
+  .slide {
+    position:absolute; inset:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); opacity:0; pointer-events:none; z-index:1;
+    transition:opacity 0s linear .42s; overflow:hidden;
+  }
+  .slide.active { opacity:1; pointer-events:auto; z-index:2; transition:none; }
+  @keyframes inR { from { opacity:0; transform:translateX(26px);} to { opacity:1; transform:none; } }
+  @keyframes inL { from { opacity:0; transform:translateX(-26px);} to { opacity:1; transform:none; } }
+  .slide.active.gonext { animation:inR .38s ease both; }
+  .slide.active.goprev { animation:inL .38s ease both; }
+
+  /* ============ chrome ============ */
+  .navzone { position:fixed; top:0; bottom:0; width:13%; z-index:50; display:flex; align-items:center; }
+  .navzone.left  { left:0;  justify-content:flex-start; padding-left:22px; }
+  .navzone.right { right:0; justify-content:flex-end;  padding-right:22px; }
+  .navbtn {
+    width:46px; height:46px; border-radius:50%; border:1px solid rgba(0,0,0,.16);
+    background:rgba(255,255,255,.92); color:#3a3a3a; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; opacity:0; transform:scale(.9); transition:opacity .22s ease, transform .22s ease;
+    box-shadow:0 2px 10px rgba(0,0,0,.14);
+  }
+  .navzone:hover .navbtn { opacity:1; transform:scale(1); }
+  .navbtn:hover { background:#ffffff; }
+  .navbtn.hidden { display:none; }
+  .navbtn svg { width:20px; height:20px; }
+
+  #progress { position:fixed; left:0; bottom:0; height:3px; background:var(--red); width:0%; z-index:60; transition:width .3s ease; }
+
+  #hint {
+    position:fixed; bottom:26px; left:50%; transform:translateX(-50%);
+    background:rgba(20,20,22,.85); color:#eceae4; font-family:var(--sans); font-size:13px;
+    padding:8px 18px; border-radius:20px; z-index:70; letter-spacing:.3px;
+    transition:opacity .8s ease; pointer-events:none;
+  }
+  #hint.gone { opacity:0; }
+
+  /* ============ content-slide scaffolding ============ */
+  .pad { position:absolute; inset:0; padding:38px 50px 30px; display:flex; flex-direction:column; }
+  .shead { flex:none; margin-bottom:16px; }
+  .kick { font-size:12.5px; font-weight:700; letter-spacing:2.2px; color:var(--red); text-transform:uppercase; margin-bottom:7px; }
+  .shead h2 { margin:0; font-size:30px; font-weight:750; letter-spacing:-.4px; line-height:1.18; color:var(--ink); }
+  .shead .rule { margin-top:12px; height:1px; background:var(--hair); position:relative; }
+  .shead .rule::before { content:""; position:absolute; left:0; top:-1px; width:64px; height:3px; background:var(--red); }
+
+  .foot {
+    position:absolute; left:50px; right:50px; bottom:12px;
+    display:flex; justify-content:space-between; font-size:10.5px; color:#b3b1aa; letter-spacing:.4px;
+  }
+
+  .callout {
+    margin-top:auto; display:flex; align-items:center; gap:14px;
+    background:var(--red-tint); border-left:3px solid var(--red);
+    padding:11px 18px; border-radius:0 8px 8px 0;
+  }
+  .callout .q { font-family:Georgia, serif; font-size:34px; line-height:0; color:var(--red); flex:none; transform:translateY(9px); }
+  .callout p { margin:0; font-size:16.5px; font-weight:600; color:var(--ink); letter-spacing:-.1px; }
+
+  .ref { color:var(--red); font-size:.72em; font-weight:700; vertical-align:super; letter-spacing:0; }
+
+  .card { background:var(--paper); border:1px solid var(--hair); border-radius:10px; }
+  .panel { background:var(--paper2); border:1px solid var(--hair2); border-radius:12px; }
+
+  .ic { flex:none; }
+  .ic svg { display:block; }
+
+  /* ============ slide 1 : title ============ */
+  .s-title .tborder { position:absolute; inset:20px; border:2px solid #161616; border-radius:26px; text-align:center; font-family:var(--sans); }
+  .s-title img { position:absolute; top:24px; left:50%; transform:translateX(-50%); height:74px; }
+  .s-title .inst { position:absolute; top:106px; width:100%; margin:0; font-family:Georgia, "Times New Roman", serif; font-size:33px; font-weight:700; color:var(--red); letter-spacing:.6px; }
+  .s-title .btp { position:absolute; top:188px; width:100%; margin:0; font-size:23px; font-weight:700; }
+  .s-title .ptitle { position:absolute; top:246px; width:100%; margin:0; font-size:24px; font-weight:700; line-height:1.42; }
+  .s-title .grp { position:absolute; top:352px; width:100%; margin:0; font-size:20.5px; }
+  .s-title .names { position:absolute; top:404px; width:100%; margin:0; font-size:18px; line-height:1.62; }
+  .s-title .guide { position:absolute; left:64px; bottom:84px; font-size:19.5px; line-height:1.5; text-align:center; }
+  .s-title .tfoot { position:absolute; bottom:14px; width:100%; font-size:14.5px; }
+
+  /* ============ slide 2 : introduction ============ */
+  .heroline { display:flex; align-items:center; gap:12px; font-size:18px; font-weight:600; color:var(--ink2); margin:2px 0 12px; }
+  .heroline .hl-strong { color:var(--ink); }
+  .factgrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+  .fact { display:flex; gap:13px; align-items:flex-start; padding:15px 17px; }
+  .fact .ic { width:30px; height:30px; border-radius:8px; background:var(--indigo-tint); color:var(--indigo); display:flex; align-items:center; justify-content:center; }
+  .fact .ic svg { width:18px; height:18px; }
+  .fact.contrib .ic { background:var(--indigo); color:#fff; }
+  .fact p { margin:0; font-size:14.2px; line-height:1.5; color:var(--ink2); }
+  .fact b { color:var(--ink); font-weight:700; }
+  .fact.contrib { border-color:#c9c4ee; background:#fbfbfe; }
+
+  /* ============ stat components (motivation) ============ */
+  .twocol { display:grid; grid-template-columns:1fr 1fr; gap:18px; flex:1; min-height:0; }
+  .ptitle2 { font-size:15.5px; font-weight:750; letter-spacing:-.2px; margin:0 0 10px; display:flex; align-items:center; gap:9px; }
+  .ptitle2 .dot { width:9px; height:9px; border-radius:50%; }
+  .hero-stat { display:flex; align-items:baseline; gap:16px; margin:6px 0 10px; }
+  .hero-stat .v { font-size:68px; font-weight:800; letter-spacing:-2px; line-height:1; }
+  .hero-stat .v small { font-size:36px; font-weight:750; letter-spacing:-1px; }
+  .hero-stat p { margin:0; font-size:14.2px; color:var(--ink2); line-height:1.45; max-width:310px; }
+  .statrow { display:flex; gap:14px; align-items:baseline; padding:14.5px 2px; border-top:1px solid var(--hair2); }
+  .statrow .v { flex:none; width:150px; font-size:22px; font-weight:800; letter-spacing:-.6px; text-align:right; }
+  .statrow p { margin:0; font-size:13.6px; color:var(--ink2); line-height:1.45; }
+
+  .dmg-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .dmg-grid3 { display:grid; grid-template-columns:1fr 1.15fr 1fr; gap:14px; margin-top:14px; }
+  .dmg { padding:20px 22px 17px; position:relative; overflow:hidden; }
+  .dmg::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:var(--bad); }
+  .dmg .v { font-size:54px; font-weight:800; letter-spacing:-1.5px; line-height:1.05; }
+  .dmg .v small { font-size:28px; font-weight:750; }
+  .dmg p { margin:9px 0 0; font-size:14px; color:var(--ink2); line-height:1.48; }
+  .dmg .chip { display:inline-block; margin-top:11px; background:var(--red-tint); color:var(--red-dk); font-size:13px; font-weight:700; padding:5px 12px; border-radius:13px; }
+  .dmg.mini { display:flex; gap:16px; align-items:center; }
+  .dmg.mini .txt { min-width:0; }
+
+  /* ============ slide 5 : status ============ */
+  .status-strip { display:flex; align-items:center; gap:18px; margin-bottom:12px; }
+  .bignum { text-align:center; padding:8px 18px 7px; }
+  .bignum .v { font-size:31px; font-weight:800; letter-spacing:-1px; line-height:1; color:var(--ink); }
+  .bignum .l { font-size:10.5px; font-weight:700; letter-spacing:1.2px; color:var(--ink3); text-transform:uppercase; margin-top:4px; }
+  .heropath { display:flex; align-items:center; flex-wrap:wrap; gap:5px; flex:1; }
+  .hp-chip { background:var(--paper2); border:1px solid var(--hair); border-radius:15px; padding:6px 13px; font-size:12.8px; font-weight:600; color:var(--ink2); white-space:nowrap; }
+  .hp-chip.end { background:var(--indigo-tint); border-color:#c9c4ee; color:var(--indigo-dk); }
+  .hp-arr { color:#b3b1aa; flex:none; display:flex; }
+  .hp-arr svg { width:13px; height:13px; }
+  .subsys-label { font-size:12px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink3); margin:2px 0 8px; }
+  .subsys { display:grid; grid-template-columns:1fr 1fr 1fr; gap:11px; }
+  .ss { display:flex; gap:11px; padding:12.5px 14px; align-items:flex-start; }
+  .ss .ic { width:21px; height:21px; border-radius:50%; background:#e8f6e8; color:var(--good); display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .ss .ic svg { width:13px; height:13px; }
+  .ss h4 { margin:0; font-size:14.2px; font-weight:700; line-height:1.25; }
+  .ss p { margin:3px 0 0; font-size:12.5px; color:var(--ink2); line-height:1.4; }
+  .ss.contrib { border:1.5px solid var(--indigo); background:#fbfbfe; position:relative; }
+  .ss.contrib .tag { position:absolute; top:-9px; right:10px; background:var(--indigo); color:#fff; font-size:9.5px; font-weight:700; letter-spacing:.8px; padding:2px 8px; border-radius:9px; text-transform:uppercase; }
+
+  /* ============ slide 6 : problem ============ */
+  .problem-quote { display:flex; gap:16px; padding:21px 24px; background:var(--paper2); border-left:4px solid var(--red); border-radius:0 10px 10px 0; margin-bottom:20px; }
+  .problem-quote p { margin:0; font-size:19px; line-height:1.55; font-weight:600; color:var(--ink); }
+  .problem-quote .q { font-family:Georgia, serif; font-size:44px; line-height:0; color:var(--red); transform:translateY(14px); flex:none; }
+  .solve4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:13px; }
+  .solve { padding:18px 19px; }
+  .solve .n { width:30px; height:30px; border-radius:50%; background:var(--red); color:#fff; font-size:15px; font-weight:750; display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
+  .solve h4 { margin:0 0 7px; font-size:15.4px; font-weight:750; line-height:1.28; }
+  .solve p { margin:0; font-size:13.3px; color:var(--ink2); line-height:1.5; }
+  .oos { display:flex; align-items:center; gap:10px; margin-top:22px; flex-wrap:wrap; }
+  .oos .lbl { font-size:11.5px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--ink3); margin-right:2px; }
+  .oos .x-chip { display:flex; align-items:center; gap:6px; background:#f4f3f0; border:1px solid var(--hair); color:var(--ink3); font-size:12.6px; font-weight:600; padding:6px 13px; border-radius:15px; }
+  .oos .x-chip svg { width:10px; height:10px; }
+
+  /* ============ slide 7 : objectives ============ */
+  .objgrid { display:grid; grid-template-columns:repeat(4, 1fr); grid-auto-rows:1fr; gap:14px; flex:1; }
+  .obj { padding:19px 19px 17px; position:relative; }
+  .obj .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .obj .ic { width:40px; height:40px; border-radius:10px; background:var(--indigo-tint); color:var(--indigo); display:flex; align-items:center; justify-content:center; }
+  .obj .ic svg { width:23px; height:23px; }
+  .obj .num { font-size:29px; font-weight:800; color:#dedcd4; letter-spacing:-1px; line-height:1; }
+  .obj h4 { margin:0 0 8px; font-size:15.8px; font-weight:750; line-height:1.28; }
+  .obj p { margin:0; font-size:13.3px; color:var(--ink2); line-height:1.5; }
+  .obj.contrib { border:1.5px solid var(--indigo); background:#fbfbfe; }
+  .obj.contrib .tag { position:absolute; top:-9px; right:12px; background:var(--indigo); color:#fff; font-size:9.5px; font-weight:700; letter-spacing:.8px; padding:2px 8px; border-radius:9px; text-transform:uppercase; }
+  .obj.contrib .num { color:#c9c4ee; }
+
+  /* ============ literature ============ */
+  .litrow { display:flex; gap:12px; padding:12.5px 2px; border-top:1px solid var(--hair2); align-items:flex-start; }
+  .litrow:first-of-type { border-top:none; }
+  .litrow .who { flex:none; width:172px; font-size:14px; font-weight:750; line-height:1.32; }
+  .litrow .who .ref { vertical-align:baseline; font-size:11.5px; }
+  .litrow p { margin:0; font-size:13.4px; color:var(--ink2); line-height:1.48; }
+  .lit-h { font-size:15.8px; font-weight:750; margin:0 0 8px; letter-spacing:-.2px; }
+  .conseq { display:flex; gap:13px; background:var(--indigo-tint); border:1px solid #d5d1f2; border-radius:10px; padding:14px 17px; align-items:flex-start; }
+  .conseq .ic { width:27px; height:27px; border-radius:7px; background:var(--indigo); color:#fff; display:flex; align-items:center; justify-content:center; flex:none; }
+  .conseq .ic svg { width:16px; height:16px; }
+  .conseq p { margin:0; font-size:13.8px; line-height:1.5; color:#2e2a55; }
+  .conseq b { color:var(--indigo-dk); }
+  .quotebox { border-left:3px solid var(--red); background:var(--paper2); padding:13px 17px; border-radius:0 8px 8px 0; }
+  .quotebox p { margin:0; font-size:14px; line-height:1.55; color:var(--ink2); font-style:italic; }
+  .quotebox .attr { display:block; margin-top:6px; font-size:11.8px; font-style:normal; font-weight:700; color:var(--ink3); }
+
+  .studybanner { display:flex; gap:10px; align-items:center; margin-bottom:13px; flex-wrap:wrap; }
+  .studybanner .name { font-size:15.2px; font-weight:750; }
+  .sb-chip { background:var(--paper2); border:1px solid var(--hair); border-radius:14px; padding:5px 13px; font-size:12.6px; font-weight:650; color:var(--ink2); }
+  .hero99 { display:flex; align-items:baseline; gap:14px; }
+  .hero99 .v { font-size:64px; font-weight:800; letter-spacing:-2px; color:var(--bad); line-height:1; }
+  .hero99 p { margin:0; font-size:14px; color:var(--ink2); line-height:1.48; }
+
+  /* ============ slide 11 : matrix ============ */
+  table.matrix { border-collapse:collapse; width:100%; table-layout:fixed; }
+  .matrix th, .matrix td { border-bottom:1px solid var(--hair2); padding:0 6px; text-align:center; vertical-align:middle; }
+  .matrix thead th { font-size:12.2px; font-weight:750; line-height:1.25; color:var(--ink); padding:8px 6px 9px; border-bottom:2px solid var(--hair); }
+  .matrix thead th .ref { font-size:9.8px; }
+  .matrix tbody th { text-align:left; font-size:13.4px; font-weight:600; color:var(--ink); line-height:1.28; padding:7px 8px 7px 0; }
+  .matrix tbody td { height:41px; }
+  .matrix .note { display:block; font-size:10px; color:var(--ink3); font-weight:600; margin-top:1px; line-height:1.1; }
+  .matrix col.ff { }
+  .matrix .ffcell { background:var(--indigo-tint); }
+  .matrix thead .ffcell { background:var(--indigo); color:#fff; border-radius:8px 8px 0 0; font-size:12.6px; letter-spacing:.3px; }
+  .matrix .ffnote { display:block; font-size:10.2px; font-weight:700; color:var(--indigo-dk); margin-top:1px; line-height:1.1; }
+  .matrix tr.key th { color:var(--ink); font-weight:750; }
+  .matrix tr.key { background:#faf5e8; }
+  .mk { display:inline-flex; }
+  .mk svg { width:15px; height:15px; }
+  .legend { display:flex; gap:20px; align-items:center; margin:10px 0 12px; font-size:12.2px; color:var(--ink2); font-weight:600; }
+  .legend .mk svg { width:13px; height:13px; }
+  .legend span.item { display:flex; align-items:center; gap:6px; }
+  .gapbox { display:flex; gap:14px; align-items:center; background:#17171a; color:#f0eee8; border-radius:10px; padding:13px 20px; }
+  .gapbox p { margin:0; font-size:15.4px; font-weight:600; line-height:1.5; letter-spacing:.1px; }
+  .gapbox b { color:#ffb3b6; }
+  .gapbox .ic { color:#ffb3b6; width:26px; }
+  .gapbox .ic svg { width:26px; height:26px; }
+
+  /* ============ slide 12 : plan ============ */
+  .phasegrid { display:grid; grid-template-columns:repeat(5, 1fr); gap:13px; margin-top:16px; }
+  .phase h4 { margin:0 0 8px; font-size:13.7px; font-weight:750; display:flex; align-items:center; gap:7px; }
+  .phase .sw { width:11px; height:11px; border-radius:3px; flex:none; }
+  .phase ul { margin:0; padding:0 0 0 2px; list-style:none; }
+  .phase li { font-size:12.3px; color:var(--ink2); line-height:1.44; padding:3.5px 0 3.5px 11px; position:relative; }
+  .phase li::before { content:""; position:absolute; left:0; top:9px; width:4px; height:4px; border-radius:50%; background:#c6c3ba; }
+  .phase li b { color:var(--ink); font-weight:700; }
+
+  /* ============ slide 13 : conclusion ============ */
+  .conc { display:flex; flex-direction:column; gap:0; flex:1; justify-content:space-evenly; padding-bottom:14px; }
+  .concrow { display:flex; gap:17px; align-items:flex-start; padding:12px 2px; border-top:1px solid var(--hair2); }
+  .concrow:first-child { border-top:none; }
+  .concrow .ic { width:37px; height:37px; border-radius:9px; flex:none; display:flex; align-items:center; justify-content:center; background:var(--paper2); border:1px solid var(--hair); color:var(--ink2); }
+  .concrow .ic svg { width:20px; height:20px; }
+  .concrow .ic.accent { background:var(--indigo-tint); color:var(--indigo); border-color:#d5d1f2; }
+  .concrow p { margin:4px 0 0; font-size:16px; line-height:1.5; color:var(--ink2); }
+  .concrow b { color:var(--ink); font-weight:700; }
+  .closing { margin-top:auto; background:#17171a; border-radius:12px; padding:18px 26px; display:flex; gap:16px; align-items:center; }
+  .closing .q { font-family:Georgia, serif; font-size:44px; line-height:0; color:#ffb3b6; transform:translateY(13px); flex:none; }
+  .closing p { margin:0; color:#f0eee8; font-size:20px; font-weight:650; line-height:1.45; letter-spacing:.1px; }
+
+  /* ============ slide 14 : references ============ */
+  .refs { column-count:2; column-gap:36px; font-size:10.6px; line-height:1.42; color:var(--ink2); }
+  .refs p { margin:0 0 7.5px; break-inside:avoid; padding-left:26px; text-indent:-26px; }
+  .refs b { color:var(--red); font-weight:750; }
+  .refs i { color:var(--ink2); }
+
+  /* svg text defaults */
+  svg text { font-family:var(--sans); }
+</style>
+</head>
+<body>
+
+<!-- ======================= icon sprite ======================= -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-chevL" viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chevR" viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.8l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-arr" viewBox="0 0 24 24"><path d="M4 12h14.5M13 6.5L18.5 12 13 17.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-design" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2.2"/><path d="M3.5 9.5h17M9.5 9.5v11"/></g></symbol>
+    <symbol id="i-req" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9.5M4 11.5h9.5M4 17h6"/><path d="M14 16.6l2.4 2.4 4.6-5"/></g></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7L4 12l4.5 5"/><path d="M15.5 7L20 12l-4.5 5"/></g></symbol>
+    <symbol id="i-loop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.6 12.2a7.6 7.6 0 1 1-2.2-5.6"/><path d="M19.9 3.6v3.6h-3.6"/><path d="M9 12.4l2.2 2.2 4-4.4"/></g></symbol>
+    <symbol id="i-deploy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.6 18.5H7a4.3 4.3 0 0 1-.6-8.56A5.6 5.6 0 0 1 17.2 8.9a3.9 3.9 0 0 1 .4 9.6z"/><path d="M12 15.8v-5M12 10.8L9.8 13M12 10.8l2.2 2.2"/></g></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11.4" cy="11.2" r="7.6"/><path d="M3.8 11.2h15.2"/><path d="M11.4 3.6c2.2 2 3.3 4.6 3.3 7.6 0 1.6-.3 3.1-.9 4.5M11.4 3.6c-2.2 2-3.3 4.6-3.3 7.6s1.1 5.6 3.3 7.6"/><path d="M14.6 17.8l2 2 3.6-4" stroke-width="2.2"/></g></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4l7 2.7v5.2c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V6.1z"/><path d="M8.8 12l2.2 2.2 4.2-4.7"/></g></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15.5a8 8 0 1 1 16 0"/><path d="M12 15.5l4.2-4.6"/><circle cx="12" cy="15.5" r="1.5" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.6" cy="6" r="2.5"/><circle cx="18.4" cy="6" r="2.5"/><circle cx="12" cy="18.2" r="2.5"/><path d="M8.1 6h7.8M6.8 8.2l3.9 7.7M17.2 8.2l-3.9 7.7"/></g></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5V8h4"/><path d="M9 14.6l2.1 2.1 4-4.4"/></g></symbol>
+    <symbol id="i-img" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="13.5" rx="2"/><circle cx="8.7" cy="9" r="1.5"/><path d="M4.5 15.6l4.4-3.9 3.6 3 2.9-2.4 4.1 3.4"/></g></symbol>
+    <symbol id="i-window" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 8.5h18"/><circle cx="5.9" cy="6.5" r=".95" fill="currentColor" stroke="none"/><circle cx="8.5" cy="6.5" r=".95" fill="currentColor" stroke="none"/><path d="M8.6 14.4l2.4 2.4 4.6-5" stroke-width="2.1"/></g></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 10l3.2 2.6L7 15.2M12.8 15.6H17"/></g></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.4v9.2L12 21l-8-4.4V7.4z"/><path d="M4 7.4l8 4.4 8-4.4M12 11.8V21"/></g></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 20.5h16"/><path d="M7.2 20.5v-6.2M12 20.5V8.8M16.8 20.5V11"/></g></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v13.5M6.5 12.5L12 18l5.5-5.5"/></g></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M4.5 20h15"/><path d="M12 6.5L5.5 9.2c0 2 1.3 3.4 3.2 3.4S12 11.2 12 9.2M12 6.5l6.5 2.7c0 2-1.3 3.4-3.2 3.4S12 11.2 12 9.2"/></g></symbol>
+    <symbol id="i-half" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></symbol>
+  </defs>
+</svg>
+
+<div id="deck">
+
+<!-- ================================================================ SLIDE 1 : TITLE -->
+<section class="slide s-title">
+  <div class="tborder">
+    <img id="sitlogo" alt="Symbiosis Institute of Technology, Pune">
+    <h1 class="inst">SYMBIOSIS INSTITUTE OF TECHNOLOGY, PUNE</h1>
+    <p class="btp">B-Tech Project</p>
+    <p class="ptitle">ForgeFlow: An AI-Native End-to-End Software Development<br>Lifecycle Automation Platform</p>
+    <p class="grp">Group Number: Group &ndash; 04</p>
+    <p class="names">Raghav Sonchhatra &ndash; PRN 23070122172<br>Sanidhya Awasthi &ndash; PRN 23070122192<br>Faheemuddin Sayyed &ndash; PRN 23070122196</p>
+    <div class="guide">Guided By:<br>Dr. Payal Kadam<br>Professor<br>Computer Science</div>
+    <div class="tfoot">Department of Computer Engineering | Academic Year 2025&ndash;26</div>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 2 : INTRODUCTION -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Introduction</div>
+      <h2>ForgeFlow — An AI-Native, Human-in-the-Loop Platform for the Automated Web SDLC</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="heroline">
+      <span class="hl-strong">Screenshots or a spec in</span>
+      <span class="ic" style="color:#C11B24"><svg width="20" height="20"><use href="#i-arr"/></svg></span>
+      <span class="hl-strong">a tested, deployed website out.</span>
+    </div>
+
+    <!-- pipeline infographic -->
+    <svg viewBox="0 0 1180 200" style="width:100%; height:196px; flex:none" role="img" aria-label="ForgeFlow six-stage pipeline">
+      <defs>
+        <marker id="ahg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a877f"/></marker>
+        <marker id="ahi" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4338CA"/></marker>
+      </defs>
+      <!-- human-control rail -->
+      <text x="560" y="12" text-anchor="middle" font-size="11" font-weight="650" fill="#898781" letter-spacing=".6">HUMAN CONTROL — ENTER, REFINE, SKIP OR REVISIT ANY STAGE</text>
+      <line x1="240" y1="22" x2="880" y2="22" stroke="#c6c3ba" stroke-width="1.2" stroke-dasharray="4 4"/>
+      <g stroke="#c6c3ba" stroke-width="1.2" stroke-dasharray="3 3">
+        <line x1="240" y1="22" x2="240" y2="44"/><line x1="368" y1="22" x2="368" y2="44"/><line x1="496" y1="22" x2="496" y2="44"/>
+        <line x1="624" y1="22" x2="624" y2="44"/><line x1="752" y1="22" x2="752" y2="44"/><line x1="880" y1="22" x2="880" y2="44"/>
+      </g>
+      <!-- input node -->
+      <rect x="2" y="50" width="148" height="60" rx="10" fill="#faf9f7" stroke="#e3e1da"/>
+      <g transform="translate(14,68)" color="#52514e"><svg width="24" height="24"><use href="#i-img"/></svg></g>
+      <text x="46" y="76" font-size="12.5" font-weight="700" fill="#1a1a1a">Screenshots</text>
+      <text x="46" y="92" font-size="11.5" fill="#52514e">or structured spec</text>
+      <line x1="152" y1="80" x2="204" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+      <!-- stage circles -->
+      <g font-size="12.5" font-weight="700" fill="#1a1a1a" text-anchor="middle">
+        <g><circle cx="240" cy="80" r="26" fill="#fff" stroke="#4338CA" stroke-width="2"/><g transform="translate(229,69)" color="#4338CA"><svg width="22" height="22"><use href="#i-design"/></svg></g><text x="240" y="128">Design</text></g>
+        <line x1="272" y1="80" x2="330" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <g><circle cx="368" cy="80" r="26" fill="#fff" stroke="#4338CA" stroke-width="2"/><g transform="translate(357,69)" color="#4338CA"><svg width="22" height="22"><use href="#i-req"/></svg></g><text x="368" y="128">Requirements</text></g>
+        <line x1="400" y1="80" x2="458" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <g><circle cx="496" cy="80" r="26" fill="#fff" stroke="#4338CA" stroke-width="2"/><g transform="translate(485,69)" color="#4338CA"><svg width="22" height="22"><use href="#i-code"/></svg></g><text x="496" y="128">Build</text></g>
+        <line x1="528" y1="80" x2="586" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <g><circle cx="624" cy="80" r="26" fill="#4338CA" stroke="#4338CA" stroke-width="2"/><g transform="translate(613,69)" color="#ffffff"><svg width="22" height="22"><use href="#i-loop"/></svg></g><text x="624" y="128">Test &amp; Self-Heal</text></g>
+        <line x1="656" y1="80" x2="714" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <g><circle cx="752" cy="80" r="26" fill="#fff" stroke="#4338CA" stroke-width="2"/><g transform="translate(741,69)" color="#4338CA"><svg width="22" height="22"><use href="#i-deploy"/></svg></g><text x="752" y="128">Deploy</text></g>
+        <line x1="784" y1="80" x2="842" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <g><circle cx="880" cy="80" r="26" fill="#fff" stroke="#4338CA" stroke-width="2"/><g transform="translate(869,69)" color="#4338CA"><svg width="22" height="22"><use href="#i-globe"/></svg></g><text x="880" y="128">Validate live</text></g>
+      </g>
+      <!-- repair loop arc -->
+      <path d="M610 108 C 596 172, 524 172, 510 108" fill="none" stroke="#4338CA" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ahi)"/>
+      <text x="560" y="184" text-anchor="middle" font-size="11.4" font-weight="700" fill="#4338CA">bounded · diff-aware repair</text>
+      <!-- validate loop arc -->
+      <path d="M866 108 C 852 172, 780 172, 766 108" fill="none" stroke="#4338CA" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ahi)"/>
+      <text x="816" y="184" text-anchor="middle" font-size="11.4" font-weight="700" fill="#4338CA">repair · redeploy</text>
+      <!-- output node -->
+      <line x1="912" y1="80" x2="944" y2="80" stroke="#8a877f" stroke-width="1.6" marker-end="url(#ahg)"/>
+      <rect x="950" y="50" width="228" height="60" rx="10" fill="#eef0fb" stroke="#c9c4ee"/>
+      <g transform="translate(964,68)" color="#332a99"><svg width="24" height="24"><use href="#i-window"/></svg></g>
+      <text x="998" y="76" font-size="12.5" font-weight="700" fill="#332a99">Live, validated URL</text>
+      <text x="998" y="92" font-size="11.5" fill="#4b459c">E2E-proven after deployment</text>
+    </svg>
+
+    <div class="factgrid">
+      <div class="fact card"><span class="ic"><svg><use href="#i-term"/></svg></span><p><b>PWA with an embedded browser IDE</b> — Monaco editor and terminal built in; generated code stays visible and editable, not a black box.</p></div>
+      <div class="fact card"><span class="ic"><svg><use href="#i-flow"/></svg></span><p><b>No stage is mandatory.</b> Enter anywhere, refine anything, skip anything, jump back at will — non-linearity is an invariant of the design.</p></div>
+      <div class="fact card contrib"><span class="ic"><svg><use href="#i-loop"/></svg></span><p><b>Core technical contribution:</b> a bounded, diff-aware self-healing repair loop — verification that terminates instead of thrashing.</p></div>
+      <div class="fact card"><span class="ic"><svg><use href="#i-box"/></svg></span><p><b>Fixed generated stack</b> — React + Express + MongoDB — gives higher first-pass success and makes rigorous verification tractable.</p></div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>Existing tools generate apps. ForgeFlow generates apps it can <em>prove</em> work — and then proves it again on the live URL.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>02 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 3 : MOTIVATION 1/2 -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Motivation (1/2)</div>
+      <h2>The Adoption–Trust Gap Is Now the Central Problem in AI Software Engineering</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="twocol">
+      <div class="panel" style="padding:16px 20px 10px">
+        <p class="ptitle2"><span class="dot" style="background:#0ca30c"></span>Adoption is effectively universal</p>
+        <div class="hero-stat">
+          <span class="v">84<small>%</small></span>
+          <p>of developers already use — or plan to use — AI coding tools <span class="ref">[1]</span></p>
+        </div>
+        <div class="statrow"><span class="v">41–46%</span><p>of all new code is now AI-generated; Gartner projects <b>60% by end-2026</b> <span class="ref">[6]</span></p></div>
+        <div class="statrow"><span class="v" style="font-size:17.5px; line-height:1.3">$4.7B &rarr; $12.3B</span><p>prompt-to-app market, 2026 &rarr; 2027 (&approx;38% CAGR) <span class="ref">[6]</span></p></div>
+        <div class="statrow"><span class="v">63%</span><p>of prompt-to-app users are <b>non-developers</b> — no ability to debug what is generated <span class="ref">[6]</span></p></div>
+      </div>
+
+      <div class="panel" style="padding:16px 20px 10px">
+        <p class="ptitle2"><span class="dot" style="background:#d03b3b"></span>Trust has collapsed in the same window</p>
+        <svg viewBox="0 0 470 168" style="width:100%; height:172px" role="img" aria-label="Trust in AI output accuracy fell from 43 percent to 29 percent in one year">
+          <g stroke="#e3e1da" stroke-width="1"><line x1="60" y1="34" x2="440" y2="34"/><line x1="60" y1="76" x2="440" y2="76"/><line x1="60" y1="118" x2="440" y2="118"/></g>
+          <g font-size="10" fill="#898781" text-anchor="end"><text x="52" y="38">50%</text><text x="52" y="80">40%</text><text x="52" y="122">30%</text></g>
+          <text x="60" y="16" font-size="11.5" font-weight="650" fill="#52514e">Trust in AI output accuracy <tspan fill="#C11B24" font-weight="750">[1]</tspan></text>
+          <line x1="120" y1="63.4" x2="390" y2="122.2" stroke="#d03b3b" stroke-width="2"/>
+          <circle cx="120" cy="63.4" r="5" fill="#d03b3b" stroke="#fff" stroke-width="2"/>
+          <circle cx="390" cy="122.2" r="5" fill="#d03b3b" stroke="#fff" stroke-width="2"/>
+          <text x="120" y="50" text-anchor="middle" font-size="14.5" font-weight="800" fill="#1a1a1a">43%</text>
+          <text x="390" y="147" text-anchor="middle" font-size="14.5" font-weight="800" fill="#1a1a1a">29%</text>
+          <text x="255" y="79" text-anchor="middle" font-size="11.5" font-weight="750" fill="#d03b3b">&minus;14 pts in one year</text>
+          <g font-size="10.5" fill="#898781" text-anchor="middle"><text x="120" y="163">2024</text><text x="390" y="163">2025</text></g>
+        </svg>
+        <div class="statrow"><span class="v">46%</span><p><b>actively distrust</b> the accuracy of AI output <span class="ref">[1]</span></p></div>
+        <div class="statrow"><span class="v">66%</span><p>cite &ldquo;almost right, but not quite&rdquo; as their single biggest frustration <span class="ref">[1]</span></p></div>
+        <div class="statrow"><span class="v">45%</span><p>say debugging AI-generated code takes <b>longer than writing it themselves</b> <span class="ref">[1]</span></p></div>
+      </div>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>03 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 4 : MOTIVATION 2/2 -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Motivation (2/2)</div>
+      <h2>And the Damage Is Measurable — Failures Survive QA and Reach Production</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="dmg-grid">
+      <div class="dmg card">
+        <span class="v">43<small>%</small></span>
+        <p>of AI-generated changes still need manual debugging <b>in production — after passing QA and staging</b> <span class="ref">[2]</span></p>
+      </div>
+      <div class="dmg card">
+        <span class="v">0<small>%</small></span>
+        <p>of surveyed engineering leaders were &ldquo;very confident&rdquo; AI fixes behave correctly once deployed <span class="ref">[2]</span></p>
+        <span class="chip">88% needed 2–3 redeploy cycles per fix</span>
+      </div>
+    </div>
+
+    <div class="dmg-grid3">
+      <div class="dmg card mini">
+        <svg viewBox="0 0 120 108" style="width:104px; height:96px; flex:none" role="img" aria-label="Code duplication rose from 8.3 to 12.3 percent">
+          <line x1="6" y1="88" x2="114" y2="88" stroke="#c3c2b7" stroke-width="1"/>
+          <rect x="18" y="41.3" width="24" height="46.7" rx="0" fill="#86b6ef"/><rect x="18" y="41.3" width="24" height="4" rx="2" fill="#86b6ef"/>
+          <rect x="72" y="18" width="24" height="70" fill="#d03b3b"/><rect x="72" y="18" width="24" height="4" rx="2" fill="#d03b3b"/>
+          <text x="30" y="34" text-anchor="middle" font-size="12" font-weight="750" fill="#1a1a1a">8.3%</text>
+          <text x="84" y="11" text-anchor="middle" font-size="12" font-weight="750" fill="#1a1a1a">12.3%</text>
+          <text x="30" y="102" text-anchor="middle" font-size="9.5" fill="#898781">baseline</text>
+          <text x="84" y="102" text-anchor="middle" font-size="9.5" fill="#898781">with AI</text>
+        </svg>
+        <div class="txt"><p style="margin-top:0"><b style="color:var(--ink)">Code duplication rose 8.3% &rarr; 12.3%</b> across 211M lines analysed <span class="ref">[3]</span></p></div>
+      </div>
+      <div class="dmg card">
+        <span class="v">1.7&times;</span>
+        <p>more issues in AI-generated code than in human-written code <span class="ref">[5]</span> — and <b>45% of AI-generated code carries a security flaw</b> <span class="ref">[4]</span></p>
+      </div>
+      <div class="dmg card">
+        <span class="v">2,500<small>%</small></span>
+        <p>Gartner-projected <b>increase in software defects by 2028</b> from citizen-developer prompt-to-app without quality controls <span class="ref">[6]</span></p>
+      </div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>Generation is solved. <b>Verification is not.</b> That gap is exactly where we built.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>04 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 5 : STATUS -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Status of Current Work</div>
+      <h2>First Working Prototype — Complete End-to-End Pipeline Implemented</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="status-strip">
+      <div class="bignum card"><div class="v">50</div><div class="l">Planned phases</div></div>
+      <div class="bignum card"><div class="v">11</div><div class="l">Epics</div></div>
+      <p style="margin:0; font-size:15px; color:var(--ink2); line-height:1.5"><b style="color:var(--ink)">The first prototype is implemented and functional, built agentically.</b><br>The hero path runs end to end:</p>
+    </div>
+    <div class="heropath" style="margin:2px 0 16px">
+      <span class="hp-chip">Upload screenshots</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip">Refine design</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip">Generate app</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip">Generate &amp; run tests</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip">Self-heal failures</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip">Deploy</span><span class="hp-arr"><svg><use href="#i-arr"/></svg></span>
+      <span class="hp-chip end">Validate live URL</span>
+    </div>
+
+    <div class="subsys-label">Shipped subsystems</div>
+    <div class="subsys">
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Control plane</h4><p>FastAPI orchestrator, non-linear stage machine, conductor</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>PWA frontend</h4><p>Workspace, stage navigator, conversational refinement</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Web IDE</h4><p>Monaco editor, xterm.js terminal, live code streaming</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Execution</h4><p>Isolated per-project Docker sandboxes, live preview</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Design stage</h4><p>Pluggable provider — Stitch MCP default, Figma alternative</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Build stage</h4><p>Agentic codegen on the fixed React / Express / MongoDB stack</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Requirements &rarr; tests</h4><p>Structured guided capture &rarr; unit + Playwright E2E suites</p></div></div>
+      <div class="ss card contrib"><span class="tag">Core contribution</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Self-healing repair loop</h4><p>Diff-aware, bounded, escalating to a human on stall</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Deploy</h4><p>Infra analyzer + dual-mode (managed / BYO) — Vercel + Render</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Live validation</h4><p>E2E re-run against the deployed URL + repair path</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Data</h4><p>Per-project database isolation + in-app CRUD browser</p></div></div>
+      <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Evaluation harness</h4><p>Headless pipeline runner + metrics collection</p></div></div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>This is not a mock-up. It is a working system — the review ahead is about hardening it, not building it.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>05 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 6 : PROBLEM & SCOPE -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Refined Problem Statement &amp; Scope</div>
+      <h2>Builders Can Generate and Deploy — They Cannot Reliably Verify</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="problem-quote">
+      <span class="q">&ldquo;</span>
+      <p>Current AI app-builders can generate and deploy web applications but cannot <em>reliably verify</em> them — leaving users in unbounded, costly bug-fix loops, with no validation of the live deployment and no beginner-safe path through cloud infrastructure.</p>
+    </div>
+
+    <div class="solve4">
+      <div class="solve card"><div class="n">1</div><h4>Verification, not just generation</h4><p>Requirements compile into executable tests; failures drive a <b style="color:var(--ink)">bounded</b> repair loop.</p></div>
+      <div class="solve card"><div class="n">2</div><h4>Post-deployment truth</h4><p>The same tests re-run against the live URL — passing locally is not evidence.</p></div>
+      <div class="solve card"><div class="n">3</div><h4>Infra-aware, dual-mode deploy</h4><p>The system classifies what the app needs, then deploys managed <b style="color:var(--ink)">or</b> BYO-credentials.</p></div>
+      <div class="solve card"><div class="n">4</div><h4>Non-linear human control</h4><p>Every stage optional, refinable and re-enterable — the human stays in charge.</p></div>
+    </div>
+
+    <div class="oos">
+      <span class="lbl">Out of scope (v1)</span>
+      <span class="x-chip"><svg><use href="#i-x"/></svg>Mobile / native / desktop</span>
+      <span class="x-chip"><svg><use href="#i-x"/></svg>Multiple stacks</span>
+      <span class="x-chip"><svg><use href="#i-x"/></svg>Team collaboration</span>
+      <span class="x-chip"><svg><use href="#i-x"/></svg>Payments in generated apps</span>
+      <span class="x-chip"><svg><use href="#i-x"/></svg>Enterprise SSO / compliance</span>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>We deliberately narrowed to the web and one fixed stack — that constraint is what makes rigorous verification achievable.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>06 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 7 : OBJECTIVES -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Objectives of Study</div>
+      <h2>Eight Objectives, One Thesis — Verified, Deployed, Human-Controlled Delivery</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="objgrid">
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-flow"/></svg></span><span class="num">01</span></div><h4>Non-linear orchestration</h4><p>A human-in-the-loop model where no SDLC stage is mandatory and every artifact is versioned and re-enterable.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-code"/></svg></span><span class="num">02</span></div><h4>Agentic generation</h4><p>Screenshots, prompts or user-supplied designs &rarr; a working full-stack web application.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-doc"/></svg></span><span class="num">03</span></div><h4>Requirements &rarr; tests</h4><p>Structured capture that compiles deterministically into unit and E2E suites traceable to acceptance criteria.</p></div>
+      <div class="obj card contrib"><span class="tag">Core</span><div class="top"><span class="ic" style="background:var(--indigo); color:#fff"><svg><use href="#i-loop"/></svg></span><span class="num">04</span></div><h4>Bounded self-healing repair</h4><p>Diff-aware patches with retry caps, no-progress detection and human escalation — developed <b>and validated</b>.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-deploy"/></svg></span><span class="num">05</span></div><h4>Infrastructure reasoning</h4><p>Classify per-project deployment needs; execute dual-mode deployment with a live component topology.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-globe"/></svg></span><span class="num">06</span></div><h4>Post-deployment closure</h4><p>Validate the live URL after every deploy; repair and redeploy on failure.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-chart"/></svg></span><span class="num">07</span></div><h4>Quantitative evaluation</h4><p>First-pass vs post-repair success, repair convergence, cost and latency on a reproducible benchmark.</p></div>
+      <div class="obj card"><div class="top"><span class="ic"><svg><use href="#i-shield"/></svg></span><span class="num">08</span></div><h4>Isolation &amp; safety</h4><p>Per-project sandboxes and databases; untrusted generated code never executes in the control plane.</p></div>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>07 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 8 : LITERATURE 1/3 -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Updated Literature Survey (1/3)</div>
+      <h2>Agentic Code Generation Is Mature — and Converging</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div style="display:grid; grid-template-columns:1.18fr 1fr; gap:22px; flex:1; min-height:0">
+      <div>
+        <p class="lit-h">Multi-agent SDLC automation</p>
+        <div class="litrow"><span class="who">ChatDev <span class="ref">[8]</span></span><p>Models a virtual software company — designer / coder / tester roles across a waterfall lifecycle.</p></div>
+        <div class="litrow"><span class="who">MetaGPT <span class="ref">[9]</span></span><p>Encodes human SOPs into agent roles; reports 100% task completion and +5.4% absolute on MBPP via executive feedback.</p></div>
+        <div class="litrow"><span class="who">AgentCoder <span class="ref">[10]</span></span><p><b style="color:var(--ink)">Fewer, better agents win:</b> 91.5% pass@1 (GPT-4) vs 86.8% SOTA — at roughly a third of the token cost.</p></div>
+        <div class="litrow"><span class="who">SWE-agent / OpenHands <span class="ref">[11][12]</span></span><p>Establish the agent–computer interface: shell, file and test-runner access as first-class tools.</p></div>
+        <div class="litrow"><span class="who">MAGIS <span class="ref">[13]</span></span><p>Targets repository-level issue resolution rather than greenfield generation.</p></div>
+        <div class="conseq" style="margin-top:12px"><span class="ic"><svg><use href="#i-img"/></svg></span><p><b>Design2Code <span style="color:var(--indigo-dk)">[21]</span></b> (484 real webpages): multimodal models still lag on visual element recall and layout fidelity — validating our choice to keep design a <b>pluggable, human-refinable</b> stage, not a one-shot conversion.</p></div>
+      </div>
+
+      <div>
+        <svg viewBox="0 0 520 190" style="width:100%; height:186px" role="img" aria-label="Token overhead per task: AgentCoder 56.9K, MetaGPT 138.2K, ChatDev 183.7K">
+          <text x="0" y="14" font-size="12.5" font-weight="700" fill="#1a1a1a">Token overhead per task <tspan font-weight="600" fill="#898781">(thousands)</tspan> <tspan fill="#C11B24" font-size="10.5" font-weight="750">[10]</tspan></text>
+          <g stroke="#e3e1da" stroke-width="1"><line x1="112" y1="26" x2="112" y2="158"/><line x1="215" y1="26" x2="215" y2="158"/><line x1="319" y1="26" x2="319" y2="158"/><line x1="422" y1="26" x2="422" y2="158"/></g>
+          <g font-size="10" fill="#898781" text-anchor="middle"><text x="112" y="172">0</text><text x="215" y="172">50K</text><text x="319" y="172">100K</text><text x="422" y="172">150K</text></g>
+          <g font-size="12" fill="#1a1a1a" text-anchor="end">
+            <text x="104" y="52" font-weight="750">AgentCoder</text>
+            <text x="104" y="96" font-weight="600">MetaGPT</text>
+            <text x="104" y="140" font-weight="600">ChatDev</text>
+          </g>
+          <rect x="112" y="38" width="117.7" height="21" fill="#1c5cab"/><rect x="225.7" y="38" width="4" height="21" rx="2" fill="#1c5cab"/>
+          <rect x="112" y="82" width="285.9" height="21" fill="#86b6ef"/><rect x="393.9" y="82" width="4" height="21" rx="2" fill="#86b6ef"/>
+          <rect x="112" y="126" width="380" height="21" fill="#86b6ef"/><rect x="488" y="126" width="4" height="21" rx="2" fill="#86b6ef"/>
+          <text x="238" y="53" font-size="12" font-weight="800" fill="#1a1a1a">56.9K</text>
+          <text x="406" y="97" font-size="12" font-weight="650" fill="#1a1a1a">138.2K</text>
+          <text x="447" y="128" font-size="12" font-weight="650" fill="#1a1a1a" transform="translate(0,13)">183.7K</text>
+          <line x1="112" y1="26" x2="112" y2="158" stroke="#c3c2b7" stroke-width="1"/>
+        </svg>
+
+        <svg viewBox="0 0 520 148" style="width:100%; height:142px; margin-top:12px" role="img" aria-label="HumanEval above 90 percent versus SWE-bench Verified 80.8 percent">
+          <text x="0" y="14" font-size="12.5" font-weight="700" fill="#1a1a1a">Benchmark performance &ne; real-world reliability</text>
+          <g font-size="11.4" fill="#1a1a1a" text-anchor="end">
+            <text x="148" y="46" font-weight="600">HumanEval <tspan font-size="9.5" fill="#C11B24" font-weight="750">[23]</tspan></text>
+            <text x="148" y="88" font-weight="600">SWE-bench Verified <tspan font-size="9.5" fill="#C11B24" font-weight="750">[7][23]</tspan></text>
+          </g>
+          <g stroke="#e3e1da" stroke-width="1"><line x1="156" y1="24" x2="156" y2="102"/><line x1="331" y1="24" x2="331" y2="102"/><line x1="506" y1="24" x2="506" y2="102"/></g>
+          <rect x="156" y="32" width="315" height="19" fill="#2a78d6"/><rect x="467" y="32" width="4" height="19" rx="2" fill="#2a78d6"/>
+          <rect x="156" y="74" width="282.8" height="19" fill="#2a78d6"/><rect x="434.8" y="74" width="4" height="19" rx="2" fill="#2a78d6"/>
+          <text x="428" y="46" font-size="11.5" font-weight="800" fill="#ffffff" text-anchor="end">&gt;90%</text>
+          <text x="446" y="88" font-size="11.5" font-weight="800" fill="#1a1a1a">80.8%</text>
+          <g font-size="9.5" fill="#898781" text-anchor="middle"><text x="156" y="114">0</text><text x="331" y="114">50%</text><text x="506" y="114">100%</text></g>
+          <text x="0" y="128" font-size="11.2" fill="#52514e">Function-level puzzles are saturated; realistic repo-level tasks are not.</text>
+          <text x="0" y="143" font-size="11.2" font-weight="700" fill="#1a1a1a">That gap is where products fail.</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>The field converged on multi-agent generation. Nobody converged on knowing when to <b>stop fixing</b>.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>08 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 9 : LITERATURE 2/3 -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Updated Literature Survey (2/3)</div>
+      <h2>Self-Repair Is Not a Silver Bullet — and Humans Stay in the Loop</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:26px; flex:1; min-height:0; align-content:center">
+      <div>
+        <p class="lit-h">Self-repair is not free</p>
+        <div class="quotebox">
+          <p>Once repair cost is accounted for, gains are &ldquo;often modest, vary a lot &hellip; and are sometimes not present at all&rdquo; — self-repair is <b style="font-style:normal">bottlenecked by the model&rsquo;s own feedback quality</b>.</p>
+          <span class="attr">Olausson et al., ICLR 2024 <span class="ref" style="vertical-align:baseline">[14]</span></span>
+        </div>
+        <div class="litrow" style="margin-top:10px"><span class="who">Human gap <span class="ref">[14]</span></span><p>Even for the strongest models, self-repair lags far behind human-level debugging.</p></div>
+        <div class="litrow"><span class="who">Self-Debugging <span class="ref">[15]</span></span><p>Improves outcomes, but depends critically on the quality of execution feedback.</p></div>
+        <div class="conseq" style="margin-top:12px">
+          <span class="ic"><svg><use href="#i-loop"/></svg></span>
+          <p><b>Direct design consequence:</b> an unbounded repair loop is a cost sink, not a feature. ForgeFlow&rsquo;s retry caps, no-progress detection and escalation are a <b>response to this literature</b> — not an arbitrary limit.</p>
+        </div>
+      </div>
+      <div>
+        <p class="lit-h">Human-in-the-loop is the deployed industrial pattern</p>
+        <div class="litrow"><span class="who">HULA <span class="ref">[16]</span></span><p>Deployed inside Atlassian Jira — engineers keep control of planning and code at every step.</p></div>
+        <div class="litrow"><span class="who">HULA follow-up <span class="ref">[17]</span></span><p>Flags the two open challenges: the <b style="color:var(--ink)">high cost of correctness testing</b> and the variability of LLM-based evaluation.</p></div>
+        <p class="lit-h" style="margin-top:14px">Test generation at scale — proven, but narrow</p>
+        <div class="litrow"><span class="who">Schäfer et al. <span class="ref">[18]</span></span><p>IEEE TSE empirical evaluation of LLM-based automated unit-test generation.</p></div>
+        <div class="litrow"><span class="who">Meta (FSE) <span class="ref">[19]</span></span><p>Industrial deployment of automated unit-test improvement at scale.</p></div>
+        <div class="litrow"><span class="who">ICSE 2026 <span class="ref">[22]</span></span><p>Program-analysis-guided iterative test generation — hybrid static/LLM pipelines.</p></div>
+      </div>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>09 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 10 : LITERATURE 2/3 CONTD -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Updated Literature Survey (2/3 — contd.)</div>
+      <h2>The Strongest 2026 Evidence: LLM Tests Degrade Exactly When Code Changes</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="studybanner">
+      <span class="name">Haroon, Khan &amp; Gulzar — arXiv, Mar 2026 <span class="ref">[20]</span></span>
+      <span class="sb-chip">8 LLMs</span><span class="sb-chip">22,374 program variants</span><span class="sb-chip">&approx;346M tokens</span>
+      <span class="sb-chip">baseline: 79.3% line / 76.1% branch coverage, fully passing suites</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1.08fr 1fr; gap:22px; flex:1; min-height:0">
+      <div>
+        <svg viewBox="0 0 560 208" style="width:100%; height:200px" role="img" aria-label="After semantic-altering edits, pass rate falls from fully passing to 66.5 percent and branch coverage from 76.1 to 60.6 percent">
+          <g font-size="11.5" font-weight="650">
+            <rect x="308" y="4" width="11" height="11" rx="2" fill="#2a78d6"/><text x="324" y="14" fill="#52514e">baseline suite</text>
+            <rect x="424" y="4" width="11" height="11" rx="2" fill="#d03b3b"/><text x="440" y="14" fill="#52514e">after edit</text>
+          </g>
+          <g stroke="#e3e1da" stroke-width="1"><line x1="150" y1="24" x2="150" y2="176"/><line x1="245" y1="24" x2="245" y2="176"/><line x1="340" y1="24" x2="340" y2="176"/><line x1="435" y1="24" x2="435" y2="176"/><line x1="530" y1="24" x2="530" y2="176"/></g>
+          <text x="142" y="46" font-size="12" font-weight="700" fill="#1a1a1a" text-anchor="end">Test-suite</text>
+          <text x="142" y="60" font-size="11" fill="#52514e" text-anchor="end">pass rate</text>
+          <rect x="150" y="34" width="380" height="18" fill="#2a78d6"/><rect x="526" y="34" width="4" height="18" rx="2" fill="#2a78d6"/>
+          <text x="522" y="47" font-size="11" font-weight="750" fill="#fff" text-anchor="end">fully passing</text>
+          <rect x="150" y="56" width="252.7" height="18" fill="#d03b3b"/><rect x="398.7" y="56" width="4" height="18" rx="2" fill="#d03b3b"/>
+          <text x="410" y="70" font-size="12" font-weight="800" fill="#1a1a1a">66.5%</text>
+          <text x="142" y="116" font-size="12" font-weight="700" fill="#1a1a1a" text-anchor="end">Branch</text>
+          <text x="142" y="130" font-size="11" fill="#52514e" text-anchor="end">coverage</text>
+          <rect x="150" y="104" width="289.2" height="18" fill="#2a78d6"/><rect x="435.2" y="104" width="4" height="18" rx="2" fill="#2a78d6"/>
+          <text x="447" y="118" font-size="12" font-weight="650" fill="#1a1a1a">76.1%</text>
+          <rect x="150" y="126" width="230.3" height="18" fill="#d03b3b"/><rect x="376.3" y="126" width="4" height="18" rx="2" fill="#d03b3b"/>
+          <text x="388" y="140" font-size="12" font-weight="800" fill="#1a1a1a">60.6%</text>
+          <g font-size="9.5" fill="#898781" text-anchor="middle"><text x="150" y="190">0</text><text x="245" y="190">25%</text><text x="340" y="190">50%</text><text x="435" y="190">75%</text><text x="530" y="190">100%</text></g>
+          <text x="150" y="206" font-size="10.8" fill="#52514e">After <tspan font-weight="700" fill="#1a1a1a">semantic-altering</tspan> changes to the program under test <tspan fill="#C11B24" font-weight="700" font-size="9.5">[20]</tspan></text>
+        </svg>
+        <div class="quotebox" style="margin-top:8px">
+          <p>Even <b style="font-style:normal">semantic-preserving</b> refactors drop the pass rate to 78.9%; test-suite match rate falls to 18.1% — models discard higher-coverage tests for weaker ones.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div class="hero99">
+          <span class="v">&gt;99%</span>
+          <p>of the failing tests <b style="color:var(--ink)">pass on the original program</b> — &ldquo;residual alignment&rdquo;: the model tests the code it <em>remembers</em>, not the code it was <em>given</em>.</p>
+        </div>
+        <div class="quotebox">
+          <p>&ldquo;Computing a code diff and explicitly highlighting the modified regions could help guide the model&rsquo;s attention.&rdquo;</p>
+          <span class="attr">— the authors&rsquo; recommended fix <span class="ref" style="vertical-align:baseline">[20]</span></span>
+        </div>
+        <div style="display:flex; justify-content:center; color:#b3b1aa"><svg width="20" height="20"><use href="#i-down"/></svg></div>
+        <div class="conseq">
+          <span class="ic"><svg><use href="#i-loop"/></svg></span>
+          <p>This is <b>precisely ForgeFlow&rsquo;s diff-aware minimal repair context</b> — designed and built in Phase 29, independently corroborated by this study.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>A March-2026 study, independently, tells you to do <b>the exact thing we built</b>.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>10 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 11 : LITERATURE 3/3 MATRIX -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Updated Literature Survey (3/3) — Research Gap</div>
+      <h2>No Existing System Verifies, Deploys, Validates Live — and Stops</h2>
+      <div class="rule"></div>
+    </header>
+
+    <table class="matrix">
+      <colgroup><col style="width:29%"><col style="width:13.5%"><col style="width:12.5%"><col style="width:15%"><col style="width:15.5%"><col class="ff" style="width:14.5%"></colgroup>
+      <thead>
+        <tr>
+          <th></th>
+          <th>ChatDev / MetaGPT <span class="ref">[8][9]</span></th>
+          <th>AgentCoder <span class="ref">[10]</span></th>
+          <th>SWE-agent / OpenHands <span class="ref">[11][12]</span></th>
+          <th>Lovable / Bolt / Replit <span style="font-weight:600; color:#898781">(industry)</span></th>
+          <th class="ffcell">ForgeFlow</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th>Multimodal design intake (screenshot &rarr; UI)</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span><span class="ffnote">pluggable</span></td></tr>
+        <tr><th>Full-stack app generation</th>
+          <td><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span><span class="note">function-level</span></td><td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span><span class="note">repo-level fixes</span></td><td><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+        <tr><th>Requirements &rarr; executable tests (traceable)</th>
+          <td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span></td><td><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span><span class="ffnote">structured</span></td></tr>
+        <tr class="key"><th>Bounded repair — retry caps + stall detection</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+        <tr class="key"><th>Diff-aware minimal repair context</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+        <tr><th>Human escalation on non-convergence</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+        <tr><th>Automated cloud deployment</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span><span class="note">locked-in</span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span><span class="ffnote">dual-mode</span></td></tr>
+        <tr class="key"><th>Post-deployment live validation</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+        <tr><th>Non-linear, skip-any-stage control</th>
+          <td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span></td><td><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span></td>
+          <td class="ffcell"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="legend">
+      <span class="item"><span class="mk" style="color:#0ca30c"><svg><use href="#i-check"/></svg></span>supported</span>
+      <span class="item"><span class="mk" style="color:#b45309"><svg><use href="#i-half"/></svg></span>partial</span>
+      <span class="item"><span class="mk" style="color:#b3b1aa"><svg><use href="#i-x"/></svg></span>absent</span>
+      <span style="color:#898781">— highlighted rows: where the whole field says no</span>
+    </div>
+
+    <div class="gapbox">
+      <span class="ic"><svg><use href="#i-scale"/></svg></span>
+      <p>Research systems verify but do not deploy. Industry systems deploy but do not verify. <b>Neither validates the live artifact — and none bound the repair loop.</b></p>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>11 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 12 : PLAN -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Plan of Next Work</div>
+      <h2>Sixteen Weeks — Prove It, Break It, Harden It</h2>
+      <div class="rule"></div>
+    </header>
+
+    <svg viewBox="0 0 1180 232" style="width:100%; height:226px; flex:none" role="img" aria-label="Gantt chart of phases A to E over sixteen weeks">
+      <g stroke="#eeece6" stroke-width="1">
+        <line x1="10" y1="8" x2="10" y2="200"/><line x1="155" y1="8" x2="155" y2="200"/><line x1="300" y1="8" x2="300" y2="200"/>
+        <line x1="445" y1="8" x2="445" y2="200"/><line x1="590" y1="8" x2="590" y2="200"/><line x1="735" y1="8" x2="735" y2="200"/>
+        <line x1="880" y1="8" x2="880" y2="200"/><line x1="1025" y1="8" x2="1025" y2="200"/><line x1="1170" y1="8" x2="1170" y2="200"/>
+      </g>
+      <g font-size="10.5" fill="#898781" text-anchor="middle">
+        <text x="10" y="216">W0</text><text x="155" y="216">W2</text><text x="300" y="216">W4</text><text x="445" y="216">W6</text>
+        <text x="590" y="216">W8</text><text x="735" y="216">W10</text><text x="880" y="216">W12</text><text x="1025" y="216">W14</text><text x="1170" y="216">W16</text>
+      </g>
+      <g font-size="12.5" font-weight="700">
+        <rect x="10" y="14" width="290" height="24" rx="5" fill="#86b6ef"/><text x="22" y="31" fill="#0d2c50">A · Gap-finding &amp; hardening</text>
+        <rect x="155" y="52" width="352.5" height="24" rx="5" fill="#5598e7"/><text x="167" y="69" fill="#0d2c50">B · Repair-loop refinement</text>
+        <rect x="372.5" y="90" width="290" height="24" rx="5" fill="#2a78d6"/><text x="384.5" y="107" fill="#ffffff">C · Evaluation at scale</text>
+        <rect x="517.5" y="128" width="435" height="24" rx="5" fill="#1c5cab"/><text x="529.5" y="145" fill="#ffffff">D · Production-worthiness</text>
+        <rect x="807.5" y="166" width="362.5" height="24" rx="5" fill="#104281"/><text x="819.5" y="183" fill="#ffffff">E · Dissemination</text>
+      </g>
+    </svg>
+
+    <div class="phasegrid">
+      <div class="phase"><h4><span class="sw" style="background:#86b6ef"></span>Gap-finding &amp; hardening <span style="color:#898781; font-weight:600">· W1–4</span></h4><ul>
+        <li>Failure-mode audit: adversarial specs, ambiguous requirements, broken deployments</li>
+        <li>Sandbox security review — isolation, caps, secrets</li>
+        <li>Resilience: provider fallbacks, crash recovery, resumable tasks</li></ul></div>
+      <div class="phase"><h4><span class="sw" style="background:#5598e7"></span>Repair-loop refinement <span style="color:#898781; font-weight:600">· W3–7</span></h4><ul>
+        <li>Tune iteration caps &amp; stall thresholds against measured convergence</li>
+        <li>Regression-guard on every patch</li>
+        <li><b>Ablation: diff-aware vs full-repo context — the headline result</b></li></ul></div>
+      <div class="phase"><h4><span class="sw" style="background:#2a78d6"></span>Evaluation at scale <span style="color:#898781; font-weight:600">· W6–10</span></h4><ul>
+        <li>Expand benchmark to 20–30 diverse app specifications</li>
+        <li>Baselines: unbounded-repair &amp; no-repair configurations</li>
+        <li>Report convergence, cost per success, latency + variance</li></ul></div>
+      <div class="phase"><h4><span class="sw" style="background:#1c5cab"></span>Production-worthiness <span style="color:#898781; font-weight:600">· W8–14</span></h4><ul>
+        <li>Observability: traces, cost dashboards, budget enforcement</li>
+        <li>Multi-user robustness, quotas, rate limiting</li>
+        <li>PWA finalisation + accessibility; seeded demo + fallbacks</li></ul></div>
+      <div class="phase"><h4><span class="sw" style="background:#104281"></span>Dissemination <span style="color:#898781; font-weight:600">· W12–16</span></h4><ul>
+        <li>Write-up for a software-engineering venue — the bounded loop + ablation is the paper</li>
+        <li>Hackathon / expo submissions; demo runbook</li>
+        <li>Open-source the eval harness + benchmark specs</li></ul></div>
+    </div>
+
+    <div class="callout"><span class="q">&ldquo;</span><p>The build is done. The next five months are about <b>proving it, breaking it, and hardening it</b>.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>12 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 13 : CONCLUSION -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">Conclusion</div>
+      <h2>Verification, Not Generation, Is the Frontier — and It Is Built</h2>
+      <div class="rule"></div>
+    </header>
+
+    <div class="conc">
+      <div class="concrow"><span class="ic"><svg><use href="#i-scale"/></svg></span><p>The industry has an <b>adoption–trust inversion</b>: 84% adoption <span class="ref">[1]</span> against 29% trust <span class="ref">[1]</span> — and 43% of AI code still failing in production after QA <span class="ref">[2]</span>.</p></div>
+      <div class="concrow"><span class="ic accent"><svg><use href="#i-loop"/></svg></span><p>ForgeFlow addresses the failure that matters — <b>verification, not generation</b> — with a bounded, diff-aware, human-escalating repair loop.</p></div>
+      <div class="concrow"><span class="ic"><svg><use href="#i-check"/></svg></span><p>A <b>complete first prototype is implemented</b>: 50 phases, 11 epics — screenshots &rarr; deployed and re-validated URL.</p></div>
+      <div class="concrow"><span class="ic"><svg><use href="#i-doc"/></svg></span><p>The design is <b>independently corroborated</b>: a March-2026 study of 22,374 program variants recommends diff-highlighted repair context after finding &gt;99% residual alignment in LLM-generated tests <span class="ref">[20]</span>.</p></div>
+      <div class="concrow"><span class="ic"><svg><use href="#i-flow"/></svg></span><p>The differentiator is defensible: research verifies without deploying; industry deploys without verifying. <b>ForgeFlow closes both loops — and stops.</b></p></div>
+      <div class="concrow"><span class="ic"><svg><use href="#i-gauge"/></svg></span><p><b>Next:</b> hardening, adversarial gap-finding, scaled evaluation with ablations, and production-readiness.</p></div>
+    </div>
+
+    <div class="closing">
+      <span class="q">&ldquo;</span>
+      <p>Anyone can make an AI write an app. The hard part is knowing when it&rsquo;s actually <em>finished</em> — and that is what we built.</p>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>13 / 14</span></footer>
+  </div>
+</section>
+
+<!-- ================================================================ SLIDE 14 : REFERENCES -->
+<section class="slide">
+  <div class="pad">
+    <header class="shead">
+      <div class="kick">References (IEEE Format)</div>
+      <h2>References</h2>
+      <div class="rule"></div>
+    </header>
+    <div class="refs">
+      <p><b>[1]</b> Stack Overflow, &ldquo;2025 Developer Survey: AI,&rdquo; Stack Overflow, 2025. [Online]. Available: https://survey.stackoverflow.co/2025/</p>
+      <p><b>[2]</b> Lightrun, &ldquo;2026 State of AI-Powered Engineering Report,&rdquo; Lightrun Ltd., 2026. [Online]. Available: https://venturebeat.com/technology/43-of-ai-generated-code-changes-need-debugging-in-production-survey-finds</p>
+      <p><b>[3]</b> GitClear, &ldquo;The Maintainability Gap: 2026 AI Code Quality Research,&rdquo; GitClear, 2026. [Online]. Available: https://www.gitclear.com/</p>
+      <p><b>[4]</b> Veracode, &ldquo;2025 GenAI Code Security Report,&rdquo; Veracode Inc., 2025. [Online]. Available: https://www.veracode.com/</p>
+      <p><b>[5]</b> CodeRabbit, &ldquo;AI-Generated Code Quality: An Analysis of 470 Real-World Pull Requests,&rdquo; CodeRabbit, 2026. [Online]. Available: https://byteiota.com/ai-code-quality-crisis-84-adoption-29-trust-in-2026/</p>
+      <p><b>[6]</b> Hostinger, &ldquo;Vibe Coding Statistics 2026: Adoption, Productivity, and Security Data,&rdquo; 2026, citing Gartner and Forrester forecasts. [Online]. Available: https://www.hostinger.com/blog/vibe-coding-statistics/</p>
+      <p><b>[7]</b> C. E. Jimenez <i>et al.</i>, &ldquo;SWE-bench: Can language models resolve real-world GitHub issues?,&rdquo; in <i>Proc. 12th Int. Conf. Learn. Represent. (ICLR)</i>, Vienna, Austria, May 2024.</p>
+      <p><b>[8]</b> C. Qian <i>et al.</i>, &ldquo;ChatDev: Communicative agents for software development,&rdquo; in <i>Proc. 62nd Annu. Meeting Assoc. Comput. Linguistics (ACL)</i>, Bangkok, Thailand, Aug. 2024, pp. 15174&ndash;15186.</p>
+      <p><b>[9]</b> S. Hong <i>et al.</i>, &ldquo;MetaGPT: Meta programming for a multi-agent collaborative framework,&rdquo; in <i>Proc. 12th Int. Conf. Learn. Represent. (ICLR)</i>, Vienna, Austria, May 2024.</p>
+      <p><b>[10]</b> D. Huang, J. M. Zhang, M. Luck, Q. Bu, Y. Qing, and H. Cui, &ldquo;AgentCoder: Multi-agent code generation with iterative testing and optimisation,&rdquo; arXiv:2312.13010, 2024.</p>
+      <p><b>[11]</b> J. Yang <i>et al.</i>, &ldquo;SWE-agent: Agent-computer interfaces enable automated software engineering,&rdquo; in <i>Adv. Neural Inf. Process. Syst. (NeurIPS)</i>, 2024.</p>
+      <p><b>[12]</b> X. Wang <i>et al.</i>, &ldquo;OpenHands: An open platform for AI software developers as generalist agents,&rdquo; in <i>Proc. 13th Int. Conf. Learn. Represent. (ICLR)</i>, 2025.</p>
+      <p><b>[13]</b> W. Tao, Y. Zhou, Y. Wang, W. Zhang, H. Zhang, and Y. Cheng, &ldquo;MAGIS: LLM-based multi-agent framework for GitHub issue resolution,&rdquo; in <i>Adv. Neural Inf. Process. Syst. (NeurIPS)</i>, vol. 37, 2024, pp. 51963&ndash;51993.</p>
+      <p><b>[14]</b> T. X. Olausson, J. P. Inala, C. Wang, J. Gao, and A. Solar-Lezama, &ldquo;Is self-repair a silver bullet for code generation?,&rdquo; in <i>Proc. 12th Int. Conf. Learn. Represent. (ICLR)</i>, Vienna, Austria, May 2024.</p>
+      <p><b>[15]</b> X. Chen, M. Lin, N. Schärli, and D. Zhou, &ldquo;Teaching large language models to self-debug,&rdquo; in <i>Proc. 12th Int. Conf. Learn. Represent. (ICLR)</i>, Vienna, Austria, May 2024.</p>
+      <p><b>[16]</b> W. Takerngsaksiri <i>et al.</i>, &ldquo;Human-in-the-loop software development agents,&rdquo; arXiv:2411.12924, 2024.</p>
+      <p><b>[17]</b> J. Pasuksmit <i>et al.</i>, &ldquo;Human-in-the-loop software development agents: Challenges and future directions,&rdquo; arXiv:2506.11009, 2025.</p>
+      <p><b>[18]</b> M. Schäfer, S. Nadi, A. Eghbali, and F. Tip, &ldquo;An empirical evaluation of using large language models for automated unit test generation,&rdquo; <i>IEEE Trans. Softw. Eng.</i>, vol. 50, no. 1, pp. 85&ndash;105, Jan. 2024.</p>
+      <p><b>[19]</b> N. Alshahwan <i>et al.</i>, &ldquo;Automated unit test improvement using large language models at Meta,&rdquo; in <i>Proc. 32nd ACM Int. Conf. Found. Softw. Eng. (FSE Companion)</i>, New York, NY, USA, 2024, pp. 185&ndash;196.</p>
+      <p><b>[20]</b> S. Haroon, M. T. Khan, and M. A. Gulzar, &ldquo;Evaluating LLM-based test generation under software evolution,&rdquo; arXiv:2603.23443, Mar. 2026.</p>
+      <p><b>[21]</b> C. Si, Y. Zhang, R. Li, Z. Yang, R. Liu, and D. Yang, &ldquo;Design2Code: Benchmarking multimodal code generation for automated front-end engineering,&rdquo; in <i>Proc. NAACL-HLT</i>, 2025.</p>
+      <p><b>[22]</b> S. Gu, N. Nashid, and A. Mesbah, &ldquo;LLM test generation via iterative hybrid program analysis,&rdquo; in <i>Proc. IEEE/ACM 47th Int. Conf. Softw. Eng. (ICSE)</i>, 2026.</p>
+      <p><b>[23]</b> DemandSphere, &ldquo;SWE-bench Verified — AI frontier model tracker,&rdquo; 2026. [Online]. Available: https://www.demandsphere.com/research/demandsphere-radar/ai-frontier-model-tracker/benchmarks/swe-bench/</p>
+    </div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 1 · Group 04</span><span>14 / 14</span></footer>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<!-- ======================= navigation chrome ======================= -->
+<div class="navzone left"><button class="navbtn" id="btnPrev" aria-label="Previous slide"><svg><use href="#i-chevL"/></svg></button></div>
+<div class="navzone right"><button class="navbtn" id="btnNext" aria-label="Next slide"><svg><use href="#i-chevR"/></svg></button></div>
+<div id="progress"></div>
+<div id="hint">&larr; &rarr; to navigate &nbsp;·&nbsp; F for fullscreen</div>
+
+<script>
+(function () {
+  var LOGO_FALLBACK = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCABGAFADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2HxXNLB4X1CWGR45EhJV0JBB9iK8ps/iD4gs1C/aUmA6CWPP6jBr1TxiP+KR1L/ria8D6da4MXUlCS5WfW8PYOhiKU/axT1/Q7YfFHXQMGKyOO/lt/wDFU9vinrJTaLWy3euxv/iq5bQtMh1bVI7OW8S0EgwsjrnJ7ADjk/Wu7l8NGz1MQeFUje6toyt1PcrnaxAKbSwPzEFvu8c89qmlKtNXvobY+hluGn7N0/e36pfeY8nxO151IC2cef4liOR+bVc8FaprOueLY5ru+neGFGaRQdqHIIAwOOpz+FTRjTL/AFeO0voms7gcXVxPKJTK/Qwq33VzuB+TaR0AHZ8Gg2phXWtGuJLRHuxFA0fO1M+UMg/ey/zc9uK1UanMm5XOKpWwnsZU4UuRtb77+Z6lS+1cb4c8R3zSiw1qLy7kSeSJgMK0gGdh9CVwwPQ549K7HrXXGSkro+bqU3CVmOooopkmB4y/5FHUs/8APA14Fx1r6B8SWtxfeHb61to/MmliKouQMn8a8Yu/Cet2Jtxc2Zi+0SiGPMqHc56Dg1wYuEpSTSPruHMXRo05qpJK77+RjAkGuu0Lx5d6Nps1oYI5nbLRykncXJ6v/e/+tWUfCetLqY037Fm78rzvLEifczjOc461UutF1G0uZoJbSTzIAplCfOEyMjcVyBmuaKq09Uj267wGNjyTkn13PSHvdCuvC0OmWs0F1d3rLG5VAX81+GmZeoI5bJ9Ksal4ftLS/wBGsLG6u7YyysBHHMSmEQvu2Nlc7gvbqea8iSRo5FkRyjqcqVOCD9a1I/E+sR3NvOL52ltwwieRQxXd97kg56d66Fi4/aR49TIal/3E7rV69+h6De6bqF14mudLW7gLPbR3SyyQZKOrMoYYYYf/AGvQAY4rsNEvZL3SoZZtvnjMcwXoJFO1gP8AgQNeOR+N9XTVDqJMD3PkiDc8ZxtznoCOeajtvGmt2cc6W1ysImmadsRg4ZjkgZzxWkcVTRxVcjxklqloe90tQWzl4I2b7xUE1NXWtj5xqzsJjArJ8RWbXekyGGPzLiAieBfWRDuUfiRj8a1qCKHqEZOLTR55HqtyfFsWr/2fcSxTae0SxxFC4KyAtkEjBGcEdQauaRr+lQrqepXpaze5m37LhCjEIoTaM8MRtPAJxml8R6HqVvOmpeHgPO8/zpLf5QpbGC3OOo+8O/B6jnIh1vTLy1i0m7zFC13JPd+eu3Ym8ygHPq7Kv/fX1rK7i7M9JQVWF4L1tureRoNo+jN4WbUNQtFmnu2a6VC5DtJJysakc5+6uB6VyGteAL7SdOS9E0UxO0SRKDkMSAAn97r7VvyHS5LuK/in+wwK6nT7RY94nfnEhi7A9AflPfIyKswa+Yb1bzxay20sIJtIIxuQ54Z/lLfNzjnoDx3rKcISXvHXhcTisPK9Jt91+iX52PKWRlcq6lWBwQRjFKK1PEOsJrWrS3qWyQKw2hV6nHdj3P8A9asr3rzZJKVkz7mlOc6ClUVnbY+k7P8A49Iv90VY71XtP+PSL/dFWO9e4tj8qn8TE7UdKp6lfJp2nT3bqzrEm4qvU1lzeJreBbomCZhbD5yABnthckZyeB78UOSW4405SV4o3jXjPjKLUtd8Tzi0tJ57eEiKJooyVBA+bnp1yPwrtpfGBleZrW1mWO3ExkaQLgmPrj5vUj8x71s2msQ3F/8AZFt5UkAZmLKABjH59e1ZVIxqLlbO/B1amCm6qjd2+48vsfh34guY8yCK1RjyskmSfwXNai/Ce5aPLapGr+ghyPzzXYzeLdOh1B7FhLvjDF3OFVdpGSSTwOevT3zTbnxfaWjoLm3uYg8hRS4Vd2E3EgE5I7ZHfis1h6S3OuWbY+TvHS/kv1OGuPhbq0fMF1bS/wC9lf8AGsO/8F69px3SafLKpOA0H7z9Bz+leojxrYFGcwXGBKIhtUHc3y9MH/bHHXrxViPxVazaqmnLDL9oYA4LICMqzcjOei8jHGRUvDUnsaxzrMIfGk/kbduhS3jBHIUCrFUdMv01PTbe9jVlSeMOA3UA1d7V2LY+ele7uQXNtDeW0kE8YeKQYZT3FV30mzkaeX7PGJLhNkrgYLjGOSOtFFJijOSW5mW/hSxjsHtLyNbqKScz4fP3iOff16knnknrWqunWcd894lsi3BXY8gGCw46+vQdaKKSSKnOXcz7zQLa+1dL2ZYnZBsCPEDxgN165yBz6ZGOc0ml6CunTTSSyidXKuispPluFKkgsSRkYGM8c+tFFFlc0c5clrliHw9pVvEYYrGFIjMJgijgSDGGA7dB0ol0mI/ZTabLdoSoTEYYFVVgFPfGCeh/rRRTsjPnk3uXrW2hsbOK3gTZDEoRFBzgDjvVkUUUEvc//9k=";
+
+  // Prefer a user-provided high-res logo file next to this HTML; fall back to embedded logo.
+  var logo = document.getElementById('sitlogo');
+  var probe = new Image();
+  probe.onload = function () { logo.src = 'sit-logo.png'; };
+  probe.onerror = function () { logo.src = LOGO_FALLBACK; };
+  probe.src = 'sit-logo.png';
+
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var deck = document.getElementById('deck');
+  var progress = document.getElementById('progress');
+  var btnPrev = document.getElementById('btnPrev');
+  var btnNext = document.getElementById('btnNext');
+  var n = slides.length;
+  var cur = Math.min(Math.max(parseInt(location.hash.slice(1), 10) || 1, 1), n) - 1;
+
+  function render(dir) {
+    slides.forEach(function (s, i) {
+      s.classList.remove('gonext', 'goprev');
+      if (i === cur) {
+        s.classList.add('active');
+        if (dir === 1) s.classList.add('gonext');
+        if (dir === -1) s.classList.add('goprev');
+      } else {
+        s.classList.remove('active');
+      }
+    });
+    progress.style.width = (cur / (n - 1)) * 100 + '%';
+    btnPrev.classList.toggle('hidden', cur === 0);
+    btnNext.classList.toggle('hidden', cur === n - 1);
+    if (history.replaceState) history.replaceState(null, '', '#' + (cur + 1));
+  }
+
+  function go(delta) {
+    var next = Math.min(Math.max(cur + delta, 0), n - 1);
+    if (next === cur) return;
+    cur = next;
+    render(delta > 0 ? 1 : -1);
+  }
+
+  btnPrev.addEventListener('click', function () { go(-1); });
+  btnNext.addEventListener('click', function () { go(1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) { e.preventDefault(); go(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) { e.preventDefault(); go(-1); }
+    else if (e.key === 'Home') { e.preventDefault(); cur = 0; render(-1); }
+    else if (e.key === 'End') { e.preventDefault(); cur = n - 1; render(1); }
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) { document.exitFullscreen(); }
+      else { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+    }
+  });
+
+  // jump when the URL hash is edited by hand
+  window.addEventListener('hashchange', function () {
+    var target = Math.min(Math.max(parseInt(location.hash.slice(1), 10) || 1, 1), n) - 1;
+    if (target !== cur) { cur = target; render(0); }
+  });
+
+  // scale deck to viewport
+  function fit() {
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    deck.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  // one-time hint
+  var hint = document.getElementById('hint');
+  setTimeout(function () { hint.classList.add('gone'); }, 4500);
+  setTimeout(function () { hint.remove(); }, 5600);
+
+  // auto-hide cursor when idle
+  var cursorTimer = null;
+  function wake() {
+    document.body.classList.remove('cursorhide');
+    clearTimeout(cursorTimer);
+    cursorTimer = setTimeout(function () { document.body.classList.add('cursorhide'); }, 3200);
+  }
+  ['mousemove', 'mousedown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, wake); });
+  wake();
+
+  render(0);
+})();
+</script>
+</body>
+</html>
