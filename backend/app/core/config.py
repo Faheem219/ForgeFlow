@@ -204,15 +204,25 @@ class Settings(BaseSettings):
     )
 
     # --- Design providers (phase 17/18) ---
-    stitch_gcp_project: str = ""
+    # Stitch (Google Labs) speaks MCP at https://stitch.googleapis.com/mcp. Credentials, in the
+    # order the transport tries them: an API key (Stitch → Settings → API keys), a Google access
+    # token (gcloud), or a client-credentials exchange against a proxy token endpoint. Blank creds
+    # → provider health()=down and the design stage falls back (figma/fake) rather than crashing.
+    stitch_api_key: str = ""  # sent as X-Goog-Api-Key — the simplest path
+    stitch_access_token: str = ""  # sent as Authorization: Bearer (externally refreshed, ~1h)
+    stitch_gcp_project: str = ""  # sent as X-Goog-User-Project (quota/billing attribution)
     stitch_client_id: str = ""
     stitch_client_secret: str = ""
     stitch_quota_monthly: int = 350
-    # Stitch MCP + OAuth endpoints and call tuning (phase-17). Blank creds → provider health()=down
-    # and the design stage falls back (fake/figma) rather than crashing.
-    stitch_mcp_url: str = ""  # Stitch MCP server base URL
+    stitch_mcp_url: str = "https://stitch.googleapis.com/mcp"
     stitch_token_url: str = ""  # OAuth2 token endpoint (client-credentials grant)
     stitch_scope: str = ""  # optional OAuth scope
+    # Stitch is project-scoped. Blank → a project is created on first use and reused; set this to
+    # pin generations to an existing project (visible in the Stitch web app).
+    stitch_project_id: str = ""
+    # Optional generation model, e.g. GEMINI_3_FLASH (standard quota) or GEMINI_3_PRO
+    # (experimental, much smaller quota). Blank → the API's own default.
+    stitch_model_id: str = ""
     stitch_timeout_s: float = 60.0  # per-call wall clock
     stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
     stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry

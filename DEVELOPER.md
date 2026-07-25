@@ -243,6 +243,7 @@ Highlights you'll likely touch:
 | `BUDGET_WARN_RATIO` (0.8) | emit a `budget.warning` at this fraction of a cap before halting |
 | `DEMO_PASSWORD` | required to seed the demo (§4) |
 | `DESIGN_PROVIDER` | `stitch` (default) \| `figma` \| `fake`; blank creds auto-fall-back |
+| `STITCH_API_KEY` | Stitch design generation — see §5.2 |
 | `VERCEL_TOKEN` / `RENDER_API_KEY` | deploy targets (FE→Vercel, BE→Render — **never** BE→Vercel) |
 
 ### 5.1 Running against an OpenAI-compatible provider (phase-53)
@@ -270,6 +271,42 @@ or a missing `openai` package fails with a clear error rather than silently misb
 The same switch is available without touching `.env`: **`/admin` → Models & provider** holds
 `LLM_PROVIDER`, both model ids, `OPENAI_BASE_URL` and the API keys, and the change takes effect on
 the next agent call — which is the fastest way to demo a provider swap.
+
+### 5.2 Setting up Stitch (the design provider)
+
+Stitch is Google Labs' AI UI designer. ForgeFlow talks to its **MCP API** at
+`https://stitch.googleapis.com/mcp` (JSON-RPC 2.0 over HTTP).
+
+**The five-minute path — an API key:**
+
+1. Open [stitch.withgoogle.com](https://stitch.withgoogle.com) and sign in with a Google account.
+2. Profile menu (top right) → **Stitch settings** → **API keys** → **Create API key**. Copy it.
+3. `STITCH_API_KEY=…` in `.env`, or set it in **`/admin` → Design providers** (stored encrypted).
+
+Nothing else is required — `STITCH_MCP_URL` already defaults to the right endpoint, and a Stitch
+project is created on first use.
+
+**The alternative — a Google access token** (for CI / zero-trust setups, expires in ~1 hour):
+
+```bash
+gcloud beta services mcp enable stitch.googleapis.com     # on your Cloud project
+gcloud auth application-default print-access-token        # → STITCH_ACCESS_TOKEN
+```
+Set `STITCH_GCP_PROJECT` too — it is sent as `X-Goog-User-Project` for quota attribution.
+
+`STITCH_CLIENT_ID` / `_SECRET` / `STITCH_TOKEN_URL` are a third path, for a proxy that implements the
+OAuth2 **client-credentials** grant. Google's own token endpoint does not implement that grant, so
+leave them blank when pointing at `stitch.googleapis.com`.
+
+**Two things worth knowing before you demo it:**
+
+- **Quota is small and real:** ~350 generations/month on the standard model, far fewer on the
+  experimental one (`STITCH_MODEL_ID=GEMINI_3_PRO`). ForgeFlow counts them itself
+  (`STITCH_QUOTA_MONTHLY`), reports `degraded` near the cap, and fails soft at it.
+- **The API is text-prompt only.** Screenshot→UI exists in the Stitch web app but has no API tool,
+  so the provider reports `from_image=False` and screenshot intake falls back down
+  `DESIGN_FALLBACK_CHAIN` (figma → fake) rather than quietly ignoring your images. Drive Stitch with
+  a text description; use `fake` if you want the screenshot path in a demo.
 
 ---
 

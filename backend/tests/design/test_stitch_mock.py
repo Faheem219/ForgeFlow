@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 import pytest
 from beanie import PydanticObjectId
@@ -20,44 +21,37 @@ pytestmark = pytest.mark.usefixtures("mongo_db")
 
 
 class FakeStitchClient:
-    """Canned MCP transport that records the token it was handed (to prove auth is wired)."""
+    """Canned MCP transport that records the headers it was handed (to prove auth is wired)."""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
-        self.tokens: list[str] = []
+        self.headers: list[dict[str, str]] = []
 
-    async def text_to_ui(self, prompt: str, *, token: str) -> StitchDesignPayload:
+    async def text_to_ui(self, prompt: str, *, headers: Mapping[str, str]) -> StitchDesignPayload:
         self.calls.append("text_to_ui")
-        self.tokens.append(token)
+        self.headers.append(dict(headers))
         return StitchDesignPayload(
-            external_ref="stitch-abc",
+            external_ref="proj-1/stitch-abc",
             html=f"<main>{prompt}</main>",
             css="main{color:red}",
             preview_image="https://stitch.example/p.png",
             meta={"stitch_project": "proj-1"},
         )
 
-    async def image_to_ui(
-        self, images: list[DesignImage], prompt: str | None, *, token: str
-    ) -> StitchDesignPayload:
-        self.calls.append("image_to_ui")
-        self.tokens.append(token)
-        return StitchDesignPayload(
-            external_ref="stitch-img", html="<img/>", css="", meta={"n": len(images)}
-        )
-
     async def refine(
-        self, external_ref: str, instruction: str, *, token: str
+        self, external_ref: str, instruction: str, *, headers: Mapping[str, str]
     ) -> StitchDesignPayload:
         self.calls.append("refine")
-        self.tokens.append(token)
+        self.headers.append(dict(headers))
         return StitchDesignPayload(
             external_ref=f"{external_ref}-r1", html=f"<main>{instruction}</main>", css=""
         )
 
-    async def fetch_code(self, external_ref: str, *, token: str) -> StitchDesignPayload:
+    async def fetch_code(
+        self, external_ref: str, *, headers: Mapping[str, str]
+    ) -> StitchDesignPayload:
         self.calls.append("fetch_code")
-        self.tokens.append(token)
+        self.headers.append(dict(headers))
         return StitchDesignPayload(html="<main/>", css="body{}", assets={"logo": "ref://logo"})
 
 
@@ -84,36 +78,36 @@ async def test_text_to_ui_maps_to_design_result(with_creds: None) -> None:
     result = await _provider(client).generate_from_text("a todo app")
 
     assert client.calls == ["text_to_ui"]
-    assert client.tokens == ["access-xyz"]  # the access token reached the transport
+    # The resolved credential reached the transport as a header, never as a bare token.
+    assert client.headers == [{"Authorization": "Bearer access-xyz"}]
     assert result.provider == "stitch"
-    assert result.external_ref == "stitch-abc"
+    assert result.external_ref == "proj-1/stitch-abc"
     assert "a todo app" in result.html
     assert result.preview_image == "https://stitch.example/p.png"
     assert result.meta["source"] == "text"
 
 
-async def test_image_to_ui_validates_and_maps(with_creds: None) -> None:
-    client = FakeStitchClient()
-    provider = _provider(client)
+async def test_screenshot_intake_is_refused_as_unsupported(with_creds: None) -> None:
+    """Stitch's API is text-prompt only, so images degrade to the fallback chain rather than
+    being silently dropped into a text generation."""
+    provider = _provider(FakeStitchClient())
+    assert provider.capabilities().from_image is False
+
     images = [DesignImage(filename="a.png", media_type="image/png", data=b"\x89PNG")]
-
-    result = await provider.generate_from_image(images, prompt="match this")
-    assert result.external_ref == "stitch-img"
-    assert result.meta["source"] == "image"
-
-    with pytest.raises(ProviderError):
-        await provider.generate_from_image([], prompt=None)  # no images
+    with pytest.raises(ProviderError) as exc:
+        await provider.generate_from_image(images, prompt="match this")
+    assert exc.value.detail == {"kind": "unsupported"}
 
 
 async def test_refine_and_fetch_code(with_creds: None) -> None:
     client = FakeStitchClient()
     provider = _provider(client)
 
-    refined = await provider.refine("stitch-abc", "make it dark")
-    assert refined.external_ref == "stitch-abc-r1"
+    refined = await provider.refine("proj-1/stitch-abc", "make it dark")
+    assert refined.external_ref == "proj-1/stitch-abc-r1"
     assert "make it dark" in refined.html
 
-    code = await provider.fetch_code("stitch-abc")
+    code = await provider.fetch_code("proj-1/stitch-abc")
     assert code.assets == {"logo": "ref://logo"}
     assert "fetch_code" in client.calls
 
@@ -128,7 +122,7 @@ async def test_result_persists_as_a_design_artifact(with_creds: None) -> None:
     assert artifact.type is ArtifactType.design
     assert artifact.stage is Stage.design
     assert artifact.meta[META_PROVIDER] == "stitch"
-    assert artifact.meta[META_EXTERNAL_REF] == "stitch-abc"
+    assert artifact.meta[META_EXTERNAL_REF] == "proj-1/stitch-abc"
 
     payload = await ArtifactService().get_content(artifact)
     assert payload is not None

@@ -101,3 +101,45 @@ as a builtin or adding `DesignQuota`/`design.quota`.
 venv (system has 0.115.5), and (b) the phase-11 sandbox `runtime.py` imports Unix-only `fcntl`/`pty`/
 `termios`, so `tests/sandbox` and a whole-repo mypy can't run here — they're the other agent's
 Linux-verified code and were left untouched. Everything phase-17 touches is fully verified.
+
+---
+
+## Follow-up — corrected against the shipped Stitch API
+
+The original transport was written before Stitch had a public API, against an *assumed* MCP contract
+(`POST {url}` with `{"method": <tool>, "params": {…}}` + an OAuth2 client-credentials bearer token).
+Stitch has since shipped a real one, and the guess was wrong in every part that matters. The provider
+now speaks it:
+
+| | Was (assumed) | Now (actual) |
+|---|---|---|
+| Endpoint | `STITCH_MCP_URL` (blank) | `https://stitch.googleapis.com/mcp` (default) |
+| Protocol | bare `{"method","params"}` POST | **MCP: JSON-RPC 2.0**, `initialize` handshake → `notifications/initialized` → `tools/call`, `Mcp-Session-Id` echoed, JSON **or** SSE responses |
+| Auth | client-credentials grant only | **`X-Goog-Api-Key`** (Stitch → Settings → API keys), or **`Authorization: Bearer`** (gcloud token), or the client-credentials exchange — kept for a proxy that implements it, since Google's token endpoint does not |
+| Tools | `text_to_ui` / `image_to_ui` / `refine` / `fetch_code` | `create_project`, `generate_screen_from_text`, `edit_screens`, `get_screen` (camelCase args) |
+| Result | `{external_ref, html, css, …}` | MCP content blocks; HTML/screenshot arrive as **download URLs**, so the transport fetches the HTML |
+| Scoping | none | **project-scoped** — `external_ref` is now `"{projectId}/{screenId}"`; `STITCH_PROJECT_ID` pins an existing project, else one is created on first use |
+
+**Capability change:** the API is **text-prompt only**. Screenshot→UI exists in the Stitch web app
+(experimental tier) but has no tool, so `capabilities().from_image` is now `False` and
+`generate_from_image` raises the new `unsupported` error kind — screenshot intake degrades down
+`DESIGN_FALLBACK_CHAIN` (phase-48) instead of silently generating from text and dropping the images.
+This mirrors what phase-18 already does for Figma.
+
+**Config added:** `STITCH_API_KEY` (sensitive), `STITCH_ACCESS_TOKEN` (sensitive),
+`STITCH_PROJECT_ID`, `STITCH_MODEL_ID`; `STITCH_MCP_URL` now defaults to the real endpoint;
+`STITCH_GCP_PROJECT` is finally *used* (sent as `X-Goog-User-Project`). All are admin-editable
+(phase-51/52), the two credentials as write-only encrypted values.
+
+**Tests:** new `tests/design/test_stitch_mcp_transport.py` (14) drives `HttpStitchClient` against a
+scripted MCP endpoint — handshake, JSON-RPC envelope, session header, SSE framing, one handshake and
+one project per client, API-key vs bearer header selection, `edit_screens`/`get_screen` argument
+shapes, resource-path ids (`projects/9/screens/1` → `screen-1`), HTML download, tool `isError` →
+fatal, and the HTTP-status → taxonomy mapping. `test_stitch_mock.py` updated to the headers-based
+transport contract and to assert screenshots are refused as `unsupported`. **Design suite: 77
+passed.**
+
+**Still unverifiable here:** a live call needs a real Stitch key. The exact JSON field names inside a
+tool result are not contractually documented, so the transport plucks defensively
+(`screenId`/`id`/`name`, `htmlUrl`/`html`/`downloadUrl`, …) and reduces `projects/…/screens/…`
+resource paths to bare ids — the smallest possible dependency on the undocumented half.

@@ -1,13 +1,24 @@
-"""Centralized Stitch OAuth (phase-17).
+"""Stitch authentication (phase-17, corrected against the shipped Stitch API).
 
-Stitch access tokens are short-lived, so this holds the platform's client credentials, fetches an
-access token via the client-credentials grant, and **refreshes transparently** before expiry. A
-single-flight lock ensures concurrent callers trigger at most one refresh (no token stampede).
+The official endpoint (``https://stitch.googleapis.com/mcp``) accepts **three** credential shapes,
+tried in this order:
+
+1. **API key** — ``X-Goog-Api-Key: <key>``. Created in Stitch → Settings → API keys. This is the
+   five-minute path and the one to use for a demo.
+2. **Google access token** — ``Authorization: Bearer <token>``, typically from
+   ``gcloud auth application-default print-access-token`` after enabling ``stitch.googleapis.com``
+   on a Cloud project. Tokens last ~1 hour, so this suits short-lived/CI use.
+3. **OAuth2 client-credentials** — the platform exchanges ``client_id``/``client_secret`` at
+   ``STITCH_TOKEN_URL`` for a bearer token, refreshing transparently before expiry. Google's own
+   token endpoint does **not** implement this grant; it is kept for a self-hosted proxy or a
+   partner endpoint that fronts Stitch and does.
+
+``STITCH_GCP_PROJECT``, when set, is sent as ``X-Goog-User-Project`` — the quota/billing project
+Google attributes the call to.
 
 Since phase-34 the **client secret** is read through the encrypted vault (a platform-scoped vault
 entry wins over the plaintext ``STITCH_CLIENT_SECRET`` in config) and is decrypted only at call
-time, inside ``_fetch_token``. The non-secret half of the credentials — client id, token URL —
-stays in layered config. **Tokens and secrets are never logged.**
+time, inside ``_fetch_token``. **Tokens, keys and secrets are never logged.**
 """
 
 from __future__ import annotations
@@ -29,11 +40,20 @@ from app.design.stitch_errors import StitchErrorKind, stitch_error
 TokenFetcher = Callable[[], Awaitable[tuple[str, float]]]
 Clock = Callable[[], float]
 
+#: Google's API-key header. The Stitch MCP endpoint reads the key from here, not from a query param.
+API_KEY_HEADER = "X-Goog-Api-Key"
+#: Quota/billing attribution project, sent when ``STITCH_GCP_PROJECT`` is configured.
+USER_PROJECT_HEADER = "X-Goog-User-Project"
+
 
 @dataclass
 class _CachedToken:
     access_token: str
     expires_at: float  # wall-clock seconds (clock())
+
+
+def _configured(key: str) -> str:
+    return str(get_config().get(key)).strip()
 
 
 async def stitch_client_secret(user_id: PydanticObjectId | None = None) -> str | None:
@@ -42,9 +62,10 @@ async def stitch_client_secret(user_id: PydanticObjectId | None = None) -> str |
 
 
 async def stitch_credentials_present(user_id: PydanticObjectId | None = None) -> bool:
-    """True when the minimum creds to obtain a token are available."""
-    config = get_config()
-    if not (config.get("stitch_client_id") and config.get("stitch_token_url")):
+    """True when *any* of the three supported credential shapes is fully configured."""
+    if _configured("stitch_api_key") or _configured("stitch_access_token"):
+        return True
+    if not (_configured("stitch_client_id") and _configured("stitch_token_url")):
         return False
     return bool(await stitch_client_secret(user_id))
 
@@ -67,8 +88,36 @@ class StitchAuth:
     def _is_valid(self, token: _CachedToken | None) -> bool:
         return token is not None and token.expires_at - self._skew() > self._clock()
 
+    # -- what the transport actually needs ---------------------------------------------------
+
+    async def headers(self) -> dict[str, str]:
+        """The auth headers for one Stitch call, resolved fresh (never cached in plaintext).
+
+        An API key short-circuits the token machinery entirely — there is nothing to refresh.
+        """
+        headers: dict[str, str] = {}
+        project = _configured("stitch_gcp_project")
+        if project:
+            headers[USER_PROJECT_HEADER] = project
+
+        api_key = _configured("stitch_api_key")
+        if api_key:
+            headers[API_KEY_HEADER] = api_key
+            return headers
+
+        headers["Authorization"] = f"Bearer {await self.get_access_token()}"
+        return headers
+
     async def get_access_token(self) -> str:
-        """Return a valid access token, refreshing (once, single-flight) if needed."""
+        """Return a valid bearer token, refreshing (once, single-flight) if needed.
+
+        A statically configured ``STITCH_ACCESS_TOKEN`` is returned as-is: it is externally
+        managed (gcloud), so ForgeFlow neither caches nor tries to refresh it.
+        """
+        static = _configured("stitch_access_token")
+        if static:
+            return static
+
         if self._is_valid(self._cached):
             assert self._cached is not None
             return self._cached.access_token

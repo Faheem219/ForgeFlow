@@ -21,6 +21,7 @@ class StitchErrorKind(StrEnum):
     quota = "quota"  # generation cap reached for the window
     transient = "transient"  # timeout / 5xx / network — worth a retry
     fatal = "fatal"  # bad request / unexpected response — do not retry
+    unsupported = "unsupported"  # the API has no such capability (e.g. screenshot→UI)
 
 
 _DEFAULT_HINTS: dict[StitchErrorKind, str] = {
@@ -37,6 +38,10 @@ _DEFAULT_HINTS: dict[StitchErrorKind, str] = {
     ),
     StitchErrorKind.fatal: (
         "Stitch could not process this request. Try a different input, or switch to 'figma'/'fake'."
+    ),
+    StitchErrorKind.unsupported: (
+        "Stitch's API cannot do this (its MCP surface is text-prompt only). Use a text prompt, "
+        "or switch the design provider to 'fake' for screenshot intake."
     ),
 }
 

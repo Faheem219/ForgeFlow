@@ -336,26 +336,72 @@ _KEYS: tuple[ConfigKey, ...] = (
         minimum=1024,
         maximum=52_428_800,
     ),
-    ConfigKey("stitch_gcp_project", Cat.providers, "str", "Stitch GCP project id."),
-    ConfigKey("stitch_client_id", Cat.providers, "str", "Stitch OAuth client id."),
+    ConfigKey(
+        "stitch_api_key",
+        Cat.providers,
+        "str",
+        "Stitch API key (Stitch → Settings → API keys), sent as X-Goog-Api-Key. The simplest way "
+        "to authenticate. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "stitch_access_token",
+        Cat.providers,
+        "str",
+        "Google access token for Stitch (e.g. from gcloud), sent as a bearer token. Expires in "
+        "about an hour and is not refreshed here. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "stitch_gcp_project",
+        Cat.providers,
+        "str",
+        "Cloud project billed/quota-attributed for Stitch calls (X-Goog-User-Project).",
+    ),
+    ConfigKey(
+        "stitch_project_id",
+        Cat.providers,
+        "str",
+        "Existing Stitch project to generate into. Blank creates one on first use.",
+    ),
+    ConfigKey(
+        "stitch_model_id",
+        Cat.providers,
+        "str",
+        "Stitch generation model, e.g. GEMINI_3_FLASH (standard quota) or GEMINI_3_PRO "
+        "(experimental, far smaller quota). Blank uses the API default.",
+    ),
+    ConfigKey(
+        "stitch_client_id",
+        Cat.providers,
+        "str",
+        "OAuth client id, only for a proxy token endpoint that implements client-credentials.",
+    ),
     ConfigKey(
         "stitch_client_secret",
         Cat.providers,
         "str",
-        "Stitch OAuth client secret. Stored encrypted; never displayed again.",
+        "OAuth client secret for that proxy endpoint. Stored encrypted; never displayed again.",
         sensitive=True,
     ),
     ConfigKey(
-        "stitch_mcp_url", Cat.providers, "str", "Stitch MCP server base URL.", extra=_url_or_blank
+        "stitch_mcp_url",
+        Cat.providers,
+        "str",
+        "Stitch MCP endpoint (JSON-RPC over HTTP). Default: https://stitch.googleapis.com/mcp",
+        extra=_url_or_blank,
     ),
     ConfigKey(
         "stitch_token_url",
         Cat.providers,
         "str",
-        "Stitch OAuth2 token endpoint (client-credentials grant).",
+        "OAuth2 token endpoint for the client-credentials path. Google's own token endpoint does "
+        "not implement that grant — leave blank unless you run a proxy that does.",
         extra=_url_or_blank,
     ),
-    ConfigKey("stitch_scope", Cat.providers, "str", "Optional Stitch OAuth scope."),
+    ConfigKey(
+        "stitch_scope", Cat.providers, "str", "Optional OAuth scope for that token endpoint."
+    ),
     ConfigKey(
         "stitch_quota_monthly",
         Cat.providers,
