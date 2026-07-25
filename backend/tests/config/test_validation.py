@@ -72,20 +72,53 @@ def test_model_pricing_json_must_be_a_json_object() -> None:
         coerce_and_validate("model_pricing_json", "[1, 2, 3]")
 
 
+def test_a_url_field_rejects_a_non_url() -> None:
+    assert coerce_and_validate("openai_base_url", "") == ""  # blank = provider default
+    assert coerce_and_validate("openai_base_url", "http://localhost:11434/v1")
+    with pytest.raises(UserError, match="http"):
+        coerce_and_validate("openai_base_url", "localhost:11434")
+
+
+def test_a_memory_size_field_rejects_nonsense() -> None:
+    assert coerce_and_validate("sandbox_mem_limit", "512m") == "512m"
+    with pytest.raises(UserError, match="memory size"):
+        coerce_and_validate("sandbox_mem_limit", "lots")
+
+
+def test_the_design_fallback_chain_rejects_an_unknown_provider() -> None:
+    assert coerce_and_validate("design_fallback_chain", "figma,fake") == "figma,fake"
+    with pytest.raises(UserError, match="unknown providers"):
+        coerce_and_validate("design_fallback_chain", "figma,sketch")
+
+
 # ---------------------------------------------------------------- sensitive keys
 
 
-def test_a_sensitive_key_cannot_be_written_as_plain_config() -> None:
-    with pytest.raises(UserError, match="vault"):
-        coerce_and_validate("anthropic_api_key", "sk-ant-whatever")
+def test_a_sensitive_key_accepts_a_value_but_never_a_blank_one() -> None:
+    """Secrets are settable from the panel (they are encrypted on the way in); blanking one is a
+    reset, not a write, so it is refused with that hint."""
+    assert coerce_and_validate("openai_api_key", "sk-test-123") == "sk-test-123"
+    with pytest.raises(UserError, match="Reset"):
+        coerce_and_validate("openai_api_key", "  ")
 
 
-async def test_setting_a_sensitive_key_via_the_service_is_refused(
+# ---------------------------------------------------------------- locked (bootstrap) keys
+
+
+def test_a_locked_key_cannot_be_written() -> None:
+    """FERNET_KEY protects the stored secrets and the Mongo keys are read before this layer
+    exists — both must come from the environment, and the refusal says why."""
+    for key in ("fernet_key", "mongodb_uri", "forgeflow_meta_db"):
+        with pytest.raises(UserError, match="cannot be set from the admin panel"):
+            coerce_and_validate(key, "anything")
+
+
+async def test_setting_a_locked_key_via_the_service_is_refused(
     db_provider: DbSettingProvider,
 ) -> None:
     with pytest.raises(UserError) as exc:
-        await ConfigAdminService().set("anthropic_api_key", "sk-ant-x", admin_id=None)
-    assert exc.value.detail == {"key": "anthropic_api_key", "sensitive": True}
+        await ConfigAdminService().set("fernet_key", "x", admin_id=None)
+    assert exc.value.detail == {"key": "fernet_key", "locked": True}
 
 
 # ---------------------------------------------------------------- restart-required flag

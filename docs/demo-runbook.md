@@ -6,6 +6,8 @@ engineered so that money moment happens on purpose, not by luck.
 
 - **Scenario:** [`eval/specs/hero-todo.yaml`](../eval/specs/hero-todo.yaml) — a todo app with a
   "Clear completed" bulk action that first-pass generation tends to get subtly wrong.
+- **Copy-paste prompts** for this and two shorter scenarios (plus the admin-panel walkthrough):
+  [`judge-demo-prompts.md`](./judge-demo-prompts.md).
 - **Regression guard:** `backend/tests/demo/test_hero_smoke.py` runs the whole path headlessly (costly
   legs mocked) and asserts every milestone. Run it before every rehearsal.
 - **Reset to clean state:** `uv run python -m scripts.demo reset` (see §4).

@@ -1,12 +1,14 @@
-"""Seed/migration: ensure indexes and seed default platform settings.
+"""Seed/migration: ensure indexes and (optionally) create the dev admin user.
 
 Run from the backend dir:  ``uv run python -m scripts.seed``  (or ``make seed``).
 Also runnable as a file:    ``uv run python scripts/seed.py``.
 
 Index creation happens via ``init_db`` (Beanie builds every model's declared indexes).
-Default ``PlatformSetting`` rows mirror the env/default config values so the admin dashboard
-(phase-52) has something to edit. A dev admin *user* is intentionally not seeded here — password
-hashing lands in phase-03.
+
+**No ``PlatformSetting`` rows are seeded.** The admin dashboard reads its catalog from the config
+registry, so it has plenty to edit without them — and a seeded row *is* an admin override, which
+would make a handful of keys report source ``admin`` on a fresh install when nobody chose anything.
+Leaving the collection empty keeps the badge honest: ``admin`` means a human set it here.
 """
 
 from __future__ import annotations
@@ -21,21 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.auth.service import hash_password  # noqa: E402
 from app.core.config import get_config  # noqa: E402
 from app.db.models import User  # noqa: E402
-from app.db.models.enums import SettingCategory, UserRole  # noqa: E402
+from app.db.models.enums import UserRole  # noqa: E402
 from app.db.mongo import close_client, init_db  # noqa: E402
-from app.db.repos import PlatformSettingRepo, UserRepo  # noqa: E402
-
-# (config key, category) — keys match Settings field names so the phase-51 DB provider can
-# override them by the same name.
-DEFAULT_SETTINGS: list[tuple[str, SettingCategory]] = [
-    ("model_codegen", SettingCategory.models),
-    ("model_routing", SettingCategory.models),
-    ("anthropic_base_url", SettingCategory.models),
-    ("design_provider", SettingCategory.providers),
-    ("deploy_default_mode", SettingCategory.deploy),
-    ("sandbox_image", SettingCategory.sandbox),
-    ("sandbox_idle_timeout_s", SettingCategory.sandbox),
-]
+from app.db.repos import UserRepo  # noqa: E402
 
 
 async def _seed_admin() -> str:
@@ -57,18 +47,9 @@ async def _seed_admin() -> str:
 
 async def seed() -> None:
     await init_db()  # ensures indexes on all collections
-    config = get_config()
-    repo = PlatformSettingRepo()
-
-    created = 0
-    for key, category in DEFAULT_SETTINGS:
-        if await repo.get_by_key(key) is None:
-            await repo.upsert(key, config.get(key), category)
-            created += 1
-
     admin_status = await _seed_admin()
 
-    print(f"seed complete: indexes ensured; {created} default platform settings created")
+    print("seed complete: indexes ensured")
     print(f"admin user: {admin_status}")
     await close_client()
 

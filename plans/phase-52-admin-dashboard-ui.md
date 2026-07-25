@@ -114,3 +114,32 @@ The user-facing half of the **user directive**: *settings must be configurable v
   267/268 (the 1 failure is the pre-existing phase-45 `eval/charts` geometry test, untouched here and
   identical at HEAD). Backend ruff/black/mypy clean; the `/admin/config/audit` route registers and
   the app boots. Backend `tests/config` run on Linux/CI.
+
+---
+
+## Follow-up (post-phase): the dashboard for the *whole* environment
+
+`phase-51`'s follow-up made all 108 settings admin-editable, which changed what the UI has to do —
+9 sections became 17, and a flat list of ~110 rows is not navigable. The dashboard was reworked:
+
+- **Grouped navigation.** Sections are grouped into *Intelligence* (models & provider, agent loop,
+  budget), *Pipeline* (design providers, sandbox, preview, testing, repair, deploy), *Platform*
+  (artifacts, database, realtime, auth, core, flags) and *Insights* (observability, audit). Each
+  section carries a **count badge of how many keys are overridden there**, so where an operator has
+  diverged from env is visible without opening anything, and each has a one-line blurb.
+- **Search across every section** (name, env var, description) with results tagged by the section
+  they live in — a key can be found without knowing where it was filed — plus an **"overridden
+  only"** filter and a header count of total admin overrides.
+- **Richer rows.** Human label + the **`ENV_VAR` name** (so panel ↔ `.env` map onto each other),
+  description, source badge, `restart required`, allowed range / enum choices, and the true **code
+  default** beneath the effective value.
+- **Bulk save.** Edited rows highlight and an `unsaved` badge appears; a sticky bar offers
+  **Save N / Discard**, posting one `PUT /admin/config`. Per-key rejections come back inline and the
+  rejected drafts are *kept* so they can be fixed in place, while accepted ones clear.
+- **Secrets are now editable, write-only.** `SensitiveField` submits a new value straight to the API
+  (never joining the bulk draft state); the stored value is never rendered, and **Reset** removes the
+  override so the key falls back to env. **Locked** keys (`FERNET_KEY`, `MONGODB_URI`,
+  `FORGEFLOW_META_DB`) render read-only with the reason they must come from the environment.
+- **Tests:** `SettingsForm.test.tsx` grew to 11 — bulk save, partial-failure isolation, discard,
+  write-only secret submission, and the locked-key rendering — 20 admin tests pass; ESLint + `tsc`
+  clean; full frontend suite 271/272 (same pre-existing `eval/charts` failure).

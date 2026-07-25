@@ -1,32 +1,49 @@
 """The catalog of admin-editable platform settings (phase-51).
 
-The resolver (``config.py``) can override *any* ``Settings`` field from the DB layer, but not every
-field should be exposed to an admin dashboard — some are secrets, some are deploy-env wiring.
-This registry is the **allowlist**: only keys listed here may be written via the admin API, and each
-carries the metadata the dashboard needs (category, type, description, whether it is sensitive or
-needs a restart) plus the validation applied on write.
+**Every** field on :class:`~app.core.config.Settings` is listed here — the directive is that the
+whole environment is configurable from the admin panel, not a curated subset — and a test
+(``tests/config/test_registry_complete.py``) fails the build if a new field is added without a
+registry entry. Each entry carries the metadata the dashboard needs (category, type, description,
+bounds/choices, sensitivity, restart semantics) plus the validation applied on write.
 
-Two rules keep it safe:
+Three rules keep it safe:
 
-- **Sensitive keys are read-only here.** API tokens (``anthropic_api_key`` …) are listed so the
-  dashboard can *show* they exist, but they are managed through the encrypted vault (phase-34),
-  never stored as a plain ``PlatformSetting``. A write to one is refused, pointing at the vault.
 - **Every value is coerced + validated** to the field's type and range before it is stored, so the
   DB layer can never feed the resolver a value the code would choke on.
+- **Sensitive keys are write-only and encrypted at rest.** API keys and tokens may be *set* from
+  the panel, but they are Fernet-encrypted into the ``PlatformSetting`` row (``config_admin``),
+  decrypted only at read time (``config_db``), and never returned to a client — reads yield a mask.
+- **Locked keys cannot be written at all.** ``fernet_key`` protects the encrypted values themselves
+  (storing it beside them would defeat the encryption) and the Mongo connection keys are read before
+  the DB layer exists, so an override there would silently do nothing. They are still *shown*, with
+  their source and the reason they are read-only.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic_core import PydanticUndefined
+
 from app.core.config import Settings
 from app.core.errors import UserError
-from app.db.models.enums import SettingCategory
+from app.db.models.enums import SettingCategory as Cat
 
 ValueType = str  # one of: "str" | "int" | "float" | "bool" | "enum" | "json"
+
+#: Why a locked key is read-only, shown verbatim in the dashboard.
+BOOTSTRAP_SECRET = (
+    "Encrypts every other secret stored here — keeping it in the same database would defeat that. "
+    "Set it in the environment."
+)
+BOOTSTRAP_DB = (
+    "Read while connecting to Mongo, before the admin config layer exists — an override here could "
+    "never take effect. Set it in the environment."
+)
 
 
 @dataclass(frozen=True)
@@ -34,29 +51,40 @@ class ConfigKey:
     """Metadata + validation for one admin-editable setting."""
 
     key: str
-    category: SettingCategory
+    category: Cat
     type: ValueType
     description: str
+    #: Secrets: writable but write-only — encrypted at rest, never read back to a client.
     sensitive: bool = False
+    #: Takes effect only after a restart (or, for sandbox limits, for newly-created containers).
     restart_required: bool = False
+    #: Read-only: an override is impossible or unsafe. ``locked_reason`` explains why.
+    locked: bool = False
+    locked_reason: str = ""
     #: Allowed values for ``type == "enum"``.
     choices: tuple[str, ...] = ()
     #: Inclusive numeric bounds for int/float.
     minimum: float | None = None
     maximum: float | None = None
-    #: Whether a numeric value may be ``None`` (e.g. an "unset" budget cap).
+    #: Whether a value may be ``None`` (e.g. an "unset" budget cap).
     nullable: bool = False
     #: Extra, key-specific validation (raises ``UserError``). Runs after type coercion.
     extra: Callable[[Any], None] | None = field(default=None, compare=False)
 
+    @property
+    def env_var(self) -> str:
+        """The environment variable that supplies this key when no admin override exists."""
+        return self.key.upper()
+
     def default(self) -> Any:
-        """The code default from ``Settings`` — the value in force when nothing overrides it."""
-        return _defaults().get(self.key)
+        """The **code** default — what the key falls back to when neither DB nor env supplies it."""
+        info = Settings.model_fields.get(self.key)
+        if info is None or info.default is PydanticUndefined:
+            return None
+        return info.default
 
 
-def _defaults() -> dict[str, Any]:
-    # A pristine Settings() carries the code defaults (env is layered on by the resolver, not here).
-    return Settings().model_dump()
+# --------------------------------------------------------------------------- validators
 
 
 def _positive(value: Any) -> None:
@@ -77,73 +105,334 @@ def _valid_json_object(value: Any) -> None:
         raise UserError("must be a JSON object")
 
 
-# The registry. Categories mirror ``SettingCategory``. Keys are ``Settings`` field names, so the DB
-# layer overrides them by the same name the resolver reads.
+def _url_or_blank(value: Any) -> None:
+    text = str(value).strip()
+    if text and not text.startswith(("http://", "https://")):
+        raise UserError("must be blank or an http(s) URL")
+
+
+def _mongo_uri_or_blank(value: Any) -> None:
+    text = str(value).strip()
+    if text and not text.startswith(("mongodb://", "mongodb+srv://")):
+        raise UserError("must be blank or a mongodb:// URI")
+
+
+_MEM = re.compile(r"^\d+(\.\d+)?\s*[bkmgBKMG]?$")
+
+
+def _memory_size(value: Any) -> None:
+    if not _MEM.match(str(value).strip()):
+        raise UserError("must be a docker memory size such as '512m' or '1g'")
+
+
+def _design_chain(value: Any) -> None:
+    """A comma-separated fallback order over known providers; blank disables auto-fallback."""
+    text = str(value).strip()
+    if not text:
+        return
+    unknown = [p for p in (s.strip() for s in text.split(",")) if p and p not in DESIGN_PROVIDERS]
+    if unknown:
+        raise UserError(f"has unknown providers: {', '.join(unknown)}")
+
+
+def _email_or_blank(value: Any) -> None:
+    text = str(value).strip()
+    if text and ("@" not in text or text.startswith("@") or text.endswith("@")):
+        raise UserError("must be blank or an email address")
+
+
+def _abs_path(value: Any) -> None:
+    text = str(value).strip()
+    if not text.startswith("/"):
+        raise UserError("must be an absolute path")
+
+
+def _leading_slash(value: Any) -> None:
+    if not str(value).strip().startswith("/"):
+        raise UserError("must start with '/'")
+
+
+def _docker_name(value: Any) -> None:
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", str(value).strip()):
+        raise UserError("must be a valid docker name (alphanumerics, '_', '.', '-')")
+
+
+DESIGN_PROVIDERS = ("stitch", "figma", "fake")
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+# --------------------------------------------------------------------------- the registry
+#
+# Keys are ``Settings`` field names, so the DB layer overrides them under the same name the resolver
+# reads. Order within a category is the order the dashboard renders.
+
 _KEYS: tuple[ConfigKey, ...] = (
-    # -- models --
+    # ---------------------------------------------------------------- models (LLM provider)
     ConfigKey(
-        "model_codegen", SettingCategory.models, "str", "Model id for real code/test/repair work."
+        "llm_provider",
+        Cat.models,
+        "enum",
+        "Chat backend for every agent: Anthropic Messages API, or any OpenAI-compatible "
+        "Chat Completions endpoint (OpenAI, Azure, Groq, OpenRouter, vLLM, Ollama…).",
+        choices=("anthropic", "openai"),
+    ),
+    ConfigKey(
+        "model_codegen",
+        Cat.models,
+        "str",
+        "Model id for real code/test/repair work. Use an id valid for the active provider.",
     ),
     ConfigKey(
         "model_routing",
-        SettingCategory.models,
+        Cat.models,
         "str",
-        "Cheap model for classification/summaries/routing.",
+        "Cheap model for classification/summaries/routing (cost discipline).",
+    ),
+    ConfigKey(
+        "anthropic_api_key",
+        Cat.models,
+        "str",
+        "Anthropic API key. Stored encrypted; never displayed again once saved.",
+        sensitive=True,
     ),
     ConfigKey(
         "anthropic_base_url",
-        SettingCategory.models,
+        Cat.models,
         "str",
         "Override the Anthropic API base URL (blank = SDK default).",
+        extra=_url_or_blank,
+    ),
+    ConfigKey(
+        "openai_api_key",
+        Cat.models,
+        "str",
+        "API key for the OpenAI-compatible endpoint. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "openai_base_url",
+        Cat.models,
+        "str",
+        "Base URL of the OpenAI-compatible endpoint, e.g. http://localhost:11434/v1 (Ollama) or "
+        "https://openrouter.ai/api/v1. Blank = the OpenAI default.",
+        extra=_url_or_blank,
     ),
     ConfigKey(
         "anthropic_max_output_tokens",
-        SettingCategory.models,
+        Cat.models,
         "int",
         "Max output tokens per model call.",
         minimum=1,
         maximum=200_000,
     ),
     ConfigKey(
-        "anthropic_api_key",
-        SettingCategory.models,
+        "anthropic_max_tool_turns",
+        Cat.models,
+        "int",
+        "Safety bound on a single agent tool-use loop.",
+        minimum=1,
+        maximum=100,
+    ),
+    ConfigKey(
+        "anthropic_max_retries",
+        Cat.models,
+        "int",
+        "Backoff attempts on transient Anthropic errors (429/5xx/network).",
+        minimum=0,
+        maximum=10,
+    ),
+    ConfigKey(
+        "openai_max_retries",
+        Cat.models,
+        "int",
+        "Backoff attempts on transient errors from the OpenAI-compatible endpoint.",
+        minimum=0,
+        maximum=10,
+    ),
+    # ---------------------------------------------------------------- agents
+    ConfigKey(
+        "app_skeleton_dir",
+        Cat.agents,
         "str",
-        "Anthropic API key — managed via the encrypted vault, not stored here.",
-        sensitive=True,
+        "Generated-app skeleton copied into /workspace. Relative paths resolve from the repo root.",
+    ),
+    ConfigKey(
+        "tool_output_max_chars",
+        Cat.agents,
+        "int",
+        "Cap on command output fed back to the model (the tail is kept).",
+        minimum=500,
+        maximum=200_000,
+    ),
+    ConfigKey(
+        "codegen_context_char_budget",
+        Cat.agents,
+        "int",
+        "Per-artifact cap on design/requirements context handed to the codegen agent.",
+        minimum=500,
+        maximum=200_000,
+    ),
+    # ---------------------------------------------------------------- budget & pricing
+    ConfigKey(
+        "budget_cap_inr_per_project",
+        Cat.budget,
+        "float",
+        "Per-project spend cap in ₹ (blank = uncapped).",
+        nullable=True,
+        extra=_positive,
+    ),
+    ConfigKey(
+        "budget_cap_inr_global",
+        Cat.budget,
+        "float",
+        "Platform-wide spend cap in ₹ (blank = uncapped).",
+        nullable=True,
+        extra=_positive,
+    ),
+    ConfigKey(
+        "budget_warn_ratio",
+        Cat.budget,
+        "float",
+        "Warn once spend crosses this fraction of a cap. 0 disables the warning.",
+        minimum=0,
+        maximum=1,
     ),
     ConfigKey(
         "model_pricing_json",
-        SettingCategory.budget,
+        Cat.budget,
         "json",
-        "Per-model ₹/1M-token pricing as JSON, or blank for built-in defaults.",
+        'Per-model ₹/1M-token pricing: {"<model>": {"input": .., "output": ..}}. '
+        "Blank = built-in defaults. Required to cost a model the platform does not know.",
         extra=_valid_json_object,
     ),
-    # -- providers --
+    # ---------------------------------------------------------------- design providers
     ConfigKey(
         "design_provider",
-        SettingCategory.providers,
+        Cat.providers,
         "enum",
         "Active design provider.",
-        choices=("stitch", "figma", "fake"),
+        choices=DESIGN_PROVIDERS,
     ),
     ConfigKey(
         "design_fallback_chain",
-        SettingCategory.providers,
+        Cat.providers,
         "str",
-        "Comma-separated fallback order when the active provider fails (phase-48).",
+        "Comma-separated fallback order when the active provider fails recoverably "
+        "(quota/auth/transient). Blank disables auto-fallback.",
+        extra=_design_chain,
     ),
-    # -- deploy --
     ConfigKey(
-        "deploy_default_mode",
-        SettingCategory.deploy,
-        "enum",
-        "Default deploy credential mode.",
-        choices=("seamless", "byo"),
+        "design_max_images",
+        Cat.providers,
+        "int",
+        "Max screenshots accepted per design intake.",
+        minimum=1,
+        maximum=50,
     ),
-    # -- sandbox (apply to newly-created sandboxes; existing ones must be recreated) --
+    ConfigKey(
+        "design_max_image_bytes",
+        Cat.providers,
+        "int",
+        "Per-screenshot size cap in bytes.",
+        minimum=1024,
+        maximum=52_428_800,
+    ),
+    ConfigKey("stitch_gcp_project", Cat.providers, "str", "Stitch GCP project id."),
+    ConfigKey("stitch_client_id", Cat.providers, "str", "Stitch OAuth client id."),
+    ConfigKey(
+        "stitch_client_secret",
+        Cat.providers,
+        "str",
+        "Stitch OAuth client secret. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "stitch_mcp_url", Cat.providers, "str", "Stitch MCP server base URL.", extra=_url_or_blank
+    ),
+    ConfigKey(
+        "stitch_token_url",
+        Cat.providers,
+        "str",
+        "Stitch OAuth2 token endpoint (client-credentials grant).",
+        extra=_url_or_blank,
+    ),
+    ConfigKey("stitch_scope", Cat.providers, "str", "Optional Stitch OAuth scope."),
+    ConfigKey(
+        "stitch_quota_monthly",
+        Cat.providers,
+        "int",
+        "Stitch generations allowed per monthly window (free tier ≈ 350).",
+        minimum=1,
+        maximum=1_000_000,
+    ),
+    ConfigKey(
+        "stitch_quota_soft_ratio",
+        Cat.providers,
+        "float",
+        "used/limit at or above this ratio reports the provider as degraded.",
+        minimum=0,
+        maximum=1,
+    ),
+    ConfigKey(
+        "stitch_timeout_s",
+        Cat.providers,
+        "float",
+        "Per-call wall clock for Stitch (seconds).",
+        minimum=1,
+        maximum=600,
+    ),
+    ConfigKey(
+        "stitch_max_retries",
+        Cat.providers,
+        "int",
+        "Extra attempts on transient Stitch errors.",
+        minimum=0,
+        maximum=10,
+    ),
+    ConfigKey(
+        "stitch_token_skew_s",
+        Cat.providers,
+        "float",
+        "Refresh the Stitch token this many seconds before real expiry.",
+        minimum=0,
+        maximum=3600,
+    ),
+    ConfigKey(
+        "figma_token",
+        Cat.providers,
+        "str",
+        "Figma personal access token. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "figma_mcp_url", Cat.providers, "str", "Figma MCP server base URL.", extra=_url_or_blank
+    ),
+    ConfigKey(
+        "figma_timeout_s",
+        Cat.providers,
+        "float",
+        "Per-call wall clock for Figma (seconds).",
+        minimum=1,
+        maximum=600,
+    ),
+    ConfigKey(
+        "figma_max_retries",
+        Cat.providers,
+        "int",
+        "Extra attempts on transient Figma errors.",
+        minimum=0,
+        maximum=10,
+    ),
+    # ---------------------------------------------------------------- sandbox
+    ConfigKey(
+        "sandbox_image",
+        Cat.sandbox,
+        "str",
+        "Docker image backing every project sandbox.",
+        restart_required=True,
+    ),
     ConfigKey(
         "sandbox_cpu_limit",
-        SettingCategory.sandbox,
+        Cat.sandbox,
         "float",
         "CPU cores per sandbox.",
         restart_required=True,
@@ -153,14 +442,15 @@ _KEYS: tuple[ConfigKey, ...] = (
     ),
     ConfigKey(
         "sandbox_mem_limit",
-        SettingCategory.sandbox,
+        Cat.sandbox,
         "str",
         "Memory per sandbox (e.g. '1g', '512m').",
         restart_required=True,
+        extra=_memory_size,
     ),
     ConfigKey(
         "sandbox_pids_limit",
-        SettingCategory.sandbox,
+        Cat.sandbox,
         "int",
         "Max processes per sandbox (fork-bomb guard).",
         restart_required=True,
@@ -168,53 +458,491 @@ _KEYS: tuple[ConfigKey, ...] = (
         maximum=4096,
     ),
     ConfigKey(
+        "sandbox_read_only_root",
+        Cat.sandbox,
+        "bool",
+        "Mount the container root read-only (/workspace and /tmp stay writable).",
+        restart_required=True,
+    ),
+    ConfigKey(
         "sandbox_idle_timeout_s",
-        SettingCategory.sandbox,
+        Cat.sandbox,
         "int",
         "Idle seconds before a sandbox is reaped.",
         minimum=30,
         maximum=86_400,
     ),
-    # -- budget --
     ConfigKey(
-        "budget_cap_inr_per_project",
-        SettingCategory.budget,
-        "float",
-        "Per-project spend cap in ₹ (blank = uncapped).",
-        nullable=True,
-        extra=_positive,
+        "sandbox_reap_interval_s",
+        Cat.sandbox,
+        "int",
+        "How often the idle reaper sweeps (seconds).",
+        minimum=5,
+        maximum=3600,
     ),
     ConfigKey(
-        "budget_cap_inr_global",
-        SettingCategory.budget,
-        "float",
-        "Platform-wide spend cap in ₹ (blank = uncapped).",
-        nullable=True,
-        extra=_positive,
+        "sandbox_exec_timeout_s",
+        Cat.sandbox,
+        "int",
+        "Default per-command wall clock before the process is killed.",
+        minimum=5,
+        maximum=7200,
     ),
-    # -- repair --
+    ConfigKey(
+        "sandbox_max_concurrent_execs",
+        Cat.sandbox,
+        "int",
+        "Concurrent commands allowed per project.",
+        minimum=1,
+        maximum=32,
+    ),
+    ConfigKey(
+        "sandbox_shell",
+        Cat.sandbox,
+        "str",
+        "Interactive terminal shell inside the sandbox.",
+        extra=_abs_path,
+    ),
+    ConfigKey(
+        "workspace_max_file_bytes",
+        Cat.sandbox,
+        "int",
+        "Per-file read/write cap for the workspace filesystem API.",
+        minimum=1024,
+        maximum=104_857_600,
+    ),
+    # ---------------------------------------------------------------- live preview
+    ConfigKey("preview_fe_dir", Cat.preview, "str", "Frontend directory inside the workspace."),
+    ConfigKey("preview_be_dir", Cat.preview, "str", "Backend directory inside the workspace."),
+    ConfigKey(
+        "preview_fe_cmd",
+        Cat.preview,
+        "str",
+        "Frontend dev-server command ({port} is substituted).",
+    ),
+    ConfigKey(
+        "preview_be_cmd",
+        Cat.preview,
+        "str",
+        "Backend dev-server command (the port arrives via the injected PORT env var).",
+    ),
+    ConfigKey(
+        "preview_fe_port",
+        Cat.preview,
+        "int",
+        "Frontend port inside the sandbox.",
+        minimum=1,
+        maximum=65_535,
+    ),
+    ConfigKey(
+        "preview_be_port",
+        Cat.preview,
+        "int",
+        "Backend port inside the sandbox.",
+        minimum=1,
+        maximum=65_535,
+    ),
+    ConfigKey(
+        "preview_health_timeout_s",
+        Cat.preview,
+        "int",
+        "How long preview start-up waits for both servers to answer.",
+        minimum=5,
+        maximum=1800,
+    ),
+    ConfigKey(
+        "preview_health_path",
+        Cat.preview,
+        "str",
+        "Frontend health-probe path.",
+        extra=_leading_slash,
+    ),
+    ConfigKey(
+        "preview_be_health_path",
+        Cat.preview,
+        "str",
+        "Backend health-probe path (skeleton contract).",
+        extra=_leading_slash,
+    ),
+    ConfigKey(
+        "preview_network_name",
+        Cat.preview,
+        "str",
+        "Internal docker network for preview traffic (sandbox↔proxy only, never the host).",
+        restart_required=True,
+        extra=_docker_name,
+    ),
+    ConfigKey(
+        "egress_network_name",
+        Cat.preview,
+        "str",
+        "Routed docker network the sandbox joins only during a live validation run.",
+        restart_required=True,
+        extra=_docker_name,
+    ),
+    ConfigKey(
+        "preview_base_domain",
+        Cat.preview,
+        "str",
+        "Wildcard domain for preview URLs in production. Blank = *.preview.localhost.",
+    ),
+    # ---------------------------------------------------------------- testing & live validation
+    ConfigKey(
+        "test_runner_timeout_s",
+        Cat.testing,
+        "int",
+        "Wall clock for a single suite invocation in the sandbox.",
+        minimum=30,
+        maximum=7200,
+    ),
+    ConfigKey(
+        "live_test_selection",
+        Cat.testing,
+        "enum",
+        "Which E2E subset runs against production. An untagged suite always runs in full.",
+        choices=("smoke", "critical", "both", "all"),
+    ),
+    ConfigKey(
+        "live_test_timeout_s",
+        Cat.testing,
+        "int",
+        "Wall clock for the live Playwright invocation.",
+        minimum=30,
+        maximum=7200,
+    ),
+    ConfigKey(
+        "live_warmup_attempts",
+        Cat.testing,
+        "int",
+        "Probes of a sleeping free-tier deployment before giving up (so results reflect real "
+        "failures, not spin-up).",
+        minimum=0,
+        maximum=60,
+    ),
+    ConfigKey(
+        "live_warmup_interval_s",
+        Cat.testing,
+        "float",
+        "Seconds between warm-up probes.",
+        minimum=0.5,
+        maximum=120,
+    ),
+    ConfigKey(
+        "live_test_retries",
+        Cat.testing,
+        "int",
+        "Playwright retries for a flaky first hit over the network.",
+        minimum=0,
+        maximum=5,
+    ),
+    # ---------------------------------------------------------------- repair loop
     ConfigKey(
         "repair_max_iterations",
-        SettingCategory.repair,
+        Cat.repair,
         "int",
-        "Hard cap on repair-loop iterations.",
+        "Hard cap on repair-loop iterations (the loop is always bounded).",
         minimum=1,
         maximum=20,
     ),
     ConfigKey(
         "repair_stall_threshold",
-        SettingCategory.repair,
+        Cat.repair,
         "int",
-        "No-progress iterations before the loop escalates.",
+        "No-progress iterations before the loop escalates to a human.",
         minimum=1,
         maximum=10,
     ),
-    # -- feature flags --
+    ConfigKey(
+        "repair_context_max_chars",
+        Cat.repair,
+        "int",
+        "Whole-context cap for a repair attempt (never feed the repo when a diff suffices).",
+        minimum=1000,
+        maximum=400_000,
+    ),
+    ConfigKey(
+        "repair_context_max_file_chars",
+        Cat.repair,
+        "int",
+        "Per-file cap before a file is truncated in the repair context.",
+        minimum=500,
+        maximum=200_000,
+    ),
+    ConfigKey(
+        "repair_context_diff_max_chars",
+        Cat.repair,
+        "int",
+        "Cap on the since-last-passing diff included in the repair context.",
+        minimum=500,
+        maximum=200_000,
+    ),
+    ConfigKey(
+        "validate_max_cycles",
+        Cat.repair,
+        "int",
+        "Outer bound: validate→repair→redeploy→re-validate cycles before escalating.",
+        minimum=1,
+        maximum=10,
+    ),
+    # ---------------------------------------------------------------- deploy
+    ConfigKey(
+        "deploy_default_mode",
+        Cat.deploy,
+        "enum",
+        "Default credential mode: platform-owned (seamless) or bring-your-own tokens.",
+        choices=("seamless", "byo"),
+    ),
+    ConfigKey(
+        "vercel_token",
+        Cat.deploy,
+        "str",
+        "Platform Vercel token for the frontend target. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "render_api_key",
+        Cat.deploy,
+        "str",
+        "Platform Render key for the backend target. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey("vercel_api_url", Cat.deploy, "str", "Vercel API base URL.", extra=_url_or_blank),
+    ConfigKey("render_api_url", Cat.deploy, "str", "Render API base URL.", extra=_url_or_blank),
+    ConfigKey(
+        "deploy_timeout_s",
+        Cat.deploy,
+        "float",
+        "Per-call wall clock for a deploy provider (seconds).",
+        minimum=1,
+        maximum=600,
+    ),
+    ConfigKey(
+        "deploy_max_retries",
+        Cat.deploy,
+        "int",
+        "Extra attempts on transient deploy-provider errors.",
+        minimum=0,
+        maximum=10,
+    ),
+    ConfigKey(
+        "deploy_repo_url",
+        Cat.deploy,
+        "str",
+        "Git repo Render builds the backend from (blank locally / when mocked).",
+    ),
+    ConfigKey(
+        "deploy_region", Cat.deploy, "str", "Optional provider region for the backend service."
+    ),
+    ConfigKey(
+        "deploy_health_timeout_s",
+        Cat.deploy,
+        "int",
+        "Seconds to poll a deployment until it reports live.",
+        minimum=10,
+        maximum=3600,
+    ),
+    ConfigKey(
+        "infra_scan_max_files",
+        Cat.deploy,
+        "int",
+        "How many workspace files the infra analyzer reads looking for env references.",
+        minimum=10,
+        maximum=5000,
+    ),
+    ConfigKey(
+        "infra_scan_max_depth",
+        Cat.deploy,
+        "int",
+        "How deep the infra analyzer walks the workspace tree.",
+        minimum=1,
+        maximum=20,
+    ),
+    # ---------------------------------------------------------------- storage
+    ConfigKey(
+        "blob_backend",
+        Cat.storage,
+        "enum",
+        "Where oversized artifact payloads live.",
+        choices=("gridfs", "filesystem"),
+    ),
+    ConfigKey(
+        "blob_fs_dir",
+        Cat.storage,
+        "str",
+        "Root directory for the filesystem blob backend (required when it is selected).",
+    ),
+    ConfigKey(
+        "artifact_inline_max_bytes",
+        Cat.storage,
+        "int",
+        "Artifact payloads at or below this size stay inline; larger ones go to the blob store.",
+        minimum=256,
+        maximum=16_777_216,
+    ),
+    # ---------------------------------------------------------------- database
+    ConfigKey(
+        "mongodb_uri",
+        Cat.database,
+        "str",
+        "Control-plane MongoDB connection URI.",
+        sensitive=True,
+        locked=True,
+        locked_reason=BOOTSTRAP_DB,
+        extra=_mongo_uri_or_blank,
+    ),
+    ConfigKey(
+        "forgeflow_meta_db",
+        Cat.database,
+        "str",
+        "Control-plane database name.",
+        locked=True,
+        locked_reason=BOOTSTRAP_DB,
+    ),
+    ConfigKey(
+        "app_db_cluster_uri",
+        Cat.database,
+        "str",
+        "Cluster hosting generated apps' per-project databases in platform mode. Blank reuses the "
+        "control-plane URI. Stored encrypted; never displayed again.",
+        sensitive=True,
+        extra=_mongo_uri_or_blank,
+    ),
+    # ---------------------------------------------------------------- realtime
+    ConfigKey(
+        "realtime_ring_size",
+        Cat.realtime,
+        "int",
+        "Per-project replay ring-buffer size for WebSocket events.",
+        minimum=16,
+        maximum=10_000,
+    ),
+    ConfigKey(
+        "realtime_heartbeat_s",
+        Cat.realtime,
+        "float",
+        "WebSocket heartbeat/ping interval (seconds).",
+        minimum=1,
+        maximum=300,
+    ),
+    # ---------------------------------------------------------------- auth & limits
+    ConfigKey(
+        "jwt_algorithm",
+        Cat.auth,
+        "enum",
+        "Signing algorithm for access tokens.",
+        choices=("HS256", "HS384", "HS512"),
+    ),
+    ConfigKey(
+        "access_token_expire_minutes",
+        Cat.auth,
+        "int",
+        "Access-token lifetime in minutes.",
+        minimum=5,
+        maximum=43_200,
+    ),
+    ConfigKey(
+        "auth_rate_limit_per_minute",
+        Cat.auth,
+        "int",
+        "Per-IP requests per minute allowed on login/register.",
+        minimum=1,
+        maximum=1000,
+    ),
+    ConfigKey(
+        "expensive_rate_limit_per_minute",
+        Cat.auth,
+        "int",
+        "Per-user requests per minute on endpoints that cost money or capacity "
+        "(model calls, sandbox work, deploys). 0 disables.",
+        minimum=0,
+        maximum=1000,
+    ),
+    ConfigKey(
+        "max_request_bytes",
+        Cat.auth,
+        "int",
+        "Hard backstop on any single request body. Must exceed a full design-image batch.",
+        restart_required=True,
+        minimum=1_048_576,
+        maximum=1_073_741_824,
+    ),
+    ConfigKey(
+        "secret_key",
+        Cat.auth,
+        "str",
+        "Access-token signing key. Rotating it signs every user out, including you. "
+        "Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "seed_admin_email",
+        Cat.auth,
+        "str",
+        "Optional dev admin created/promoted by `make seed`. Blank skips seeding.",
+        extra=_email_or_blank,
+    ),
+    ConfigKey(
+        "seed_admin_password",
+        Cat.auth,
+        "str",
+        "Password for the seeded admin. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    ConfigKey(
+        "demo_email",
+        Cat.auth,
+        "str",
+        "Account seeded by the demo script (phase-50).",
+        extra=_email_or_blank,
+    ),
+    ConfigKey(
+        "demo_password",
+        Cat.auth,
+        "str",
+        "Password for the demo account — blank means the script refuses to seed rather than "
+        "shipping a known credential. Stored encrypted; never displayed again.",
+        sensitive=True,
+    ),
+    # ---------------------------------------------------------------- core
+    ConfigKey(
+        "forgeflow_env",
+        Cat.core,
+        "str",
+        "Deployment environment label reported by /health (local, staging, prod…).",
+    ),
+    ConfigKey(
+        "app_version", Cat.core, "str", "Version string reported by the API.", restart_required=True
+    ),
+    ConfigKey(
+        "cors_origins",
+        Cat.core,
+        "str",
+        "Comma-separated allowed browser origins ('*' permitted in dev).",
+        restart_required=True,
+    ),
+    ConfigKey(
+        "log_level",
+        Cat.core,
+        "enum",
+        "Minimum log level for the control plane.",
+        restart_required=True,
+        choices=LOG_LEVELS,
+    ),
+    ConfigKey(
+        "fernet_key",
+        Cat.core,
+        "str",
+        "Encryption key for the credential vault and for secrets stored here.",
+        sensitive=True,
+        locked=True,
+        locked_reason=BOOTSTRAP_SECRET,
+    ),
+    # ---------------------------------------------------------------- feature flags
     ConfigKey(
         "log_json",
-        SettingCategory.feature_flags,
+        Cat.feature_flags,
         "bool",
-        "Emit structured JSON logs.",
+        "Emit structured JSON logs (off = human-readable console logs).",
         restart_required=True,
     ),
 )
@@ -237,18 +965,23 @@ def get_registered(key: str) -> ConfigKey:
 def coerce_and_validate(key: str, raw: Any) -> Any:
     """Type-coerce + validate a raw admin input into the value that will be stored.
 
-    Raises ``UserError`` (surfaced as 400 with detail) on any type/range/enum/sensitive violation.
+    Raises ``UserError`` (surfaced as 400 with detail) on any type/range/enum/locked violation.
     The returned value is already the correct Python type, so the resolver serves it without
-    re-coercion.
+    re-coercion. Sensitive values are returned as-is; encrypting them is ``config_admin``'s job.
     """
     entry = get_registered(key)
-    if entry.sensitive:
+    if entry.locked:
         raise UserError(
-            f"{key!r} is a secret — set it in the credentials vault, not platform config",
-            detail={"key": key, "sensitive": True},
+            f"{key!r} cannot be set from the admin panel — {entry.locked_reason}",
+            detail={"key": key, "locked": True},
         )
 
     value = _coerce(entry, raw)
+    if entry.sensitive and not str(value).strip():
+        raise UserError(
+            f"{key!r} must not be blank — use Reset to fall back to the environment",
+            detail={"key": key, "sensitive": True},
+        )
     if entry.type in ("int", "float") and value is not None:
         _check_range(entry, value)
     if entry.type == "enum" and value not in entry.choices:

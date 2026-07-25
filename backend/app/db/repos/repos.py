@@ -293,14 +293,18 @@ class PlatformSettingRepo(BaseRepo[PlatformSetting]):
         value: Any,
         category: SettingCategory,
         updated_by: PydanticObjectId | None = None,
+        encrypted: bool = False,
     ) -> PlatformSetting:
         existing = await self.get_by_key(key)
         if existing is not None:
             existing.value = value
             existing.category = category
+            existing.encrypted = encrypted
             existing.updated_by = updated_by
             existing.updated_at = utcnow()
             await existing.save()
             return existing
-        setting = PlatformSetting(key=key, value=value, category=category, updated_by=updated_by)
+        setting = PlatformSetting(
+            key=key, value=value, category=category, encrypted=encrypted, updated_by=updated_by
+        )
         return await setting.insert()

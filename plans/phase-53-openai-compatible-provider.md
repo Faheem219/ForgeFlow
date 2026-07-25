@@ -44,7 +44,9 @@ The change is small because the phase-20 agent client already isolated the netwo
 - **Anthropic stays the internal vocabulary; OpenAI is an edge adapter.** The loop keeps speaking content blocks / `tool_use` / `tool_result`; only the transport translates. This is why zero other modules changed and why the default install and behaviour are byte-for-byte unchanged. Translating the whole (stateless) transcript on each turn keeps the adapter simple and correct — no per-conversation adapter state.
 - **Fail loud, not silent.** An unknown `LLM_PROVIDER` and a missing `openai` package both raise typed errors; malformed tool-call arguments raise `ProviderError` rather than being coerced to `{}` (a wrong tool call must not look like an empty one).
 - **Honest cost.** Usage is read from the stream when the endpoint reports it; an endpoint that omits usage yields ₹0 (the same "must be priced to count" contract as any unlisted model), never a fabricated number.
-- **Already admin-configurable.** Because the new keys are ordinary `Settings` fields, the phase-51/52 admin dashboard surfaces `llm_provider` / `openai_base_url` / models with no extra work (sensitive `openai_api_key` still routes through the vault path).
+- **Already admin-configurable.** Because the new keys are ordinary `Settings` fields, the phase-51/52 admin dashboard surfaces `llm_provider` / `openai_base_url` / models with no extra work.
+
+  *Follow-up:* the phase-51 registry originally listed only 18 curated keys, so in practice `llm_provider` and `openai_*` were **not** reachable from the panel. That was corrected — the registry now covers every `Settings` field, and `OPENAI_API_KEY` is settable there as a **write-only, encrypted** secret rather than being refused. Switching provider end-to-end (`LLM_PROVIDER` → `openai`, base URL, both model ids, the key) is now a single **Models & provider** section in `/admin`, live on the next agent call. A regression test (`tests/config/test_registry_complete.py::test_the_phase_53_provider_keys_are_admin_editable`) pins it.
 
 ## Out of scope for this phase
 

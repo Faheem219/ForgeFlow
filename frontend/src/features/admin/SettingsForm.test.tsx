@@ -15,25 +15,37 @@ function json(body: unknown, status = 200): Response {
 }
 
 function setting(over: Partial<SettingView> = {}): SettingView {
-  return {
+  const merged: SettingView = {
     key: 'model_routing',
+    label: 'Model routing',
+    env_var: 'MODEL_ROUTING',
     category: 'models',
     type: 'str',
     description: 'Cheap model for routing.',
     sensitive: false,
     restart_required: false,
+    locked: false,
+    locked_reason: '',
     choices: [],
     value: 'claude-haiku-4-5-20251001',
     default: 'claude-haiku-4-5-20251001',
     source: 'env',
     ...over,
   };
+  // Label + env var follow the key unless a test states them, as the API does.
+  return {
+    ...merged,
+    label: over.label ?? merged.key,
+    env_var: over.env_var ?? merged.key.toUpperCase(),
+  };
 }
 
 interface MockState {
   puts: Array<{ key: string; value: unknown }>;
+  bulk: Array<Record<string, unknown>>;
   deletes: string[];
   putStatus: number;
+  bulkErrors: Record<string, string>;
 }
 
 function installFetch(state: MockState): void {
@@ -42,6 +54,18 @@ function installFetch(state: MockState): void {
     vi.fn<typeof fetch>((input, init) => {
       const url = String(input);
       const key = url.split('/admin/config/')[1] ?? '';
+      if (init?.method === 'PUT' && key === '') {
+        const updates = JSON.parse(String(init.body)).updates as Record<string, unknown>;
+        state.bulk.push(updates);
+        return Promise.resolve(
+          json({
+            updated: Object.keys(updates)
+              .filter((k) => !(k in state.bulkErrors))
+              .map((k) => setting({ key: k, source: 'db' })),
+            errors: state.bulkErrors,
+          }),
+        );
+      }
       if (init?.method === 'PUT') {
         state.puts.push({ key, value: JSON.parse(String(init.body)).value });
         if (state.putStatus >= 400) {
@@ -77,7 +101,7 @@ function renderForm(settings: SettingView[], onChanged = vi.fn()) {
 let state: MockState;
 
 beforeEach(() => {
-  state = { puts: [], deletes: [], putStatus: 200 };
+  state = { puts: [], bulk: [], deletes: [], putStatus: 200, bulkErrors: {} };
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -98,6 +122,8 @@ describe('SettingsForm', () => {
     expect((screen.getByTestId('input-model_routing') as HTMLInputElement).value).toBe(
       'claude-haiku-4-5-20251001',
     );
+    // The env var a key falls back to is shown, so an operator can map panel ↔ .env.
+    expect(screen.getByText('MODEL_ROUTING')).toBeInTheDocument();
   });
 
   it('saves an edit via PUT', async () => {
@@ -118,7 +144,13 @@ describe('SettingsForm', () => {
   it('coerces numeric edits to numbers', async () => {
     installFetch(state);
     renderForm([
-      setting({ key: 'repair_max_iterations', category: 'repair', type: 'int', value: 5, default: 5 }),
+      setting({
+        key: 'repair_max_iterations',
+        category: 'repair',
+        type: 'int',
+        value: 5,
+        default: 5,
+      }),
     ]);
 
     fireEvent.change(screen.getByTestId('input-repair_max_iterations'), { target: { value: '8' } });
@@ -147,7 +179,13 @@ describe('SettingsForm', () => {
     state.putStatus = 400;
     installFetch(state);
     renderForm([
-      setting({ key: 'repair_max_iterations', category: 'repair', type: 'int', value: 5, default: 5 }),
+      setting({
+        key: 'repair_max_iterations',
+        category: 'repair',
+        type: 'int',
+        value: 5,
+        default: 5,
+      }),
     ]);
 
     fireEvent.change(screen.getByTestId('input-repair_max_iterations'), {
@@ -158,17 +196,111 @@ describe('SettingsForm', () => {
     await waitFor(() =>
       expect(screen.getByTestId('error-repair_max_iterations')).toHaveTextContent('must be ≤ 20'),
     );
+    expect((screen.getByTestId('input-repair_max_iterations') as HTMLInputElement).value).toBe(
+      '999',
+    );
   });
 
-  it('renders sensitive keys masked and read-only, never the value', () => {
+  it('saves several edits in one bulk request', async () => {
     installFetch(state);
     renderForm([
-      setting({ key: 'anthropic_api_key', sensitive: true, value: '••••••', default: '' }),
+      setting(),
+      setting({ key: 'model_codegen', value: 'claude-sonnet-5', default: 'claude-sonnet-5' }),
     ]);
 
+    fireEvent.change(screen.getByTestId('input-model_routing'), { target: { value: 'haiku-x' } });
+    fireEvent.change(screen.getByTestId('input-model_codegen'), { target: { value: 'sonnet-x' } });
+
+    expect(screen.getByTestId('bulk-bar')).toHaveTextContent('2 unsaved changes');
+    fireEvent.click(screen.getByTestId('save-all'));
+
+    await waitFor(() =>
+      expect(state.bulk.at(-1)).toEqual({ model_routing: 'haiku-x', model_codegen: 'sonnet-x' }),
+    );
+  });
+
+  it('keeps a rejected key editable when a bulk save partially fails', async () => {
+    state.bulkErrors = { model_codegen: 'not a known model' };
+    installFetch(state);
+    renderForm([
+      setting(),
+      setting({ key: 'model_codegen', value: 'claude-sonnet-5', default: 'claude-sonnet-5' }),
+    ]);
+
+    fireEvent.change(screen.getByTestId('input-model_routing'), { target: { value: 'haiku-x' } });
+    fireEvent.change(screen.getByTestId('input-model_codegen'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByTestId('save-all'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('error-model_codegen')).toHaveTextContent('not a known model'),
+    );
+    // The rejected edit survives for the operator to fix; the accepted one is cleared.
+    expect(screen.getByTestId('bulk-bar')).toHaveTextContent('1 unsaved change');
+  });
+
+  it('discards all pending edits', () => {
+    installFetch(state);
+    renderForm([setting()]);
+
+    fireEvent.change(screen.getByTestId('input-model_routing'), { target: { value: 'haiku-x' } });
+    expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('discard-all'));
+
+    expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+    expect((screen.getByTestId('input-model_routing') as HTMLInputElement).value).toBe(
+      'claude-haiku-4-5-20251001',
+    );
+  });
+
+  it('makes a secret write-only: no value shown, and a new one is PUT', async () => {
+    installFetch(state);
+    renderForm([
+      setting({
+        key: 'openai_api_key',
+        label: 'OpenAI API key',
+        env_var: 'OPENAI_API_KEY',
+        sensitive: true,
+        value: '••••••',
+        default: '',
+        source: 'db',
+      }),
+    ]);
+
+    // The stored value is never rendered — only that one exists.
     expect(screen.getByTestId('sensitive-status')).toHaveTextContent('••••••');
-    // No editor / save control for a secret — it routes to the vault, not config.
-    expect(screen.queryByTestId('input-anthropic_api_key')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('save-anthropic_api_key')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('input-openai_api_key')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('sensitive-edit'));
+    fireEvent.change(screen.getByTestId('sensitive-input'), { target: { value: 'sk-new-key' } });
+    fireEvent.click(screen.getByTestId('sensitive-save'));
+
+    await waitFor(() =>
+      expect(state.puts.at(-1)).toEqual({ key: 'openai_api_key', value: 'sk-new-key' }),
+    );
+    // ...and it is not left rendered anywhere after submitting.
+    expect(screen.queryByText('sk-new-key')).not.toBeInTheDocument();
+  });
+
+  it('renders a locked key read-only, with the reason it cannot be set here', () => {
+    installFetch(state);
+    renderForm([
+      setting({
+        key: 'fernet_key',
+        label: 'Fernet key',
+        env_var: 'FERNET_KEY',
+        category: 'core',
+        sensitive: true,
+        locked: true,
+        locked_reason: 'Encrypts every other secret stored here.',
+        value: '••••••',
+        default: '',
+      }),
+    ]);
+
+    expect(screen.getByText('Encrypts every other secret stored here.')).toBeInTheDocument();
+    expect(screen.queryByTestId('input-fernet_key')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sensitive-edit')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-fernet_key')).not.toBeInTheDocument();
   });
 });

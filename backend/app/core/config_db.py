@@ -16,6 +16,11 @@ The answer is a **synchronous in-memory cache** that async code refreshes:
 **Fail-soft is mandatory** (§7): if Mongo is unavailable, ``load`` keeps the last-known cache (empty
 at worst) and never raises, so config resolution degrades to env/default rather than taking the
 control plane down.
+
+**Secrets never sit in the cache in plaintext.** A sensitive key (an API token set from the admin
+panel) is stored as Fernet ciphertext; the cache holds the ciphertext and ``get`` decrypts on the
+read — "decrypted at call time only" (§7). An undecryptable value (``FERNET_KEY`` rotated) resolves
+as ``MISSING``, so the key falls back to env/default instead of erroring.
 """
 
 from __future__ import annotations
@@ -31,21 +36,49 @@ logger = logging.getLogger(__name__)
 DEFAULT_TTL_SECONDS = 30.0
 
 
+def _decrypt(ciphertext: Any) -> Any:
+    """Plaintext for a stored secret, or ``MISSING`` when it cannot be decrypted.
+
+    Imported lazily: the vault pulls in the DB models, and this module is imported during config
+    bootstrap. Never raises and never logs the value.
+    """
+    try:
+        from app.deploy.secrets import SecretVault
+
+        plaintext = SecretVault().decrypt(str(ciphertext))
+    except Exception:
+        logger.warning("config: a stored secret could not be decrypted; falling back to env")
+        return MISSING
+    return MISSING if plaintext is None else plaintext
+
+
 class DbSettingProvider:
     """A resolver provider backed by ``PlatformSetting`` docs, via a sync cache."""
 
     name = "db"
 
     def __init__(self, ttl_seconds: float = DEFAULT_TTL_SECONDS) -> None:
-        self._cache: dict[str, Any] = {}
+        #: key -> (stored value, whether it is Fernet ciphertext)
+        self._cache: dict[str, tuple[Any, bool]] = {}
         self._loaded_at: float | None = None
         self._ttl = ttl_seconds
 
     # -- the sync resolver interface --------------------------------------------------------
 
     def get(self, key: str) -> Any:
-        """Return the admin override for ``key`` from the cache, or ``MISSING``."""
-        return self._cache.get(key, MISSING)
+        """Return the admin override for ``key`` from the cache, or ``MISSING``.
+
+        A secret is decrypted here — on the read — rather than being held in plaintext memory.
+        """
+        entry = self._cache.get(key)
+        if entry is None:
+            return MISSING
+        value, encrypted = entry
+        return _decrypt(value) if encrypted else value
+
+    def is_overridden(self, key: str) -> bool:
+        """Whether an admin override exists, without decrypting it."""
+        return key in self._cache
 
     # -- async cache management -------------------------------------------------------------
 
@@ -56,10 +89,15 @@ class DbSettingProvider:
 
             docs = await PlatformSettingRepo().all()
             # Only admin-editable keys are applied, so a stray/renamed DB row can't shadow a field
-            # the code no longer reads.
+            # the code no longer reads; `locked` keys are refused on write but skipped here too, so
+            # a hand-edited row can never shadow the bootstrap keys (§7).
             from app.core.config_registry import REGISTRY
 
-            self._cache = {d.key: d.value for d in docs if d.key in REGISTRY}
+            self._cache = {
+                d.key: (d.value, bool(d.encrypted))
+                for d in docs
+                if d.key in REGISTRY and not REGISTRY[d.key].locked
+            }
             self._loaded_at = time.monotonic()
         except Exception:
             logger.warning("config: DB layer unavailable; serving env/default", exc_info=True)

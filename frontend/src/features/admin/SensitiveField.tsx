@@ -10,20 +10,21 @@ import { Badge } from '../../components/ui';
  * characters. Editing is a fresh password input; the typed value only leaves the component via
  * `onSubmit`, and is not persisted in the DOM after.
  *
- * In the config dashboard, sensitive keys are refused by the phase-51 API on purpose (secrets live
- * in the encrypted vault, not `PlatformSetting`), so `readOnly` renders the masked state with a
- * vault note and no editor. The component is still a genuine write-only input for any surface that
- * does route to the vault.
+ * A secret submitted here is encrypted before it is stored and can never be read back — so the
+ * field is deliberately asymmetric: you may replace a value or clear the override, never inspect
+ * it. `readOnly` drops the editor entirely, for a key that cannot be set from the panel at all.
  */
 export function SensitiveField({
   isSet,
   readOnly = false,
+  busy = false,
   note,
   onSubmit,
 }: {
   /** Whether a secret is currently stored (derived from the mask, never the value itself). */
   isSet: boolean;
   readOnly?: boolean;
+  busy?: boolean;
   note?: string;
   onSubmit?: (secret: string) => void;
 }): JSX.Element {
@@ -50,16 +51,18 @@ export function SensitiveField({
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2" data-testid="sensitive-field">
+      <div className="flex flex-wrap items-center gap-2" data-testid="sensitive-field">
         {status}
         <button
           type="button"
           data-testid="sensitive-edit"
+          disabled={busy}
           onClick={() => setEditing(true)}
-          className="rounded px-2 py-1 text-xs text-brand-300 hover:bg-slate-800"
+          className="rounded px-2 py-1 text-xs text-brand-300 hover:bg-slate-800 disabled:opacity-50"
         >
-          {isSet ? 'Replace' : 'Set'}
+          {busy ? 'Saving…' : isSet ? 'Replace' : 'Set'}
         </button>
+        {note ? <span className="text-xs text-slate-500">{note}</span> : null}
       </div>
     );
   }

@@ -99,10 +99,24 @@ class DeployMode(StrEnum):
 
 
 class SettingCategory(StrEnum):
-    models = "models"
-    providers = "providers"
-    deploy = "deploy"
-    sandbox = "sandbox"
-    budget = "budget"
+    """Sections of the admin config panel (phase-51/52).
+
+    Every ``Settings`` field belongs to exactly one, so the dashboard can present the *whole*
+    environment — not a subset — grouped the way an operator thinks about it.
+    """
+
+    models = "models"  # LLM provider, model ids, base URLs, call tuning
+    agents = "agents"  # agent loop / tooling budgets
+    budget = "budget"  # spend caps + per-model pricing
+    providers = "providers"  # design providers (Stitch / Figma) + design intake
+    sandbox = "sandbox"  # container limits + command execution
+    preview = "preview"  # live preview servers + docker networks
+    testing = "testing"  # test runner + live validation
     repair = "repair"  # repair-loop thresholds (phase-51 admin config)
+    deploy = "deploy"  # deploy providers, infra analyzer, DB provisioning
+    storage = "storage"  # artifacts, blobs, workspace file caps
+    database = "database"  # control-plane + app-data Mongo wiring
+    realtime = "realtime"  # WebSocket hub tuning
+    auth = "auth"  # sessions, rate limits, request caps, seeded accounts
+    core = "core"  # environment, version, CORS, logging
     feature_flags = "feature_flags"

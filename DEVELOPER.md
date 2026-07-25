@@ -217,6 +217,20 @@ Every setting resolves through a **layered config** — precedence **admin panel
 default**. [`.env.example`](./.env.example) is authoritative and documents every variable; copy it to
 `.env` (never commit `.env`). Blank values fall back to the code default.
 
+**Every variable in `.env.example` is also editable at runtime from `/admin`** — models, provider and
+base URLs, API keys, budgets, sandbox limits, preview commands, repair thresholds, auth limits,
+feature flags. An override saved there wins over `.env` and applies immediately (keys flagged
+*restart required* apply on the next boot / next sandbox). A test
+(`tests/config/test_registry_complete.py`) fails the build if a new `Settings` field is added without
+an admin entry and an `.env.example` fallback, so the two can't drift.
+
+- **Secrets** (`*_API_KEY`, `*_TOKEN`, `SECRET_KEY`, …) can be *set* from the panel but never read
+  back: they are Fernet-encrypted into the settings store, decrypted only at call time, and shown as
+  `••••••`. The audit log records that they changed, never to what.
+- **Three keys are env-only** and shown read-only with the reason: `FERNET_KEY` (it encrypts the
+  stored secrets — keeping it beside them would defeat that) and `MONGODB_URI` / `FORGEFLOW_META_DB`
+  (read while connecting to Mongo, before the admin layer exists).
+
 Highlights you'll likely touch:
 
 | Variable | For |
@@ -252,6 +266,10 @@ MODEL_PRICING_JSON={"gpt-4o":{"input":210,"output":840}}   # optional; unlisted 
 
 Anthropic remains the default and is unchanged if you leave `LLM_PROVIDER` unset. An unknown provider
 or a missing `openai` package fails with a clear error rather than silently misbehaving.
+
+The same switch is available without touching `.env`: **`/admin` → Models & provider** holds
+`LLM_PROVIDER`, both model ids, `OPENAI_BASE_URL` and the API keys, and the change takes effect on
+the next agent call — which is the fastest way to demo a provider swap.
 
 ---
 
