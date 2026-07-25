@@ -31,6 +31,7 @@ from app.deploy.deploy_router import deploy_router
 from app.deploy.router import infra_router
 from app.design.router import router as design_router
 from app.eval.router import eval_router
+from app.orchestrator.conductor import reap_orphaned_runs
 from app.orchestrator.router import intents_router, requirements_router
 from app.orchestrator.router import router as artifacts_router
 from app.projects.router import router as projects_router
@@ -64,6 +65,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.warning(
             "config: DB layer not installed at startup; using env/default", exc_info=True
         )
+
+    # Close build runs orphaned by a previous process. A detached build lives in *this* process, so
+    # anything still open belongs to one that is gone — leaving it would show a permanent phantom
+    # build and lock the project out of starting a real one.
+    try:
+        await reap_orphaned_runs()
+    except Exception:
+        logger.warning("could not reap orphaned build runs at startup", exc_info=True)
 
     manager = get_manager()
     # Adopt any surviving sandbox containers / clear stale mappings. Best-effort: a control

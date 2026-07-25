@@ -16,6 +16,30 @@ export interface BuildReportData {
 
 export const BUILD_REPORT_KIND = 'build_report';
 
+/** A build running right now, as reported by the server (survives a page reload). */
+export interface BuildActivity {
+  run_id: string;
+  started_at: string;
+  step: string;
+  label: string;
+  target: string;
+  files: string[];
+}
+
+export interface ProjectActivity {
+  build: BuildActivity | null;
+}
+
+/**
+ * Long-running work in flight for this project.
+ *
+ * The reattach point: a build is detached from the request that started it, so after a reload this
+ * is the only way to discover one is still running (and what it has written so far).
+ */
+export function getActivity(projectId: string): Promise<ProjectActivity> {
+  return apiFetch<ProjectActivity>(`/projects/${projectId}/activity`);
+}
+
 /** Build-report artifacts (code_change with meta.kind === 'build_report'), oldest → newest. */
 export function listBuildReports(projectId: string): Promise<ArtifactDto[]> {
   return apiFetch<ArtifactDto[]>(`/projects/${projectId}/artifacts?stage=build&type=code_change`);

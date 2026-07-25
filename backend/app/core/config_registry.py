@@ -228,9 +228,10 @@ _KEYS: tuple[ConfigKey, ...] = (
         "anthropic_max_tool_turns",
         Cat.models,
         "int",
-        "Safety bound on a single agent tool-use loop.",
+        "Safety bound on a single agent tool-use loop. One turn per tool call, so a large "
+        "full-stack build needs hundreds; the loop stays bounded and budget-checked either way.",
         minimum=1,
-        maximum=100,
+        maximum=500,
     ),
     ConfigKey(
         "anthropic_max_retries",

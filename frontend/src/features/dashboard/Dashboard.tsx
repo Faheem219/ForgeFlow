@@ -2,11 +2,30 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Badge, Button, EmptyState, Input, Modal, Panel, Spinner } from '../../components/ui';
+import { Badge, Button, EmptyState, Input, Modal, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import { STAGE_LABELS } from '../workspace/stageMeta';
 import { createProject, listProjects } from './api';
+
+const MINUTE = 60_000;
+const UNITS: Array<[limit: number, ms: number, unit: Intl.RelativeTimeFormatUnit]> = [
+  [60 * MINUTE, MINUTE, 'minute'],
+  [24 * 60 * MINUTE, 60 * MINUTE, 'hour'],
+  [30 * 24 * 60 * MINUTE, 24 * 60 * MINUTE, 'day'],
+  [Number.POSITIVE_INFINITY, 30 * 24 * 60 * MINUTE, 'month'],
+];
+
+/** "5 minutes ago" — so a card says when it was last touched without a full timestamp. */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'recently';
+  const elapsed = Date.now() - then;
+  if (elapsed < MINUTE) return 'just now';
+  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const [, ms, unit] = UNITS.find(([limit]) => elapsed < limit) as [number, number, Intl.RelativeTimeFormatUnit];
+  return format.format(-Math.round(elapsed / ms), unit);
+}
 
 export default function Dashboard(): JSX.Element {
   const navigate = useNavigate();
@@ -50,35 +69,40 @@ export default function Dashboard(): JSX.Element {
         <Button onClick={() => setModalOpen(true)}>New project</Button>
       </div>
 
-      <Panel title="Your projects">
-        {projectsQuery.isLoading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
-          </div>
-        ) : projects.length === 0 ? (
-          <EmptyState
-            title="No projects yet"
-            description="Create your first project to open a workspace."
-            action={<Button onClick={() => setModalOpen(true)}>New project</Button>}
-          />
-        ) : (
-          <ul className="divide-y divide-slate-800" data-testid="project-list">
-            {projects.map((project) => (
-              <li key={project.id}>
-                <button
-                  type="button"
-                  data-testid={`project-${project.id}`}
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                  className="flex w-full items-center justify-between px-1 py-3 text-left hover:bg-slate-800/40"
-                >
-                  <span className="text-sm font-medium text-slate-100">{project.name}</span>
+      {projectsQuery.isLoading ? (
+        <div className="flex justify-center py-16">
+          <Spinner />
+        </div>
+      ) : projects.length === 0 ? (
+        <EmptyState
+          title="No projects yet"
+          description="Create your first project to open a workspace."
+          action={<Button onClick={() => setModalOpen(true)}>New project</Button>}
+        />
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="project-list">
+          {projects.map((project) => (
+            <li key={project.id}>
+              <button
+                type="button"
+                data-testid={`project-${project.id}`}
+                onClick={() => navigate(`/projects/${project.id}`)}
+                className="flex h-full w-full flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-left transition hover:border-slate-700 hover:bg-slate-800/40"
+              >
+                <span className="flex items-start justify-between gap-2">
+                  <span className="truncate font-medium text-slate-100">{project.name}</span>
                   <Badge tone="brand">{STAGE_LABELS[project.current_stage]}</Badge>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+                </span>
+                <span className="mt-auto flex items-center gap-2 text-xs text-slate-500">
+                  <span>{project.stack}</span>
+                  <span aria-hidden>·</span>
+                  <span>Updated {relativeTime(project.updated_at)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <Modal
         open={modalOpen}

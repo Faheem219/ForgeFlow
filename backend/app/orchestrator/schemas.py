@@ -145,7 +145,12 @@ class StageResult(BaseModel):
 
 
 class IntentResponse(BaseModel):
-    """Summary of a conductor run, returned by the intent endpoint."""
+    """Summary of a conductor run, returned by the intent endpoint.
+
+    A detached stage (build) answers as soon as the work is *accepted*, so ``messages`` and
+    ``artifacts`` are empty and ``to_status`` is ``in_progress``; the outcome arrives over the
+    realtime channel and via ``GET /projects/{id}/activity``.
+    """
 
     stage: Stage
     action: IntentAction
@@ -155,3 +160,20 @@ class IntentResponse(BaseModel):
     messages: list[MessagePublic]
     artifacts: list[ArtifactPublic]
     run_id: str
+
+
+class BuildActivityPublic(BaseModel):
+    """A build that is running right now, as a reloaded page needs to see it."""
+
+    run_id: str
+    started_at: datetime
+    step: str = ""
+    label: str = ""
+    target: str = ""
+    files: list[str] = Field(default_factory=list)
+
+
+class ActivityPublic(BaseModel):
+    """Long-running work in flight for a project. ``build`` is ``None`` when nothing is running."""
+
+    build: BuildActivityPublic | None = None

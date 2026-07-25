@@ -17,12 +17,16 @@ from typing import Any
 import pytest
 
 from app.agents.anthropic_client import (
+    MessageRequest,
     OpenAITransport,
     SdkTransport,
     TextDelta,
     TurnComplete,
     _accumulate,
+    _backoff_delay,
+    _is_transient_openai_error,
     _parse_tool_args,
+    _provider_message,
     _to_openai_messages,
     _to_openai_tools,
     default_transport,
@@ -194,3 +198,114 @@ def test_unknown_provider_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_config()
     with pytest.raises(SystemError):
         default_transport()
+
+
+# --------------------------------------------------------------------- transient classification
+#
+# A compatible server (NVIDIA NIM, vLLM, …) can answer 200, open the SSE stream and only then report
+# that it is out of capacity. The SDK raises a bare `APIError` with no status code, so the retry
+# decision rests entirely on the message — these pin that classification.
+
+httpx = pytest.importorskip("httpx")
+openai_sdk = pytest.importorskip("openai")
+
+
+def _request() -> Any:
+    return httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+
+
+def _response(status: int) -> Any:
+    return httpx.Response(status, request=_request())
+
+
+def _mid_stream_error(message: str) -> Any:
+    """The exact shape `openai._streaming` raises for an error inside a 200 SSE body."""
+    return openai_sdk.APIError(message=message, request=_request(), body=None)
+
+
+def test_mid_stream_capacity_error_is_transient() -> None:
+    # The real NVIDIA message that surfaced as an unretried 500.
+    exc = _mid_stream_error("ResourceExhausted: Worker local total request limit reached (16/16)")
+    # No status code to classify by (HTTP was 200) — the message is the only signal there is.
+    assert not hasattr(exc, "status_code")
+    assert _is_transient_openai_error(exc) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Rate limit exceeded, please try again",
+        "The server is busy right now",
+        "Service Unavailable",
+        "Model is overloaded",
+    ],
+)
+def test_other_capacity_phrasings_are_transient(message: str) -> None:
+    assert _is_transient_openai_error(_mid_stream_error(message)) is True
+
+
+def test_mid_stream_business_error_is_not_retried() -> None:
+    # A genuine rejection must fail fast rather than burn retries on a guaranteed failure.
+    exc = _mid_stream_error("This model does not support tool use")
+    assert _is_transient_openai_error(exc) is False
+
+
+@pytest.mark.parametrize("status", [429, 500, 503, 408])
+def test_retryable_status_codes(status: int) -> None:
+    exc = openai_sdk.APIStatusError("busy", response=_response(status), body=None)
+    assert _is_transient_openai_error(exc) is True
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+def test_client_errors_are_not_retryable(status: int) -> None:
+    exc = openai_sdk.APIStatusError("nope", response=_response(status), body=None)
+    assert _is_transient_openai_error(exc) is False
+
+
+def test_connection_errors_are_transient() -> None:
+    assert _is_transient_openai_error(openai_sdk.APIConnectionError(request=_request())) is True
+
+
+def test_capacity_message_is_actionable() -> None:
+    exc = _mid_stream_error("ResourceExhausted: Worker local total request limit reached (16/16)")
+
+    exhausted = _provider_message(exc, produced=False)
+    assert "out of capacity" in exhausted
+    assert "16/16" in exhausted  # the provider's own words survive, so the cause is visible
+
+    # Having already streamed tokens, the turn cannot be replayed — say so instead of promising
+    # a retry that never happened.
+    assert "mid-response" in _provider_message(exc, produced=True)
+
+
+def test_rejection_message_does_not_claim_capacity() -> None:
+    assert "rejected the request" in _provider_message(
+        _mid_stream_error("This model does not support tool use"), produced=False
+    )
+
+
+def test_backoff_grows_and_is_capped() -> None:
+    assert _backoff_delay(0) < _backoff_delay(3)
+    assert _backoff_delay(99) <= 20.25  # cap + max jitter
+
+
+# --------------------------------------------------------------------- unconfigured credentials
+
+
+async def test_missing_anthropic_key_is_a_provider_error_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unconfigured key must fail soft (502), never as an opaque 500.
+
+    The SDK signals missing credentials with a bare ``TypeError`` from deep inside request building;
+    letting that escape turns a fixable configuration problem into "Internal server error".
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    reset_config()
+
+    request = MessageRequest(
+        model="claude-sonnet-5", system=None, messages=[], tools=[], max_tokens=16
+    )
+    with pytest.raises(ProviderError, match="No Anthropic API key"):
+        async for _ in SdkTransport().stream(request):
+            pass

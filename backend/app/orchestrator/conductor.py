@@ -20,13 +20,18 @@ Intent → state-machine action mapping:
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from collections.abc import Coroutine
+from typing import Any
+
 from beanie import PydanticObjectId
 
 from app.core.config import get_config
 from app.core.errors import UserError
 from app.db.models import Run
 from app.db.models.common import utcnow
-from app.db.models.enums import MessageRole, StageStatus
+from app.db.models.enums import MessageRole, Stage, StageStatus
 from app.db.repos import RunRepo, StageStateRepo
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.messages import MessageService
@@ -46,8 +51,61 @@ from app.orchestrator.stages.base import StageContext
 from app.projects.service import ProjectService
 from app.projects.state_machine import Action, can_transition
 from app.realtime.hub import emit
+from app.realtime.schemas import EventType
+
+logger = logging.getLogger(__name__)
 
 _REOPENABLE = {StageStatus.complete, StageStatus.skipped, StageStatus.stale}
+
+#: Stages whose handler runs far longer than a request should be held open. Their work is detached
+#: so it survives the client that started it (a refresh, a proxy timeout) and is followed over the
+#: realtime channel instead.
+_DETACHED_STAGES = {Stage.build}
+
+#: Run kinds that mean "a build is in flight" — the conductor's own trace and the codegen agent's.
+BUILD_RUN_KINDS = ("conductor:build", "codegen:build")
+
+#: Strong refs to detached tasks; asyncio only holds weak ones, so without this they can vanish
+#: mid-build with no error anywhere.
+_DETACHED: set[asyncio.Task[None]] = set()
+
+
+def _runs_detached(stage: Stage, action: Action) -> bool:
+    """Whether this intent should be answered immediately and finished in the background."""
+    return stage in _DETACHED_STAGES and action is not Action.skip
+
+
+async def reap_orphaned_runs() -> int:
+    """Close build runs left open by a previous process. Returns how many were reaped.
+
+    Detached builds live in the API process, so any still-open build run at startup belongs to a
+    process that no longer exists — it cannot still be running. Left alone it would read as "a build
+    is in flight" forever: the UI would spin and, worse, the concurrent-build guard would lock the
+    project out of ever building again. Called once from the app lifespan.
+    """
+    reaped = 0
+    for run in await Run.find(
+        {"kind": {"$in": list(BUILD_RUN_KINDS)}, "finished_at": None}
+    ).to_list():
+        run.finished_at = utcnow()
+        if run.progress.step not in ("", "report"):
+            run.progress.step = "failed"
+            run.progress.label = "Interrupted by a restart"
+        await run.save()
+        reaped += 1
+    if reaped:
+        logger.info("reaped %d orphaned build run(s) from a previous process", reaped)
+    return reaped
+
+
+async def drain_detached() -> None:
+    """Await every detached stage task currently in flight.
+
+    Detached work outlives the response by design, which leaves tests (and a graceful shutdown) with
+    nothing to await. This is that join point.
+    """
+    while _DETACHED:
+        await asyncio.gather(*list(_DETACHED), return_exceptions=True)
 
 
 def _resolve_action(action: IntentAction, current: StageStatus) -> Action:
@@ -85,68 +143,202 @@ class Conductor:
                 intent.project_id, MessageRole.user, intent.message, stage=intent.stage
             )
 
+        # Refuse to start a second build on top of one already running: they share one workspace
+        # and would race on the same files. The open `Run` is the durable lock.
+        if _runs_detached(intent.stage, action):
+            active = await self._runs.active_for_project(intent.project_id, BUILD_RUN_KINDS)
+            if active:
+                raise UserError(
+                    "A build is already running for this project — wait for it to finish, "
+                    "or reload to follow its progress."
+                )
+
         run = await self._runs.insert(
             Run(project_id=intent.project_id, kind=f"conductor:{intent.stage}")
         )
-        try:
-            stage_state = await self._stages.get_or_create(intent.project_id, intent.stage)
-            ctx = StageContext(
-                project=project,
-                stage_state=stage_state,
-                messages=self._messages,
-                artifacts=self._artifacts,
-                config=get_config(),
-                emit=emit,
+        stage_state = await self._stages.get_or_create(intent.project_id, intent.stage)
+
+        # Publish "this stage is working" BEFORE the handler runs. A build holds this request
+        # open for minutes, and until now the stage stayed `empty` for all of it — the UI (and
+        # any second viewer) showed "Not started" while the agent was plainly building.
+        #
+        # Only for enter/complete: `refine` requires a complete/skipped/stale status, so writing
+        # in_progress first would make the closing transition illegal.
+        marked_in_progress = action in (Action.enter, Action.complete)
+        if marked_in_progress:
+            await self._stages.set_status(intent.project_id, intent.stage, StageStatus.in_progress)
+            await self._emit_transition(intent, current, StageStatus.in_progress)
+
+        ctx = StageContext(
+            project=project,
+            stage_state=stage_state,
+            messages=self._messages,
+            artifacts=self._artifacts,
+            config=get_config(),
+            emit=emit,
+        )
+
+        # A build runs for minutes. Holding the HTTP request open for it makes the work only as
+        # durable as one browser tab: a reload (or any proxy timeout) abandons the response, and
+        # the UI loses every trace of a build that is in fact still running. Detach it instead and
+        # answer at once — the client follows over the realtime channel and can re-discover the run
+        # from its `Run` document after a refresh. NOTE: the detached path owns closing `run`.
+        if _runs_detached(intent.stage, action):
+            self._spawn(
+                self._execute_detached(
+                    user_id, intent, ctx, action, run, marked_in_progress=marked_in_progress
+                )
             )
-            result = await get_handler(intent.stage).handle(intent, ctx)
-
-            created = [
-                await self._artifacts.create_version(
-                    intent.project_id, spec.stage, spec.type, text=spec.text, meta=spec.meta
-                )
-                for spec in result.artifacts
-            ]
-            artifact_ids = [a.id for a in created if a.id is not None]
-
-            persisted = [
-                await self._messages.append(
-                    intent.project_id,
-                    m.role,
-                    m.content,
-                    stage=intent.stage,
-                    # Link the round's artifacts to the assistant's reply.
-                    artifacts=artifact_ids if m.role is MessageRole.assistant else None,
-                )
-                for m in result.messages
-            ]
-
-            outcome = await self._projects.transition_stage(
-                intent.project_id, user_id, intent.stage, action
-            )
-
-            to_status = outcome.to_status
-            if result.next_status is not None and result.next_status is not outcome.to_status:
-                await self._stages.set_status(intent.project_id, intent.stage, result.next_status)
-                to_status = result.next_status
-
-            for extra in result.events:
-                await emit(
-                    str(intent.project_id),
-                    str(extra.get("event", "progress")),
-                    dict(extra.get("payload", {})),
-                    stage=intent.stage,
-                )
-
             return IntentResponse(
                 stage=intent.stage,
                 action=intent.action,
-                from_status=outcome.from_status,
-                to_status=to_status,
-                stale=list(outcome.stale),
-                messages=[MessageOut.from_message(m) for m in persisted],
-                artifacts=[ArtifactOut.from_artifact(a) for a in created],
+                from_status=current,
+                to_status=StageStatus.in_progress,
+                stale=[],
+                messages=[],
+                artifacts=[],
                 run_id=str(run.id),
+            )
+
+        try:
+            return await self._execute(
+                user_id, intent, ctx, action, current, run, marked_in_progress
             )
         finally:
             run.finished_at = utcnow()
             await run.save()
+
+    # -- execution ---------------------------------------------------------------------------
+
+    async def _execute(
+        self,
+        user_id: PydanticObjectId,
+        intent: Intent,
+        ctx: StageContext,
+        action: Action,
+        current: StageStatus,
+        run: Run,
+        marked_in_progress: bool,
+    ) -> IntentResponse:
+        """Dispatch to the stage handler, then persist everything it produced."""
+        try:
+            result = await get_handler(intent.stage).handle(intent, ctx)
+        except Exception:
+            # A failed handler must not strand the stage in `in_progress` forever — that reads as
+            # "still working" and blocks the user from retrying with a clear head.
+            await self._release(intent, marked_in_progress)
+            raise
+
+        created = [
+            await self._artifacts.create_version(
+                intent.project_id, spec.stage, spec.type, text=spec.text, meta=spec.meta
+            )
+            for spec in result.artifacts
+        ]
+        artifact_ids = [a.id for a in created if a.id is not None]
+
+        persisted = [
+            await self._messages.append(
+                intent.project_id,
+                m.role,
+                m.content,
+                stage=intent.stage,
+                # Link the round's artifacts to the assistant's reply.
+                artifacts=artifact_ids if m.role is MessageRole.assistant else None,
+            )
+            for m in result.messages
+        ]
+
+        outcome = await self._projects.transition_stage(
+            intent.project_id, user_id, intent.stage, action
+        )
+
+        to_status = outcome.to_status
+        if result.next_status is not None and result.next_status is not outcome.to_status:
+            await self._stages.set_status(intent.project_id, intent.stage, result.next_status)
+            to_status = result.next_status
+
+        for extra in result.events:
+            await emit(
+                str(intent.project_id),
+                str(extra.get("event", "progress")),
+                dict(extra.get("payload", {})),
+                stage=intent.stage,
+            )
+
+        return IntentResponse(
+            stage=intent.stage,
+            action=intent.action,
+            # The status the stage held when the user acted. `outcome.from_status` is re-read after
+            # the early in_progress mark above, so it would report that instead.
+            from_status=current,
+            to_status=to_status,
+            stale=list(outcome.stale),
+            messages=[MessageOut.from_message(m) for m in persisted],
+            artifacts=[ArtifactOut.from_artifact(a) for a in created],
+            run_id=str(run.id),
+        )
+
+    async def _execute_detached(
+        self,
+        user_id: PydanticObjectId,
+        intent: Intent,
+        ctx: StageContext,
+        action: Action,
+        run: Run,
+        *,
+        marked_in_progress: bool,
+    ) -> None:
+        """Run a long stage after the response has gone out.
+
+        Nothing may escape to the event loop from here — there is no caller left to catch it.
+        """
+        try:
+            await self._execute(
+                user_id, intent, ctx, action, StageStatus.in_progress, run, marked_in_progress
+            )
+        except Exception as exc:  # noqa: BLE001 - a detached task has nobody to raise to
+            logger.warning("detached %s stage failed", intent.stage, exc_info=True)
+            # `_execute` already reset the stage; tell the client why, since there is no response
+            # left to carry the error.
+            await emit(
+                str(intent.project_id),
+                EventType.progress,
+                {"stage": str(intent.stage), "step": "failed", "error": str(exc)},
+                stage=intent.stage,
+            )
+        finally:
+            # Closing the Run is what flips "a build is running" off, so it must happen whatever
+            # else did — otherwise the project is locked out of building forever.
+            run.finished_at = utcnow()
+            await run.save()
+
+    # -- helpers -----------------------------------------------------------------------------
+
+    def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
+        """Fire a detached task, holding a strong reference so it is not garbage-collected."""
+        task = asyncio.create_task(coro)
+        _DETACHED.add(task)
+        task.add_done_callback(_DETACHED.discard)
+
+    async def _emit_transition(
+        self, intent: Intent, from_status: StageStatus, to_status: StageStatus
+    ) -> None:
+        await emit(
+            str(intent.project_id),
+            EventType.stage_transition,
+            {
+                "stage": str(intent.stage),
+                "from": str(from_status),
+                "to": str(to_status),
+                "stale": [],
+            },
+            stage=intent.stage,
+        )
+
+    async def _release(self, intent: Intent, marked_in_progress: bool) -> None:
+        """Hand a failed stage back to the user instead of leaving it stuck `in_progress`."""
+        if not marked_in_progress:
+            return
+        await self._stages.set_status(intent.project_id, intent.stage, StageStatus.awaiting_user)
+        await self._emit_transition(intent, StageStatus.in_progress, StageStatus.awaiting_user)

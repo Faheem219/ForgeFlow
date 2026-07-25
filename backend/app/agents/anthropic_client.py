@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -37,6 +38,8 @@ from app.core.errors import ProviderError, SystemError, UserError  # noqa: A004 
 from app.db.models import Run
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
+
+logger = logging.getLogger(__name__)
 
 Emitter = Callable[..., Awaitable[Any]]
 # A tool dispatcher: (tool_name, tool_input) -> result string fed back to the model.
@@ -229,9 +232,17 @@ class SdkTransport:
         anthropic = _import_anthropic()
         config = get_config()
         base_url = str(config.get("anthropic_base_url")) or None
-        client = anthropic.AsyncAnthropic(
-            api_key=str(config.get("anthropic_api_key")), base_url=base_url
-        )
+        api_key = str(config.get("anthropic_api_key")).strip()
+        # Check the key here rather than letting the SDK raise. Unconfigured credentials are a
+        # *provider* problem (502, actionable) — the SDK signals them with a bare ``TypeError``,
+        # which would otherwise escape as an opaque 500 "Internal server error".
+        if not api_key:
+            raise ProviderError(
+                "No Anthropic API key is configured. Set it in the admin panel under Models, or "
+                "switch LLM_PROVIDER to an OpenAI-compatible endpoint.",
+                fallback_hint="configure_provider",
+            )
+        client = anthropic.AsyncAnthropic(api_key=api_key, base_url=base_url)
 
         kwargs: dict[str, Any] = {
             "model": request.model,
@@ -280,7 +291,7 @@ class SdkTransport:
             except retryable as exc:
                 if attempt >= attempts:
                     raise ProviderError("Anthropic request failed after retries") from exc
-                await asyncio.sleep(min(20.0, 0.5 * 2**attempt) + random.uniform(0, 0.25))
+                await asyncio.sleep(_backoff_delay(attempt))
         raise ProviderError("Anthropic request failed")  # unreachable
 
 
@@ -461,13 +472,70 @@ async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
     )
 
 
+#: Substrings marking a **mid-stream** provider failure as transient. An OpenAI-compatible server
+#: (NVIDIA NIM, vLLM, Together, …) may accept a request (HTTP 200), open the SSE stream, and only
+#: then report that it is out of capacity — e.g. "ResourceExhausted: Worker local total request
+#: limit reached (16/16)". The SDK surfaces that as a bare ``APIError`` carrying **no status code**
+#: (the response really was a 200), so its text is the only signal available to classify it.
+_TRANSIENT_STREAM_MARKERS: tuple[str, ...] = (
+    "resourceexhausted",
+    "resource_exhausted",
+    "request limit reached",
+    "rate limit",
+    "too many requests",
+    "overloaded",
+    "server is busy",
+    "temporarily unavailable",
+    "service unavailable",
+    "try again",
+)
+
+
+def _backoff_delay(attempt: int) -> float:
+    """Capped exponential backoff with jitter, so retries spread out instead of stampeding."""
+    return float(min(20.0, 0.5 * 2**attempt)) + random.uniform(0, 0.25)
+
+
+def _is_transient_openai_error(exc: BaseException) -> bool:
+    """Whether an ``openai`` SDK error is worth another attempt.
+
+    Errors that carry an HTTP status are classified by that status; a mid-stream ``APIError`` (which
+    has none — see :data:`_TRANSIENT_STREAM_MARKERS`) is classified by its message instead.
+    """
+    openai = _import_openai()
+    if isinstance(exc, openai.APIConnectionError):  # network blip / timeout
+        return True
+    if isinstance(exc, openai.APIStatusError):
+        status = int(getattr(exc, "status_code", 0) or 0)
+        return status in (408, 409, 425, 429) or status >= 500
+    if isinstance(exc, openai.APIError):
+        return any(marker in str(exc).lower() for marker in _TRANSIENT_STREAM_MARKERS)
+    return False
+
+
+def _provider_message(exc: BaseException, *, produced: bool) -> str:
+    """A user-facing explanation for a failed provider call (rendered by the API as a 502)."""
+    text = str(exc).strip() or exc.__class__.__name__
+    if not _is_transient_openai_error(exc):
+        return f"The model provider rejected the request ({text})."
+    if produced:
+        return (
+            f"The model provider ran out of capacity mid-response ({text}). The partial response "
+            "was discarded — run the stage again."
+        )
+    return (
+        f"The model provider is out of capacity ({text}). Retries were exhausted — try again "
+        "shortly, or point MODEL_CODEGEN / MODEL_ROUTING at a less contended model."
+    )
+
+
 class OpenAITransport:
     """Transport over any OpenAI-compatible Chat Completions endpoint (phase-53).
 
     A pure adapter: it translates the loop's Anthropic-shaped request into Chat Completions params,
     streams, and folds the response back into the loop's :class:`StreamEvent`s. Like
     :class:`SdkTransport`, the real network path is lazy-imported and not exercised by tests; the
-    translation and stream-reassembly helpers it delegates to are.
+    translation, stream-reassembly and retry-classification helpers it delegates to are.
     """
 
     async def stream(  # pragma: no cover - real network path
@@ -489,26 +557,34 @@ class OpenAITransport:
         if request.tools:
             params["tools"] = _to_openai_tools(request.tools)
 
-        raw = await self._with_retries(lambda: client.chat.completions.create(**params))
-        async for event in _accumulate(raw):
-            yield event
-
-    async def _with_retries(self, make_call: Callable[[], Any]) -> Any:  # pragma: no cover
-        openai = _import_openai()
-        retryable = (
-            openai.APIConnectionError,
-            openai.RateLimitError,
-            openai.InternalServerError,
-        )
-        attempts = int(get_config().get("openai_max_retries"))
+        # The retry spans **opening and consuming** the stream, not just opening it: a compatible
+        # server can answer 200 and only then fail inside the SSE body, which is precisely the case
+        # a create-only retry would miss.
+        attempts = int(config.get("openai_max_retries"))
         for attempt in range(attempts + 1):
+            produced = False
             try:
-                return await make_call()
-            except retryable as exc:
-                if attempt >= attempts:
-                    raise ProviderError("OpenAI request failed after retries") from exc
-                await asyncio.sleep(min(20.0, 0.5 * 2**attempt) + random.uniform(0, 0.25))
-        raise ProviderError("OpenAI request failed")  # unreachable
+                raw = await client.chat.completions.create(**params)
+                async for event in _accumulate(raw):
+                    produced = True
+                    yield event
+                return
+            except openai.OpenAIError as exc:
+                # Once tokens have been emitted the turn cannot be restarted — replaying it would
+                # duplicate streamed output in the UI — so only a pre-output failure is retryable.
+                if produced or attempt >= attempts or not _is_transient_openai_error(exc):
+                    raise ProviderError(_provider_message(exc, produced=produced)) from exc
+                delay = _backoff_delay(attempt)
+                # A silent retry chain looks identical to a hung request from the outside; say so.
+                logger.warning(
+                    "model provider unavailable, retrying in %.1fs (attempt %d/%d): %s",
+                    delay,
+                    attempt + 1,
+                    attempts,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+        raise ProviderError("The model provider request failed")  # unreachable
 
 
 # --------------------------------------------------------------------- provider selection

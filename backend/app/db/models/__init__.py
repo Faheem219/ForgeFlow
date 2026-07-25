@@ -14,7 +14,7 @@ from app.db.models.platform_setting import PlatformSetting
 from app.db.models.project import Project
 from app.db.models.repair_attempt import RepairAttempt
 from app.db.models.requirement import AcceptanceCriterion, Feature, RequirementSpec
-from app.db.models.run import Cost, Run
+from app.db.models.run import Cost, Run, RunProgress
 from app.db.models.stage_state import StageState
 from app.db.models.test_run import TestRun
 from app.db.models.test_suite import TestSuite
@@ -55,6 +55,7 @@ __all__ = [
     "RepairAttempt",
     "RequirementSpec",
     "Run",
+    "RunProgress",
     "StageState",
     "TestRun",
     "TestSuite",

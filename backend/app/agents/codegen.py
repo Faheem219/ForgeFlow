@@ -41,6 +41,7 @@ from app.agents.tools.registry import ToolDispatch, ToolRegistry
 from app.core.config import get_config
 from app.core.errors import NotFoundError, UserError
 from app.db.models import Project, RequirementSpec, Run
+from app.db.models.common import utcnow
 from app.db.models.enums import ArtifactType, Stage, StageStatus
 from app.db.models.requirement import Feature
 from app.db.repos import StageStateRepo
@@ -61,6 +62,53 @@ _PREVIEW_FAILED = "failed"
 _INSTANTIATED_MARKERS = ("pnpm-workspace.yaml", "package.json")
 
 BUILD_REPORT_KIND = "build_report"
+
+# Where generated *feature* code lives. The inventory is scoped to these so the model sees its own
+# prior work, not the 100+ skeleton/config files it must never touch.
+_FEATURE_ROOTS = ("backend/src", "frontend/src")
+
+# Never walk into these — they are enormous and irrelevant to what the agent has authored.
+_INVENTORY_SKIP = {"node_modules", ".git", "dist", "build", ".cache", "coverage", ".turbo"}
+
+# Skeleton files present from instantiation; listing them as "existing feature code" would invite
+# the model to treat scaffolding as its own output.
+_SKELETON_FILES = {
+    "backend/src/app.ts",
+    "backend/src/index.ts",
+    "backend/src/config.ts",
+    "backend/src/db.ts",
+    "frontend/src/main.tsx",
+    "frontend/src/routes.tsx",
+    "frontend/src/index.css",
+}
+
+_INVENTORY_MAX_FILES = 120  # a cap so a large workspace cannot blow the prompt budget
+
+#: Human labels for the coarse build phases, mirrored onto the Run so a reattaching client can say
+#: what the build is doing without replaying events.
+STEP_LABELS: dict[str, str] = {
+    "instantiate_skeleton": "Scaffolding the skeleton",
+    "survey": "Surveying existing code",
+    "plan": "Planning the build",
+    "implement": "Writing feature code",
+    "report": "Finishing up",
+    "failed": "Build failed",
+}
+
+#: Human labels for the tool calls the build makes, surfaced as `progress` events. The long,
+#: silent-looking waits are install/preview/tests — naming them is the whole point.
+TOOL_STEP_LABELS: dict[str, str] = {
+    "instantiate_skeleton": "Scaffolding the skeleton",
+    "read_file": "Reading existing code",
+    "list_dir": "Inspecting the workspace",
+    "write_file": "Writing feature code",
+    "install_deps": "Installing dependencies",
+    "run_command": "Running a command",
+    "run_tests": "Running tests",
+    "start_preview": "Starting the preview servers",
+    "restart_preview": "Restarting the preview servers",
+    "git_commit": "Committing the workspace",
+}
 
 
 @dataclass
@@ -161,6 +209,7 @@ class CodegenAgent:
         ctx: ToolContext | None = None,
         channel: str | None = None,
         instruction: str | None = None,
+        fresh: bool = False,
     ) -> BuildReport:
         project_id = project.id
         if project_id is None:  # pragma: no cover - a persisted project always carries an id
@@ -169,13 +218,13 @@ class CodegenAgent:
         ctx = ctx or ToolContext.build(project, run, channel=channel)
 
         tracker = _BuildTracker()
-        dispatch = self._make_dispatch(ctx, tracker)
+        dispatch = self._make_dispatch(ctx, tracker, channel, run)
         notes: list[str] = []
 
         stages = {s.stage: s.status for s in await self._stages.list_for_project(project_id)}
 
         # Step 0 — skeleton-first (deterministic; recorded on the trace as the first tool action).
-        await self._emit(channel, "instantiate_skeleton")
+        await self._emit(channel, "instantiate_skeleton", run)
         if await self._is_instantiated(ctx):
             notes.append(
                 "Workspace already instantiated — building incrementally, not rescaffolding."
@@ -183,6 +232,31 @@ class CodegenAgent:
         else:
             await dispatch("instantiate_skeleton", {})
             await dispatch("git_commit", {"message": "skeleton"})
+
+        # What a previous (possibly failed) build already wrote. Withheld on an explicit
+        # regenerate-everything request, which is the whole point of that escape hatch.
+        await self._emit(channel, "survey", run)
+        existing, existing_paths = (None, []) if fresh else await self._existing_code(ctx)
+        if fresh:
+            notes.append(
+                "Full regeneration requested — rewrite the feature code rather than extending it."
+            )
+        elif existing_paths:
+            notes.append(
+                f"{len(existing_paths)} feature file(s) already exist — extend them, "
+                "do not restart."
+            )
+            previous = await self._previous_report(project_id)
+            if previous is not None:
+                notes.append(
+                    f"Previous build: boot={previous.boot_status}"
+                    + (
+                        f", features={', '.join(previous.features_built)}"
+                        if previous.features_built
+                        else ""
+                    )
+                )
+                notes += [f"Outstanding follow-up: {f}" for f in previous.follow_ups]
 
         # Gather minimal upstream context (tolerate missing / stale — D12).
         design, design_note = await self._design_context(project_id, stages)
@@ -193,32 +267,58 @@ class CodegenAgent:
             notes.insert(0, f"Change request: {instruction}")
 
         # Step 1 — plan (Haiku).
-        await self._emit(channel, "plan")
+        await self._emit(channel, "plan", run)
         plan = await self._plan(
-            project_id, run, project.name, design, requirements, channel, instruction
+            project_id, run, project.name, design, requirements, channel, instruction, existing
         )
 
         # Steps 2–3 — implement + verify boot (Sonnet, bounded tool-use loop).
-        await self._emit(channel, "implement")
-        impl = await self._client.run_tool_loop(
-            task_kind=TaskKind.codegen,
-            project_id=project_id,
-            run=run,
-            system=system_prompt(CODEGEN_SYSTEM_EXTRA),
-            messages=[
-                {
-                    "role": "user",
-                    "content": implement_user_prompt(
-                        project.name, plan, design, requirements, notes
-                    ),
-                }
-            ],
-            tools=self._registry.anthropic_tools(),
-            tool_dispatch=dispatch,
-            channel=channel,
-        )
+        await self._emit(channel, "implement", run)
+        try:
+            impl = await self._client.run_tool_loop(
+                task_kind=TaskKind.codegen,
+                project_id=project_id,
+                run=run,
+                system=system_prompt(CODEGEN_SYSTEM_EXTRA),
+                messages=[
+                    {
+                        "role": "user",
+                        "content": implement_user_prompt(
+                            project.name, plan, design, requirements, notes, existing
+                        ),
+                    }
+                ],
+                tools=self._registry.anthropic_tools(),
+                tool_dispatch=dispatch,
+                channel=channel,
+            )
+        except Exception as exc:
+            # Persist what the failed attempt DID achieve. Without this the files it wrote are
+            # invisible in the UI and the next build has no record to resume from.
+            await self._emit(channel, "failed", run)
+            partial = BuildReport(
+                boot_status=tracker.boot_status(),
+                files_changed=sorted(tracker.files_written),
+                features_built=features,
+                follow_ups=[
+                    "The build did not finish — run it again to resume from the files already "
+                    "written.",
+                    *self._follow_ups(tracker),
+                ],
+                notes=[*notes, f"Build failed: {exc}"],
+                commit=tracker.last_commit,
+                tests_passed=tracker.tests_passed,
+                summary=f"Build failed before completing: {exc}",
+                plan=plan,
+            )
+            await self._persist_report(project_id, partial, failed=True)
+            await emit(
+                channel, "build.report", {"stage": "build", **partial.to_dict()}, stage=Stage.build
+            )
+            raise
 
         # Step 4 — build report.
+        await self._emit(channel, "report", run)
         report = BuildReport(
             boot_status=tracker.boot_status(),
             files_changed=sorted(tracker.files_written),
@@ -247,8 +347,9 @@ class CodegenAgent:
         requirements: str | None,
         channel: str,
         instruction: str | None = None,
+        existing: str | None = None,
     ) -> str:
-        user = plan_user_prompt(project_name, design, requirements)
+        user = plan_user_prompt(project_name, design, requirements, existing)
         if instruction:
             user += f"\n\nThe user requested this specific change — plan for it: {instruction}"
         result = await self._client.run_tool_loop(
@@ -306,10 +407,41 @@ class CodegenAgent:
 
     # -- helpers -------------------------------------------------------------------------
 
-    def _make_dispatch(self, ctx: ToolContext, tracker: _BuildTracker) -> ToolDispatch:
+    def _make_dispatch(
+        self, ctx: ToolContext, tracker: _BuildTracker, channel: str, run: Run
+    ) -> ToolDispatch:
         async def dispatch(name: str, raw_args: dict[str, Any]) -> str:
+            label = TOOL_STEP_LABELS.get(name, name)
+            target = _tool_target(name, raw_args)
+            # Announce the tool BEFORE it runs. install_deps/start_preview/run_tests each block for
+            # minutes; unannounced they read as a hang, which is exactly what users reported.
+            await emit(
+                channel,
+                EventType.progress,
+                {
+                    "stage": "build",
+                    "step": "implement",
+                    "tool": name,
+                    "label": label,
+                    "target": target,
+                },
+                stage=Stage.build,
+            )
+            run.progress.label = label
+            run.progress.target = target
+            run.progress.updated_at = utcnow()
+            await run.save()
+
             result = await self._registry.dispatch(ctx, name, raw_args)
             tracker.observe(name, raw_args, result)
+
+            # Record written files durably as they land, so a reload can rebuild the list without
+            # depending on the (bounded) realtime replay ring.
+            written = sorted(tracker.files_written)
+            if written != run.progress.files:
+                run.progress.files = written
+                run.progress.updated_at = utcnow()
+                await run.save()
             return result
 
         return dispatch
@@ -322,6 +454,66 @@ class CodegenAgent:
             except NotFoundError:
                 continue
         return False
+
+    async def _existing_code(self, ctx: ToolContext) -> tuple[str | None, list[str]]:
+        """An inventory of feature code already on disk: ``(prompt block, paths)``.
+
+        This is what makes a rebuild incremental. A build that died half-way still leaves its files
+        in the workspace; without telling the model they exist it starts over and rewrites them all.
+        Paths + sizes only — the model pulls contents with ``read_file`` when it actually needs them
+        (§7 cost discipline: never feed the whole repo when a listing suffices).
+        """
+        found: list[tuple[str, int]] = []
+        for root in _FEATURE_ROOTS:
+            try:
+                nodes = await ctx.workspace.tree(ctx.project, root, depth=None)
+            except (NotFoundError, UserError):
+                continue  # that half of the stack has not been created yet
+            for node in nodes:
+                path = getattr(node, "path", "") or ""
+                if getattr(node, "type", "") == "dir" or not path:
+                    continue
+                parts = path.split("/")
+                if any(part in _INVENTORY_SKIP for part in parts):
+                    continue
+                if path in _SKELETON_FILES:
+                    continue
+                found.append((path, int(getattr(node, "size", 0) or 0)))
+
+        if not found:
+            return None, []
+
+        found.sort(key=lambda item: item[0])
+        paths = [path for path, _ in found]
+        shown = found[:_INVENTORY_MAX_FILES]
+        lines = [f"  {path} ({_human_size(size)})" for path, size in shown]
+        if len(found) > len(shown):
+            lines.append(f"  …and {len(found) - len(shown)} more")
+        return "\n".join(lines), paths
+
+    async def _previous_report(self, project_id: PydanticObjectId) -> BuildReport | None:
+        """The most recent build report, so a retry knows what the last attempt achieved."""
+        latest = await self._artifacts.get_latest(project_id, Stage.build, ArtifactType.code_change)
+        if latest is None or latest.meta.get("kind") != BUILD_REPORT_KIND:
+            return None
+        try:
+            text = await self._artifacts.get_content(latest)
+            data = json.loads(text) if text else None
+        except (UserError, NotFoundError, json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return BuildReport(
+            boot_status=str(data.get("boot_status", BOOT_NOT_STARTED)),
+            files_changed=[str(f) for f in data.get("files_changed", [])],
+            features_built=[str(f) for f in data.get("features_built", [])],
+            follow_ups=[str(f) for f in data.get("follow_ups", [])],
+            notes=[str(n) for n in data.get("notes", [])],
+            commit=data.get("commit"),
+            tests_passed=data.get("tests_passed"),
+            summary=str(data.get("summary", "")),
+            plan=str(data.get("plan", "")),
+        )
 
     def _follow_ups(self, tracker: _BuildTracker) -> list[str]:
         out: list[str] = []
@@ -337,7 +529,9 @@ class CodegenAgent:
             out.append("Tests did not pass — run the Test & repair stage.")
         return out
 
-    async def _persist_report(self, project_id: PydanticObjectId, report: BuildReport) -> None:
+    async def _persist_report(
+        self, project_id: PydanticObjectId, report: BuildReport, *, failed: bool = False
+    ) -> None:
         await self._artifacts.create_version(
             project_id,
             Stage.build,
@@ -351,11 +545,46 @@ class CodegenAgent:
                 "follow_ups": report.follow_ups,
                 "tests_passed": report.tests_passed,
                 "commit": report.commit,
+                "failed": failed,
             },
         )
 
-    async def _emit(self, channel: str, step: str) -> None:
-        await emit(channel, EventType.progress, {"stage": "build", "step": step}, stage=Stage.build)
+    async def _emit(self, channel: str, step: str, run: Run | None = None) -> None:
+        label = STEP_LABELS.get(step, step)
+        await emit(
+            channel,
+            EventType.progress,
+            {"stage": "build", "step": step, "label": label},
+            stage=Stage.build,
+        )
+        # Mirror the phase onto the Run so a reattaching client knows where the build is.
+        if run is not None:
+            run.progress.step = step
+            run.progress.label = label
+            run.progress.target = ""
+            run.progress.updated_at = utcnow()
+            await run.save()
+
+
+def _human_size(size: int) -> str:
+    return f"{size} B" if size < 1024 else f"{size / 1024:.1f} KB"
+
+
+def _tool_target(name: str, args: dict[str, Any]) -> str:
+    """The most useful single detail about a tool call — the file, or the command being run."""
+    if name in ("write_file", "read_file"):
+        path = args.get("path")
+        return path if isinstance(path, str) else ""
+    if name == "list_dir":
+        path = args.get("path")
+        return path if isinstance(path, str) else ""
+    if name == "run_command":
+        cmd = args.get("cmd")
+        return " ".join(str(c) for c in cmd[:4]) if isinstance(cmd, list) else ""
+    if name == "run_tests":
+        kind = args.get("kind")
+        return str(kind) if kind else ""
+    return ""
 
 
 def _truncate(text: str, budget: int) -> str:

@@ -13,8 +13,9 @@ from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
 from app.core.limits import expensive_rate_limit
 from app.db.models import Artifact
+from app.db.repos import RunRepo
 from app.orchestrator.artifacts import ArtifactService
-from app.orchestrator.conductor import Conductor
+from app.orchestrator.conductor import BUILD_RUN_KINDS, Conductor
 from app.orchestrator.requirements import (
     RequirementSpecInput,
     RequirementSpecPublic,
@@ -25,8 +26,10 @@ from app.orchestrator.requirements import (
 )
 from app.orchestrator.requirements_suggest import suggest_criteria
 from app.orchestrator.schemas import (
+    ActivityPublic,
     ArtifactDetail,
     ArtifactDiffResponse,
+    BuildActivityPublic,
     Intent,
     IntentRequest,
     IntentResponse,
@@ -82,6 +85,37 @@ async def submit_intent(
     """Route a user intent through the conductor; detailed progress streams over the WS."""
     intent = Intent.from_request(parse_object_id(project_id), body)
     return await Conductor().handle_intent(user_id, intent)
+
+
+@intents_router.get("/{project_id}/activity", response_model=ActivityPublic)
+async def project_activity(
+    project_id: str,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> ActivityPublic:
+    """What long-running work is in flight for this project, and how far it has got.
+
+    This is the reattach point: a build is detached from the request that started it, so a reloaded
+    page has no other way to learn one is running. Progress is read from the ``Run`` document rather
+    than the realtime replay ring, which is bounded and long since evicted on a real build.
+    """
+    pid = await _owned_project_id(project_id, user_id)
+    runs = await RunRepo().active_for_project(pid, BUILD_RUN_KINDS)
+    if not runs:
+        return ActivityPublic(build=None)
+
+    # Prefer the codegen run — it is the one carrying progress. The conductor's own trace opens
+    # first, so it is the fallback for the brief window before codegen starts.
+    detailed = next((r for r in runs if r.kind == "codegen:build"), runs[0])
+    return ActivityPublic(
+        build=BuildActivityPublic(
+            run_id=str(detailed.id),
+            started_at=detailed.started_at,
+            step=detailed.progress.step,
+            label=detailed.progress.label,
+            target=detailed.progress.target,
+            files=list(detailed.progress.files),
+        )
+    )
 
 
 # --------------------------------------------------------------------- requirements (phase-25)

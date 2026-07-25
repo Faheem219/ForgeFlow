@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { BuildPanel } from './BuildPanel';
 
 // The IDE + preview are Monaco/xterm-backed — stub them so the panel logic tests stay light.
@@ -19,6 +20,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 interface MockState {
+  activity: { build: Record<string, unknown> | null };
   buildStatus: string;
   reports: Array<Record<string, unknown>>;
   reportDetail: Record<string, unknown>;
@@ -59,6 +61,7 @@ function installFetch(state: MockState): void {
         json([{ stage: 'build', status: state.buildStatus, artifacts: [], updated_at: '' }]),
       );
     }
+    if (url.includes('/activity')) return Promise.resolve(json(state.activity));
     if (url.includes('/artifacts?')) return Promise.resolve(json(state.reports));
     if (url.includes('/artifacts/')) return Promise.resolve(json(state.reportDetail));
     if (url.includes('/intent')) {
@@ -93,6 +96,7 @@ let state: MockState;
 
 beforeEach(() => {
   state = {
+    activity: { build: null },
     buildStatus: 'complete',
     reports: [reportArtifact()],
     reportDetail: { ...reportArtifact(), content: JSON.stringify(REPORT) },
@@ -139,6 +143,88 @@ describe('BuildPanel', () => {
     fireEvent.click(await screen.findByTestId('build-skip'));
     await waitFor(() =>
       expect(state.intentCalls.at(-1)).toMatchObject({ stage: 'build', action: 'skip' }),
+    );
+  });
+
+  it('lists generated files as their writes stream in', async () => {
+    // The plan step writes nothing, so without this surface the panel looks frozen and then dumps
+    // every file at once — the exact complaint this panel answers.
+    installFetch(state);
+    renderPanel();
+    await screen.findByTestId('mock-ide');
+
+    act(() => {
+      useRealtimeStore.setState({ channel: PROJECT, events: [] });
+    });
+    act(() => {
+      useRealtimeStore.setState((s) => ({
+        events: [
+          ...s.events,
+          {
+            event: 'progress',
+            project_id: PROJECT,
+            stage: 'build',
+            payload: { stage: 'build', step: 'implement' },
+            seq: 1,
+            ts: '',
+          },
+          {
+            event: 'fs.write',
+            project_id: PROJECT,
+            stage: 'build',
+            payload: { path: 'backend/src/todo/model.ts' },
+            seq: 2,
+            ts: '',
+          },
+        ],
+      }));
+    });
+
+    const list = await screen.findByTestId('build-file-list');
+    expect(list).toHaveTextContent('backend/src/todo/model.ts');
+    expect(screen.getByTestId('build-file-count')).toHaveTextContent('1 file written');
+  });
+
+  it('reattaches to a build that is already running after a reload', async () => {
+    // The panel mounts fresh (as after a refresh) with no local mutation in flight: the only way it
+    // can know a build is running is the server's activity endpoint.
+    state.activity = {
+      build: {
+        run_id: 'r1',
+        started_at: '2026-07-25T00:00:00Z',
+        step: 'implement',
+        label: 'Installing dependencies',
+        target: 'backend',
+        files: ['backend/src/features/todo/todo.model.ts'],
+      },
+    };
+    installFetch(state);
+    renderPanel();
+
+    // It shows what the agent is doing right now, and what it has already written…
+    expect(await screen.findByTestId('build-activity-label')).toHaveTextContent(
+      'Installing dependencies',
+    );
+    expect(await screen.findByTestId('build-file-list')).toHaveTextContent(
+      'backend/src/features/todo/todo.model.ts',
+    );
+    // …and refuses to start a competing build.
+    expect(await screen.findByTestId('build-proceed')).toBeDisabled();
+  });
+
+  it('requests a from-scratch rebuild via the menu', async () => {
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-menu'));
+    fireEvent.click(screen.getByTestId('build-fresh'));
+
+    await waitFor(() =>
+      expect(state.intentCalls.at(-1)).toMatchObject({
+        stage: 'build',
+        action: 'proceed',
+        payload: { fresh: true },
+      }),
     );
   });
 

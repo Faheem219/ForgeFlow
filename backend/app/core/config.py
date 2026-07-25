@@ -99,7 +99,10 @@ class Settings(BaseSettings):
 
     # Agent client tuning (phase-20).
     anthropic_max_output_tokens: int = 4096
-    anthropic_max_tool_turns: int = 16  # safety bound on the tool-use loop
+    # Safety bound on the tool-use loop. A real full-stack build writes a file per tool turn and
+    # then installs/boots/tests, so a low bound aborts large projects mid-build; the loop stays
+    # bounded (D7) and every turn is still budget-checked.
+    anthropic_max_tool_turns: int = 250
     anthropic_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
     # Per-model pricing (₹ per 1M tokens) as JSON: {"<model>": {"input": .., "output": ..}}.
     # Blank → the built-in defaults in app/agents/pricing.py. Admin-editable (phase-51/52).

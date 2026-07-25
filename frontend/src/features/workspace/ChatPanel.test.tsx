@@ -85,4 +85,32 @@ describe('ChatPanel', () => {
       expect(screen.getByTestId('chat-stream')).toHaveTextContent('Hello world');
     });
   });
+
+  // A long streamed answer (a build plan runs to hundreds of tokens) used to grow the column and
+  // push the composer out of the panel entirely. The transcript must absorb it by scrolling.
+  it('keeps the composer reachable while a long plan streams in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+
+    render(<ChatPanel projectId={PROJECT} activeStage="build" />, { wrapper: wrapper() });
+
+    useRealtimeStore.setState({
+      channel: PROJECT,
+      events: Array.from({ length: 400 }, (_, i) => tokenEvent(i + 1, `plan line ${i}\n`)),
+    });
+
+    await waitFor(() => expect(screen.getByTestId('chat-stream')).toBeInTheDocument());
+
+    // Both controls still render, and the streamed text lives inside the scrollable transcript
+    // rather than in a sibling that competes with them for height.
+    expect(screen.getByLabelText('Message')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+
+    const transcript = screen.getByTestId('chat-messages');
+    expect(transcript).toContainElement(screen.getByTestId('chat-stream'));
+    expect(transcript.className).toContain('overflow-auto');
+    expect(transcript.className).toContain('min-h-0');
+  });
 });

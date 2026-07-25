@@ -4,6 +4,7 @@ type-checker-friendly; str-backed enums encode directly as their values.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -275,6 +276,22 @@ class RunRepo(BaseRepo[Run]):
         # Mongo stores datetimes at millisecond precision, so two runs started in the same
         # millisecond tie on `started_at`; `_id` is monotonic and breaks it in real order.
         return await Run.find({"project_id": project_id}).sort("-started_at", "-_id").to_list()
+
+    async def active_for_project(
+        self, project_id: PydanticObjectId, kinds: Sequence[str]
+    ) -> list[Run]:
+        """Unfinished runs of the given kinds, newest first.
+
+        An open ``Run`` (``finished_at is None``) is the durable "work in flight" signal: it is what
+        lets a reloaded page discover a build that is still going, and what stops a second build
+        being started on top of one.
+        """
+        return (
+            await Run.find({"project_id": project_id, "kind": {"$in": list(kinds)}})
+            .find({"finished_at": None})
+            .sort("-started_at", "-_id")
+            .to_list()
+        )
 
 
 class PlatformSettingRepo(BaseRepo[PlatformSetting]):

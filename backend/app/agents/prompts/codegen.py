@@ -34,7 +34,10 @@ CODEGEN_SYSTEM_EXTRA = (
     "Workflow: write the code, install any NEW dependencies, then start the preview and make both "
     "servers healthy — fix boot errors as they arise, keeping changes small and verifiable. Commit "
     "with `git_commit` once it builds and boots. Finish with a concise summary of the features you "
-    "built and any follow-ups."
+    "built and any follow-ups.\n"
+    "Resuming: a build may run against a workspace an earlier build already wrote to (it may have "
+    "failed part-way). Never restart from scratch when feature code is already listed as present — "
+    "read what exists, keep what is correct, and write only the missing or incomplete parts."
 )
 
 
@@ -50,12 +53,36 @@ def format_requirements(summary: str | None) -> str:
     return f"Requirements:\n{summary}"
 
 
-def plan_user_prompt(project_name: str, design: str | None, requirements: str | None) -> str:
+def format_existing(inventory: str | None) -> str:
+    """The existing-feature-code block: the lever that makes a rebuild incremental.
+
+    Without it the model cannot tell a fresh workspace from one a previous (possibly failed) build
+    already populated, so it regenerates everything — the waste this block exists to stop.
+    """
+    if not inventory:
+        return "Existing feature code: none — this is the first build on a bare skeleton."
+    return (
+        "Existing feature code (from earlier builds — ALREADY ON DISK):\n"
+        f"{inventory}\n"
+        "Treat this as work already done. Do NOT rewrite a file that is already correct: use "
+        "`read_file` to check anything you intend to change, then write ONLY what is missing, "
+        "incomplete, or required by the request above. Finishing a half-built feature is the goal."
+    )
+
+
+def plan_user_prompt(
+    project_name: str,
+    design: str | None,
+    requirements: str | None,
+    existing: str | None = None,
+) -> str:
     return (
         f"Project: {project_name}\n\n"
         f"{format_requirements(requirements)}\n\n"
         f"{format_design(design)}\n\n"
-        "Produce the short build plan."
+        f"{format_existing(existing)}\n\n"
+        "Produce the short build plan. If feature code already exists, plan only the remaining "
+        "work — list what is already done separately from what is left."
     )
 
 
@@ -65,13 +92,15 @@ def implement_user_prompt(
     design: str | None,
     requirements: str | None,
     notes: list[str],
+    existing: str | None = None,
 ) -> str:
     notes_block = ("\n\nNotes:\n" + "\n".join(f"- {n}" for n in notes)) if notes else ""
     return (
         f"Project: {project_name}\n\n"
         f"Build plan:\n{plan}\n\n"
         f"{format_requirements(requirements)}\n\n"
-        f"{format_design(design)}"
+        f"{format_design(design)}\n\n"
+        f"{format_existing(existing)}"
         f"{notes_block}\n\n"
-        "Implement the plan onto the skeleton now, then verify it boots."
+        "Implement the remaining plan onto the skeleton now, then verify it boots."
     )

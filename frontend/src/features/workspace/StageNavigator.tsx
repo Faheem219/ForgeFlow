@@ -41,23 +41,29 @@ function StageRow({
   return (
     <li className="relative">
       <div
-        className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+        className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
           active ? 'border-brand-500 bg-brand-600/10' : 'border-slate-800 hover:bg-slate-800/50'
         }`}
       >
+        {/* Name and status stack rather than compete for one line — at rail width the pair does not
+            fit side by side, and truncating either one is worse than a second row. */}
         <button
           type="button"
           data-testid={`stage-${stage}`}
           onClick={() => onSelect(stage)}
-          className="flex flex-1 items-center justify-between text-left"
+          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
         >
-          <span className="flex items-center gap-2 text-sm text-slate-100">
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-sm text-slate-100">
             {lockedBy ? (
-              <span title={`Requires ${STAGE_LABELS[lockedBy]} to be complete`} aria-label="locked">
+              <span
+                title={`Requires ${STAGE_LABELS[lockedBy]} to be complete`}
+                aria-label="locked"
+                className="shrink-0 text-[11px]"
+              >
                 🔒
               </span>
             ) : null}
-            {STAGE_LABELS[stage]}
+            <span className="truncate">{STAGE_LABELS[stage]}</span>
           </span>
           <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
         </button>

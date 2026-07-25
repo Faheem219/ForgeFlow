@@ -17,7 +17,7 @@ from app.db.models import Project, Run
 from app.db.models.enums import MessageRole, Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.orchestrator.artifacts import ArtifactService
-from app.orchestrator.conductor import Conductor
+from app.orchestrator.conductor import Conductor, drain_detached
 from app.orchestrator.messages import MessageService
 from app.orchestrator.schemas import Intent, IntentAction
 from app.orchestrator.stages import register_handler
@@ -65,8 +65,16 @@ class FakeCodegen:
         ctx: object | None = None,
         channel: str | None = None,
         instruction: str | None = None,
+        fresh: bool = False,
     ) -> BuildReport:
-        self.calls.append({"instruction": instruction, "channel": channel, "run_kind": run.kind})
+        self.calls.append(
+            {
+                "instruction": instruction,
+                "channel": channel,
+                "run_kind": run.kind,
+                "fresh": fresh,
+            }
+        )
         if self._error is not None:
             raise self._error
         return self._report
@@ -191,7 +199,13 @@ async def test_refine_over_complete_build_marks_downstream_stale(restore_registr
         Intent(project_id=pid, stage=Stage.build, action=IntentAction.refine, message="tweak"),
     )
 
-    assert Stage.test in resp.stale
+    # The build is detached, so the response only acknowledges acceptance — the staling it causes
+    # is applied when the background work finishes, not when the request returns.
+    assert resp.to_status is StageStatus.in_progress
+    assert resp.stale == []
+
+    await drain_detached()
+
     stages = await ProjectService().list_stages(pid, user)
     assert next(s for s in stages if s.stage is Stage.test).status is StageStatus.stale
     # A healthy rebuild lands back at complete (deploy stays reachable).

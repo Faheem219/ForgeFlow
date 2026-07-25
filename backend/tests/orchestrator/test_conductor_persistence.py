@@ -58,10 +58,13 @@ async def test_happy_path_persists_messages_artifacts_state_and_emits() -> None:
     refreshed = await ProjectService().get_owned(pid, user)
     assert refreshed.current_stage is Stage.test
 
-    # stage.transition event emitted.
+    # stage.transition events emitted: the stage is published as working before the handler runs
+    # (so a client watching sees it immediately, not only once the work is over), then settled.
     transition_events = [e for e in events if e.event == str(EventType.stage_transition)]
-    assert len(transition_events) == 1
-    assert transition_events[0].payload["to"] == str(StageStatus.complete)
+    assert [e.payload["to"] for e in transition_events] == [
+        str(StageStatus.in_progress),
+        str(StageStatus.complete),
+    ]
 
 
 async def test_run_is_opened_and_closed_with_zero_cost() -> None:

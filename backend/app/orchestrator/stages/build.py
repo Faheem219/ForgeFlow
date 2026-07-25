@@ -58,12 +58,19 @@ class BuildStageHandler:
 
         # A refine carries the change-request instruction; a proceed is the initial build.
         instruction = (intent.message or "").strip() or None
+        # Opt-in escape hatch: regenerate the feature code instead of extending what is on disk
+        # (the default, so a failed build resumes rather than starting over).
+        fresh = bool(intent.payload.get("fresh"))
 
         # Codegen is its own costed Run (kept distinct from the conductor's intent trace).
         run = await self._runs.insert(Run(project_id=project_id, kind="codegen:build"))
         try:
             report = await self._codegen.run(
-                project, run, channel=str(project_id), instruction=instruction
+                project,
+                run,
+                channel=str(project_id),
+                instruction=instruction,
+                fresh=fresh,
             )
         finally:
             run.finished_at = utcnow()

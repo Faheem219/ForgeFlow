@@ -80,7 +80,7 @@ export function AdminDashboard(): JSX.Element {
   const showsCatalog = searching || CONFIG_SECTIONS.includes(active);
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] gap-6">
+    <div className="flex h-[calc(100vh-6.5rem)] gap-6">
       <nav className="w-56 shrink-0 space-y-4 overflow-y-auto pr-1" aria-label="Admin sections">
         {ADMIN_GROUPS.map((group) => (
           <div key={group}>
