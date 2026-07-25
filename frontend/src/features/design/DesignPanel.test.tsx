@@ -20,6 +20,9 @@ interface MockState {
   artifact: Record<string, unknown>;
   intentStatus: number;
   intentCalls: Array<Record<string, unknown>>;
+  /** Screens the provider reports for the whole project (the app, not one version). */
+  screens: Array<{ ref: string; title: string; preview_image: string | null }>;
+  screenBodies: Record<string, string>;
 }
 
 function installFetch(state: MockState): void {
@@ -41,6 +44,13 @@ function installFetch(state: MockState): void {
           },
         }),
       );
+    }
+    if (url.includes('/design/screens')) {
+      return Promise.resolve(json({ screens: state.screens }));
+    }
+    if (url.includes('/design/screen?')) {
+      const ref = decodeURIComponent(url.split('ref=')[1] ?? '');
+      return Promise.resolve(json({ ref, html: state.screenBodies[ref] ?? '', css: '' }));
     }
     if (url.includes('/design/images')) {
       return Promise.resolve(
@@ -110,7 +120,14 @@ function renderPanel() {
 let state: MockState;
 
 beforeEach(() => {
-  state = { versions: [], artifact: {}, intentStatus: 200, intentCalls: [] };
+  state = {
+    versions: [],
+    artifact: {},
+    intentStatus: 200,
+    intentCalls: [],
+    screens: [],
+    screenBodies: {},
+  };
   useToastStore.setState({ toasts: [] });
 });
 
@@ -147,8 +164,86 @@ describe('DesignPanel', () => {
 
     const frame = await screen.findByTestId('design-preview-frame');
     await waitFor(() => expect(frame.getAttribute('srcdoc')).toContain('<h1>hi</h1>'));
-    // Untrusted markup is fully sandboxed.
-    expect(frame.getAttribute('sandbox')).toBe('');
+    // Untrusted markup stays sandboxed. Scripts may run (real exports style themselves at
+    // runtime), but `allow-same-origin` must never be granted alongside — that pairing would
+    // dissolve the sandbox and hand the markup our DOM, cookies and API.
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+  });
+
+  it('lists every screen in the project and previews the one picked', async () => {
+    // The gap this closes: an app's screens (landing, login, dashboard…) are spread across design
+    // versions, so the version list alone can't show you the whole app.
+    state.versions = [version('a1', 1)];
+    state.artifact = {
+      ...version('a1', 1),
+      meta: { source: 'text', external_ref: 'proj/login' },
+      content: JSON.stringify({ html: '<h1>login</h1>', css: '' }),
+    };
+    state.screens = [
+      { ref: 'proj/landing', title: 'Landing', preview_image: null },
+      { ref: 'proj/login', title: 'Login', preview_image: null },
+    ];
+    state.screenBodies = { 'proj/landing': '<h1>landing</h1>' };
+    installFetch(state);
+    renderPanel();
+
+    // Opens on the screen this version produced, taken from the artifact's provider ref.
+    const select = (await screen.findByTestId('screen-select')) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe('proj/login'));
+    expect(screen.getByTestId('design-preview-frame').getAttribute('srcdoc')).toContain('login');
+
+    fireEvent.change(select, { target: { value: 'proj/landing' } });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('design-preview-frame').getAttribute('srcdoc')).toContain(
+        'landing',
+      ),
+    );
+  });
+
+  it('refines the screen currently on show, not the latest one generated', async () => {
+    state.versions = [version('a1', 1)];
+    state.artifact = {
+      ...version('a1', 1),
+      meta: { source: 'text', external_ref: 'proj/dark' },
+      content: JSON.stringify({ html: '<h1>dark</h1>', css: '' }),
+    };
+    state.screens = [
+      { ref: 'proj/light', title: 'Light', preview_image: null },
+      { ref: 'proj/dark', title: 'Dark', preview_image: null },
+    ];
+    state.screenBodies = { 'proj/light': '<h1>light</h1>' };
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.change(await screen.findByTestId('screen-select'), {
+      target: { value: 'proj/light' },
+    });
+    fireEvent.change(screen.getByTestId('design-refine-input'), {
+      target: { value: 'raise the contrast' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }));
+
+    await waitFor(() => {
+      const call = state.intentCalls.at(-1);
+      expect(call).toMatchObject({
+        stage: 'design',
+        action: 'refine',
+        message: 'raise the contrast',
+        payload: { design_ref: 'proj/light' },
+      });
+    });
+  });
+
+  it('hides the picker when the provider reports a single screen', async () => {
+    state.versions = [version('a1', 1)];
+    state.artifact = { ...version('a1', 1), content: JSON.stringify({ html: '<h1>x</h1>' }) };
+    state.screens = [{ ref: 'proj/only', title: 'Only', preview_image: null }];
+    installFetch(state);
+    renderPanel();
+
+    await screen.findByTestId('design-preview-frame');
+    expect(screen.queryByTestId('screen-picker')).not.toBeInTheDocument();
   });
 
   it('refines an existing design with a chat instruction', async () => {

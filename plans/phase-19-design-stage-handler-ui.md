@@ -67,6 +67,10 @@ First real stage handler, exercising the conductor (`phase-08`), providers (`pha
 ## Design notes
 
 - Returned HTML/CSS is previewed in a **sandboxed iframe** (untrusted markup) — never injected into the platform DOM.
+  *(Revised after live Stitch runs: the frame is `sandbox="allow-scripts"`, because real exports style themselves at
+  runtime via the Tailwind CDN and a script-less frame renders them unstyled — a false picture of what was generated.
+  `allow-same-origin` is deliberately never granted, so the markup runs in an opaque origin and cannot reach the
+  platform DOM, cookies, storage or API; forms, popups and top-navigation stay blocked. Pinned by `DesignPreview.test.tsx`.)*
 
 ## Status
 
@@ -104,3 +108,32 @@ and `features/design/DesignPanel.test.tsx` (6).
 (phase-19 surface) clean; eslint/prettier/tsc + vite build clean. Same Windows-env notes as phase-17
 (isolated FastAPI 0.139.0 venv; `tests/sandbox` untouched, skipped here). Live Stitch/Figma smoke
 needs real creds; covered offline via the `fake` provider.
+
+---
+
+## Follow-up — the project's screens, not just this version's
+
+A real app is a *set* of screens (landing, login, signup, dashboard…) built up over many
+generate/refine turns, but each design **version** records only the screen that turn produced. So
+the version list could never show the whole app, and a refine always targeted whichever screen was
+generated last — wrong as soon as a project has two.
+
+- **`ScreenLister`** (`design/base.py`) — an **optional** provider capability
+  (`isinstance(provider, ScreenLister)`), so `fake`/imported designs are not forced to fake one;
+  `DesignCapabilities.list_screens` advertises it. Stitch implements it over its `list_screens`
+  tool, returning `DesignScreenRef{ref, title, preview_image}` where `ref` is the same handle
+  `fetch_code`/`refine` already take.
+- **API** — `GET /projects/{id}/design/screens` (the whole project; empty, never an error, when the
+  provider can't enumerate) and `GET /projects/{id}/design/screen?ref=…` (one screen's markup,
+  fetched on demand rather than bloating every artifact).
+- **UI** — a **screen dropdown** above the preview whenever the project has more than one, opening
+  on the screen the current version produced. Picking another previews it immediately.
+- **Refine follows the eye** — `DesignIntake.design_ref` carries the shown screen, so "make this
+  darker" changes what you are looking at. Reviewing the newest design and then correcting an older
+  screen is now a two-click flow instead of impossible.
+
+Two bugs found alongside: a refine sent from the **conversation** composer invalidated only
+`messages`+`stages`, so a new design version stayed invisible (`ChatPanel` now invalidates every
+query scoped to the project); and the panel's "follow the newest version" comment did not match its
+code, which only moved the selection when it became *invalid*. Both are pinned by tests, as is the
+race where a slow artifact load would stomp a screen the user had already picked.

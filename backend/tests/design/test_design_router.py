@@ -103,3 +103,26 @@ async def test_design_endpoints_are_ownership_checked(client: AsyncClient) -> No
 
 async def test_design_endpoints_require_auth(client: AsyncClient) -> None:
     assert (await client.get("/projects/whatever/design/provider")).status_code == 401
+
+
+async def test_screen_list_is_empty_for_a_provider_that_cannot_enumerate(
+    client: AsyncClient,
+) -> None:
+    """`fake` has no project of screens, so the UI simply gets nothing to put in the picker —
+    the endpoint must not 404 or error, or the design panel would break for those providers."""
+    token = await _register(client, "screens@example.com")
+    pid = await _project(client, token)
+
+    resp = await client.get(f"/projects/{pid}/design/screens", headers=_auth(token))
+
+    assert resp.status_code == 200
+    assert resp.json() == {"screens": []}
+
+
+async def test_screen_list_requires_ownership(client: AsyncClient) -> None:
+    owner = await _register(client, "owner-screens@example.com")
+    pid = await _project(client, owner)
+    stranger = await _register(client, "stranger-screens@example.com")
+
+    resp = await client.get(f"/projects/{pid}/design/screens", headers=_auth(stranger))
+    assert resp.status_code == 404  # existence is not leaked

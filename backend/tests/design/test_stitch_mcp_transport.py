@@ -8,6 +8,7 @@ download URL into the markup ForgeFlow stores.
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
@@ -21,17 +22,90 @@ from app.design.stitch_auth import StitchAuth
 
 MCP_URL = "https://stitch.example/mcp"
 HTML_URL = "https://storage.example/screen.html"
+IMAGE_URL = "https://storage.example/screen.png"
+
+#: The tool catalog the real endpoint advertises (mirrored from the official @google/stitch-sdk
+#: generated tool definitions), so these tests fail if we drift from the shipped contract.
+DEFAULT_TOOLS: dict[str, dict[str, Any]] = {
+    "create_project": {"properties": {"title": {"type": "string"}}},
+    "generate_screen_from_text": {
+        "properties": {
+            "projectId": {},
+            "prompt": {},
+            "designSystem": {},
+            "deviceType": {},
+            "modelId": {},
+        },
+        "required": ["projectId", "prompt"],
+    },
+    "edit_screens": {
+        "properties": {"projectId": {}, "selectedScreenIds": {}, "prompt": {}, "deviceType": {}},
+        "required": ["projectId", "selectedScreenIds", "prompt"],
+    },
+    "get_screen": {
+        "properties": {"name": {}, "projectId": {}, "screenId": {}},
+        "required": ["name", "projectId", "screenId"],
+    },
+    "list_screens": {"properties": {"projectId": {}}, "required": ["projectId"]},
+}
+
+
+def screen_doc(*, with_code: bool = True) -> dict[str, Any]:
+    """A Stitch ``ScreenInput``: ids plus ``htmlCode``/``screenshot`` File objects."""
+    screen: dict[str, Any] = {"id": "screen-1", "name": "projects/proj-9/screens/screen-1"}
+    if with_code:
+        screen["htmlCode"] = {"downloadUrl": HTML_URL, "mimeType": "text/html"}
+        screen["screenshot"] = {"downloadUrl": IMAGE_URL, "mimeType": "image/png"}
+    return screen
+
+
+def session_doc(
+    screen: dict[str, Any], extra: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """A generate/edit response: the screens are buried in ``outputComponents[].design.screens``."""
+    return {
+        "projectId": "proj-9",
+        "sessionId": "sess-1",
+        "outputComponents": [
+            {"text": "Here you go"},
+            {"design": {"screens": [screen, *(extra or [])]}},
+        ],
+    }
 
 
 class McpServer:
-    """A scripted Stitch MCP endpoint: records requests, answers by tool name."""
+    """A scripted Stitch MCP endpoint: records requests, answers by tool name.
 
-    def __init__(self, *, sse: bool = False, session: str | None = "sess-1") -> None:
+    ``tools`` is the advertised catalog (name → inputSchema); a server that declares different
+    names or argument spellings is how the discovery behaviour is exercised.
+    """
+
+    def __init__(
+        self,
+        *,
+        sse: bool = False,
+        session: str | None = "sess-1",
+        tools: dict[str, dict[str, Any]] | None = None,
+        strict: bool = False,
+    ) -> None:
         self.requests: list[dict[str, Any]] = []
         self.headers: list[httpx.Headers] = []
         self.sse = sse
         self.session = session
-        self.screens: dict[str, dict[str, Any]] = {}
+        self.tools = DEFAULT_TOOLS if tools is None else tools
+        #: When set, generation answers with a screen that has no code yet (async generation).
+        self.generate_without_code = False
+        #: Extra screens returned alongside the primary one (a multi-screen design).
+        self.extra_screens: list[dict[str, Any]] = []
+        #: What ``list_screens`` reports for the project.
+        self.project_screens: list[dict[str, Any]] = []
+        #: When set, an argument the schema doesn't declare is rejected — like the real API.
+        self.strict = strict
+        #: Override the whole ``get_screen`` tool result, to script an unusual response shape.
+        self.screen_result: dict[str, Any] | None = None
+        #: How many ``get_screen`` reads answer without code before one carries it (async gen).
+        self.screen_ready_after = 0
+        self._screen_reads = 0
 
     # -- wiring ---------------------------------------------------------------------------
 
@@ -41,6 +115,8 @@ class McpServer:
     def _handle(self, request: httpx.Request) -> httpx.Response:
         if str(request.url) == HTML_URL:
             return httpx.Response(200, text="<main>generated</main>")
+        if request.method == "GET":  # any other download URL is dead
+            return httpx.Response(404)
 
         body = json.loads(request.content)
         self.requests.append(body)
@@ -51,27 +127,48 @@ class McpServer:
         if body.get("method") == "initialize":
             headers = {"Mcp-Session-Id": self.session} if self.session else {}
             return self._rpc(body["id"], {"protocolVersion": "2024-11-05"}, headers)
+        if body.get("method") == "tools/list":
+            tools = [{"name": n, "inputSchema": s} for n, s in self.tools.items()]
+            return self._rpc(body["id"], {"tools": tools})
         if body.get("method") == "tools/call":
             name = body["params"]["name"]
             args = body["params"].get("arguments", {})
+            if self.strict:
+                schema = self.tools.get(name) or {}
+                declared = set(schema.get("properties") or {})
+                required = set(schema.get("required") or [])
+                # Exactly what Google does: an unknown field OR a missing required one is
+                # INVALID_ARGUMENT.
+                if (set(args) - declared) or (required - set(args)):
+                    return self._rpc(
+                        body["id"],
+                        {
+                            "isError": True,
+                            "content": [
+                                {"type": "text", "text": "Request contains an invalid argument."}
+                            ],
+                        },
+                    )
+            if name == "get_screen" and self.screen_result is not None:
+                return self._rpc(body["id"], self.screen_result)
             return self._rpc(body["id"], {"content": [self._tool(name, args)]})
         return httpx.Response(400, json={"error": "unexpected"})
 
     def _tool(self, name: str, args: dict[str, Any]) -> dict[str, str]:
-        if name == "create_project":
-            return self._text({"projectId": "proj-9"})
-        if name == "generate_screen_from_text":
-            self.screens["screen-1"] = {"htmlUrl": HTML_URL, "imageUrl": "https://img.example/1"}
-            return self._text({"screenId": "screen-1"})  # id only — forces a get_screen
+        if name in ("create_project", "createProject"):
+            # The real response is the project resource, keyed by `name`.
+            return self._text({"name": "projects/proj-9", "title": "ForgeFlow"})
+        if name in ("generate_screen_from_text", "generateScreenFromText"):
+            primary = screen_doc(with_code=not self.generate_without_code)
+            return self._text(session_doc(primary, self.extra_screens))
         if name == "edit_screens":
-            return self._text({"screenId": args["screenIds"][0]})
+            return self._text(session_doc(screen_doc(), self.extra_screens))
+        if name == "list_screens":
+            return self._text({"screens": self.project_screens})
         if name == "get_screen":
-            return self._text(
-                {
-                    "screenId": args["screenId"],
-                    **self.screens.get(args["screenId"], {"htmlUrl": HTML_URL}),
-                }
-            )
+            self._screen_reads += 1
+            ready = self._screen_reads > self.screen_ready_after
+            return self._text(screen_doc(with_code=ready))
         return self._text({})
 
     @staticmethod
@@ -141,19 +238,22 @@ async def test_a_generation_performs_the_handshake_then_calls_the_tool(patched_h
     payload = await HttpStitchClient().text_to_ui("a todo app", headers=await _headers())
 
     methods = [r["method"] for r in server.requests]
-    assert methods[:2] == ["initialize", "notifications/initialized"]
-    assert server.tool_calls() == ["create_project", "generate_screen_from_text", "get_screen"]
+    assert methods[:3] == ["initialize", "notifications/initialized", "tools/list"]
+    # The generate response already carries the screen's files, so no extra read is needed.
+    assert server.tool_calls() == ["create_project", "generate_screen_from_text"]
 
     body = server.requests[0]
     assert body["jsonrpc"] == "2.0" and "id" in body  # a real JSON-RPC envelope, not a bare call
+    assert server.arguments_for("create_project") == {"title": "ForgeFlow"}
     assert server.arguments_for("generate_screen_from_text") == {
         "projectId": "proj-9",
         "prompt": "a todo app",
     }
-    # The screen's HTML arrives as a download URL and is fetched into the stored design.
+    # The screen is dug out of outputComponents[].design.screens, and its htmlCode.downloadUrl
+    # fetched into the markup the preview renders.
     assert payload.html == "<main>generated</main>"
     assert payload.external_ref == "proj-9/screen-1"
-    assert payload.preview_image == "https://img.example/1"
+    assert payload.preview_image == IMAGE_URL
 
 
 async def test_the_session_header_is_echoed_on_every_later_call(patched_httpx: Any) -> None:
@@ -183,8 +283,266 @@ async def test_the_handshake_runs_once_per_client(patched_httpx: Any) -> None:
     await client.text_to_ui("two", headers=await _headers())
 
     assert [r["method"] for r in server.requests].count("initialize") == 1
+    assert [r["method"] for r in server.requests].count("tools/list") == 1
     # ...and the project is created once, then reused.
     assert server.tool_calls().count("create_project") == 1
+
+
+# ---------------------------------------------------------------- schema discovery
+
+
+async def test_arguments_are_renamed_to_whatever_the_schema_declares(patched_httpx: Any) -> None:
+    """The server is the authority on argument spelling — a snake_case API gets snake_case."""
+    server = McpServer(
+        tools={
+            "create_project": {"properties": {"title": {}}},
+            "generate_screen_from_text": {"properties": {"project_id": {}, "text": {}}},
+            "get_screen": {"properties": {"project_id": {}, "screen_id": {}}},
+        },
+        strict=True,
+    )
+    patched_httpx(server)
+
+    await HttpStitchClient().text_to_ui("a todo app", headers=await _headers())
+
+    assert server.arguments_for("create_project") == {"title": "ForgeFlow"}
+    assert server.arguments_for("generate_screen_from_text") == {
+        "project_id": "proj-9",
+        "text": "a todo app",
+    }
+
+
+async def test_an_argument_the_tool_does_not_declare_is_dropped(
+    patched_httpx: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live failure this fixes: sending a field Google doesn't know → INVALID_ARGUMENT."""
+    monkeypatch.setenv("STITCH_MODEL_ID", "GEMINI_3_PRO")
+    reset_config()
+    server = McpServer(strict=True)  # its generate schema has no `modelId`… it does, so remove it
+    server.tools = {
+        **DEFAULT_TOOLS,
+        "generate_screen_from_text": {"properties": {"projectId": {}, "prompt": {}}},
+    }
+    patched_httpx(server)
+
+    await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert "modelId" not in server.arguments_for("generate_screen_from_text")
+
+
+async def test_a_renamed_tool_is_still_found(patched_httpx: Any) -> None:
+    server = McpServer(
+        tools={
+            "createProject": {"properties": {"name": {}}},
+            "generateScreenFromText": {"properties": {"projectId": {}, "prompt": {}}},
+            "get_screen": {"properties": {"projectId": {}, "screenId": {}}},
+        }
+    )
+    patched_httpx(server)
+
+    payload = await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert server.tool_calls()[:2] == ["createProject", "generateScreenFromText"]
+    assert payload.external_ref == "proj-9/screen-1"
+
+
+async def test_a_server_without_tools_list_still_works(patched_httpx: Any) -> None:
+    """Discovery is best-effort: no listing → send the default names, don't fail the design."""
+    server = McpServer(tools={})
+    patched_httpx(server)
+
+    payload = await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert server.tool_calls()[0] == "create_project"
+    assert payload.external_ref == "proj-9/screen-1"
+
+
+async def test_a_rejected_argument_names_the_tool_and_its_schema(patched_httpx: Any) -> None:
+    """The message an operator sees must make the mismatch obvious, not just 'invalid argument'."""
+    # A required field none of our aliases map onto — the case the aliases cannot repair.
+    server = McpServer(
+        tools={
+            **DEFAULT_TOOLS,
+            "create_project": {
+                "properties": {"somethingElse": {}},
+                "required": ["somethingElse"],
+            },
+        },
+        strict=True,
+    )
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError) as exc:
+        await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert exc.value.detail == {"kind": "contract"}
+    assert "create_project" in exc.value.message
+    assert "somethingElse" in exc.value.message  # what the tool actually accepts
+
+
+# ---------------------------------------------------------------- response shapes
+#
+# The live failure these cover: a design generated fine in Stitch but arrived with empty HTML, so
+# the stage saved a blank artifact and the preview said "nothing to preview".
+
+
+async def _generate_with(server: McpServer, patched: Any) -> Any:
+    server.generate_without_code = True  # force the get_screen read these cases script
+    patched(server)
+    return await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+
+async def _no_sleep(_seconds: float) -> None:
+    return None
+
+
+async def test_html_delivered_as_a_resource_block_is_read(patched_httpx: Any) -> None:
+    """MCP tools may answer with a resource, not a JSON text block — that is not an empty design."""
+    server = McpServer()
+    server.screen_result = {
+        "content": [
+            {
+                "type": "resource",
+                "resource": {
+                    "uri": "stitch://s1",
+                    "mimeType": "text/html",
+                    "text": "<div>hi</div>",
+                },
+            }
+        ]
+    }
+    payload = await _generate_with(server, patched_httpx)
+    assert payload.html == "<div>hi</div>"
+
+
+async def test_a_resource_uri_is_downloaded(patched_httpx: Any) -> None:
+    server = McpServer()
+    server.screen_result = {
+        "content": [{"type": "resource", "resource": {"uri": HTML_URL, "mimeType": "text/html"}}]
+    }
+    payload = await _generate_with(server, patched_httpx)
+    assert payload.html == "<main>generated</main>"
+
+
+async def test_raw_html_in_a_text_block_is_read(patched_httpx: Any) -> None:
+    """Not every text block is JSON; markup is the payload itself."""
+    server = McpServer()
+    server.screen_result = {"content": [{"type": "text", "text": "<html><body>raw</body></html>"}]}
+    payload = await _generate_with(server, patched_httpx)
+    assert "raw" in payload.html
+
+
+async def test_structured_content_is_preferred(patched_httpx: Any) -> None:
+    server = McpServer()
+    server.screen_result = {
+        "content": [{"type": "text", "text": json.dumps({"htmlUrl": "https://wrong.example/x"})}],
+        "structuredContent": {"html": "<p>structured</p>"},
+    }
+    payload = await _generate_with(server, patched_httpx)
+    assert payload.html == "<p>structured</p>"
+
+
+async def test_a_screen_without_code_yet_is_polled_until_it_has_some(patched_httpx: Any) -> None:
+    """Generation is async: answering before the code exists must not yield a blank design."""
+    server = McpServer()
+    server.screen_ready_after = 2  # the first two get_screen calls carry no html
+    payload = await _generate_with(server, patched_httpx)
+
+    assert server.tool_calls().count("get_screen") == 3
+    assert payload.html == "<main>generated</main>"
+
+
+async def test_every_screen_in_a_response_is_captured(patched_httpx: Any) -> None:
+    """One generate can return a whole flow (light + dark); keeping only the first would discard
+    designs the user can see in their Stitch project."""
+    server = McpServer()
+    dark = {
+        "id": "screen-2",
+        "title": "Personal Todo App (Dark)",
+        "htmlCode": {"fileContentBase64": base64.b64encode(b"<p>dark</p>").decode("ascii")},
+        "screenshot": {"downloadUrl": IMAGE_URL},
+    }
+    server.extra_screens = [dark]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+    assert payload.html == "<main>generated</main>"  # the primary is unchanged
+    assert [s.id for s in payload.screens] == ["screen-1", "screen-2"]
+    assert payload.screens[1].title == "Personal Todo App (Dark)"
+    # An inline base64 body is decoded rather than downloaded.
+    assert payload.screens[1].html == "<p>dark</p>"
+
+
+async def test_a_single_screen_design_carries_no_screen_list(patched_httpx: Any) -> None:
+    """`screens` feeds the switcher; a lone screen leaves it empty so nothing downstream cares."""
+    server = McpServer()
+    patched_httpx(server)
+
+    payload = await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+    assert payload.screens == []
+
+
+async def test_a_broken_secondary_screen_does_not_fail_the_design(patched_httpx: Any) -> None:
+    server = McpServer()
+    server.extra_screens = [
+        {"id": "screen-2", "htmlCode": {"downloadUrl": "https://dead.example/x"}}
+    ]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+    assert payload.html == "<main>generated</main>"  # the primary still lands
+    assert payload.screens == []  # …and the unusable extra is dropped, not fatal
+
+
+async def test_list_screens_enumerates_the_whole_project(patched_httpx: Any) -> None:
+    """An app is a set of screens built over many turns; the picker needs all of them."""
+    server = McpServer()
+    server.project_screens = [
+        {"id": "landing", "title": "Landing", "screenshot": {"downloadUrl": IMAGE_URL}},
+        {"name": "projects/proj-9/screens/login", "title": "Login"},
+    ]
+    patched_httpx(server)
+    client = HttpStitchClient(sleeper=_no_sleep)
+    await client.text_to_ui("x", headers=await _headers())  # establishes the project
+
+    refs = await client.list_screens(headers=await _headers())
+
+    assert [r.ref for r in refs] == ["proj-9/landing", "proj-9/login"]
+    assert [r.title for r in refs] == ["Landing", "Login"]
+    assert refs[0].preview_image == IMAGE_URL
+    assert server.arguments_for("list_screens") == {"projectId": "proj-9"}
+
+
+async def test_list_screens_is_empty_before_anything_is_generated(patched_httpx: Any) -> None:
+    """No project yet → nothing to enumerate, and definitely not an error."""
+    server = McpServer()
+    patched_httpx(server)
+
+    assert await HttpStitchClient().list_screens(headers=await _headers()) == []
+    assert server.tool_calls() == []  # not even a call is made
+
+
+async def test_a_screen_that_never_produces_html_fails_loudly(
+    patched_httpx: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Better a clear error that falls back than a saved design with nothing to preview."""
+    monkeypatch.setenv("STITCH_READY_TIMEOUT_S", "5")
+    reset_config()
+    server = McpServer()
+    server.generate_without_code = True
+    server.screen_result = {
+        "content": [{"type": "text", "text": json.dumps({"status": "PENDING"})}]
+    }
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError) as exc:
+        await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+    assert exc.value.detail == {"kind": "contract"}  # recoverable → the stage falls back
+    assert "no HTML" in exc.value.message
+    assert "PENDING" in exc.value.message  # the raw payload is quoted, so the shape is diagnosable
 
 
 # ---------------------------------------------------------------- auth
@@ -232,10 +590,11 @@ async def test_refine_edits_the_named_screen(patched_httpx: Any) -> None:
 
     assert server.arguments_for("edit_screens") == {
         "projectId": "proj-9",
-        "screenIds": ["screen-1"],
+        "selectedScreenIds": ["screen-1"],  # the API's own spelling, not `screenIds`
         "prompt": "make it dark",
     }
     assert payload.external_ref == "proj-9/screen-1"
+    assert payload.html == "<main>generated</main>"
 
 
 async def test_fetch_code_reads_the_screen_without_generating(patched_httpx: Any) -> None:
@@ -245,6 +604,12 @@ async def test_fetch_code_reads_the_screen_without_generating(patched_httpx: Any
     payload = await HttpStitchClient().fetch_code("proj-9/screen-1", headers=await _headers())
 
     assert server.tool_calls() == ["get_screen"]  # no create_project, no generation
+    # `name` is the resource path the API requires; the id pair is its deprecated form.
+    assert server.arguments_for("get_screen") == {
+        "name": "projects/proj-9/screens/screen-1",
+        "projectId": "proj-9",
+        "screenId": "screen-1",
+    }
     assert payload.html == "<main>generated</main>"
 
 
@@ -259,7 +624,9 @@ async def test_a_resource_path_id_is_reduced_to_its_last_segment(patched_httpx: 
     assert payload.external_ref.endswith("/screen-1")
 
 
-async def test_a_tool_error_is_fatal_not_a_silent_empty_design(patched_httpx: Any) -> None:
+async def test_a_tool_error_is_recoverable_not_a_silent_empty_design(patched_httpx: Any) -> None:
+    """A tool rejection must classify as `contract` — Stitch can't serve this, but figma/fake may,
+    so the stage falls back instead of 502-ing (a `fatal` would dead-end it)."""
     server = McpServer()
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -289,13 +656,13 @@ async def test_a_tool_error_is_fatal_not_a_silent_empty_design(patched_httpx: An
         with pytest.raises(ProviderError) as exc:
             await HttpStitchClient().text_to_ui("x", headers=await _headers())
 
-    assert exc.value.detail == {"kind": "fatal"}
+    assert exc.value.detail == {"kind": "contract"}
     assert "prompt rejected" in exc.value.message
 
 
 @pytest.mark.parametrize(
     ("status", "kind"),
-    [(401, "auth"), (403, "auth"), (429, "quota"), (500, "transient"), (400, "fatal")],
+    [(401, "auth"), (403, "auth"), (429, "quota"), (500, "transient"), (400, "contract")],
 )
 async def test_http_status_maps_to_the_error_taxonomy(status: int, kind: str) -> None:
     original = httpx.AsyncClient

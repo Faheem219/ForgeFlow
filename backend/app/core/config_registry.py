@@ -372,6 +372,15 @@ _KEYS: tuple[ConfigKey, ...] = (
         "(experimental, far smaller quota). Blank uses the API default.",
     ),
     ConfigKey(
+        "stitch_ready_timeout_s",
+        Cat.providers,
+        "float",
+        "How long to wait for an asynchronously generated Stitch screen to carry its HTML before "
+        "falling back, rather than saving a blank design.",
+        minimum=5,
+        maximum=600,
+    ),
+    ConfigKey(
         "stitch_client_id",
         Cat.providers,
         "str",

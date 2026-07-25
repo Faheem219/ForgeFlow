@@ -35,6 +35,28 @@ export function getDesignArtifact(artifactId: string): Promise<ArtifactDetail> {
   return apiFetch<ArtifactDetail>(`/artifacts/${artifactId}`);
 }
 
+/** A screen that lives in the provider's project (a whole app spans many of them). */
+export interface DesignScreenRef {
+  ref: string;
+  title: string;
+  preview_image: string | null;
+}
+
+/** Every screen in the provider's project. Empty when the provider cannot enumerate them. */
+export function listDesignScreens(projectId: string): Promise<{ screens: DesignScreenRef[] }> {
+  return apiFetch<{ screens: DesignScreenRef[] }>(`/projects/${projectId}/design/screens`);
+}
+
+/** One screen's markup, fetched on demand when it is picked in the preview. */
+export function getDesignScreen(
+  projectId: string,
+  ref: string,
+): Promise<{ ref: string; html: string; css: string }> {
+  return apiFetch<{ ref: string; html: string; css: string }>(
+    `/projects/${projectId}/design/screen?ref=${encodeURIComponent(ref)}`,
+  );
+}
+
 /** Read a File as a base64 string (no data: prefix) for the JSON upload endpoint. */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

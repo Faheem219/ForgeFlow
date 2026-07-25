@@ -10,10 +10,12 @@ import {
   fileToBase64,
   getDesignArtifact,
   getDesignProvider,
+  getDesignScreen,
+  listDesignScreens,
   listDesignVersions,
   uploadDesignImages,
 } from './api';
-import { DesignPreview } from './DesignPreview';
+import { DesignPreview, type DesignScreen } from './DesignPreview';
 
 const HEALTH_TONES: Record<ProviderHealth, 'success' | 'warning' | 'danger'> = {
   ok: 'success',
@@ -21,13 +23,28 @@ const HEALTH_TONES: Record<ProviderHealth, 'success' | 'warning' | 'danger'> = {
   down: 'danger',
 };
 
-function parsePayload(content: string | null | undefined): { html: string; css: string } {
-  if (!content) return { html: '', css: '' };
+interface DesignContent {
+  html: string;
+  css: string;
+  screens: DesignScreen[];
+}
+
+function parsePayload(content: string | null | undefined): DesignContent {
+  if (!content) return { html: '', css: '', screens: [] };
   try {
-    const parsed = JSON.parse(content) as { html?: string; css?: string };
-    return { html: parsed.html ?? '', css: parsed.css ?? '' };
+    const parsed = JSON.parse(content) as {
+      html?: string;
+      css?: string;
+      screens?: DesignScreen[];
+    };
+    return {
+      html: parsed.html ?? '',
+      css: parsed.css ?? '',
+      // Only present when the provider returned a multi-screen design.
+      screens: Array.isArray(parsed.screens) ? parsed.screens : [],
+    };
   } catch {
-    return { html: content, css: '' };
+    return { html: content, css: '', screens: [] };
   }
 }
 
@@ -36,6 +53,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [instruction, setInstruction] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [screenRef, setScreenRef] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [ownHtml, setOwnHtml] = useState('');
   const [ownCss, setOwnCss] = useState('');
@@ -56,22 +74,71 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
   const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
   const latest = versions.at(-1);
+  const latestId = latest?.id ?? null;
+  const lastSeenLatest = useRef<string | null>(null);
 
-  // Keep a valid selection; follow the newest version as it arrives.
+  // Keep a valid selection, and *follow* a newly-arrived version — after a refine the user asked
+  // for that design, so jumping to it is what they expect. Selecting an older version by hand
+  // still sticks, because only a change of the newest id moves the selection.
   useEffect(() => {
-    if (versions.length === 0) {
+    if (latestId === null) {
+      lastSeenLatest.current = null;
       setSelectedId(null);
-    } else if (!selectedId || !versions.some((v) => v.id === selectedId)) {
-      setSelectedId(versions[versions.length - 1].id);
+      return;
     }
-  }, [versions, selectedId]);
+    if (latestId !== lastSeenLatest.current) {
+      lastSeenLatest.current = latestId;
+      setSelectedId(latestId);
+      return;
+    }
+    if (!selectedId || !versions.some((v) => v.id === selectedId)) {
+      setSelectedId(latestId);
+    }
+  }, [versions, latestId, selectedId]);
 
   const contentQuery = useQuery({
     queryKey: ['design-artifact', selectedId],
     queryFn: () => getDesignArtifact(selectedId as string),
     enabled: Boolean(selectedId),
   });
-  const design = parsePayload(contentQuery.data?.content);
+  const version = parsePayload(contentQuery.data?.content);
+
+  // -- screen picker ---------------------------------------------------------------------------
+  // A design *version* holds the one screen that turn produced, but a real app is a set of screens
+  // built up over many turns (landing, login, dashboard…). The provider knows the full set, so it
+  // is listed here and any of them can be previewed — and refined — without hunting through
+  // version history.
+  const screensQuery = useQuery({
+    queryKey: ['design-screens', projectId],
+    queryFn: () => listDesignScreens(projectId),
+  });
+  const projectScreens = screensQuery.data?.screens ?? [];
+  const versionRef =
+    typeof contentQuery.data?.meta?.external_ref === 'string'
+      ? contentQuery.data.meta.external_ref
+      : '';
+
+  // Opening a different *version* clears any screen choice; the picker then defaults to that
+  // version's own screen. Deliberately not keyed on `versionRef` — the artifact can resolve after
+  // the user has already picked a screen, and a default must never stomp a choice.
+  useEffect(() => {
+    setScreenRef(null);
+  }, [selectedId]);
+
+  const shownRef = screenRef ?? versionRef;
+  const viewingOther = Boolean(screenRef) && screenRef !== versionRef;
+
+  const screenQuery = useQuery({
+    queryKey: ['design-screen', projectId, screenRef],
+    queryFn: () => getDesignScreen(projectId, screenRef as string),
+    // Only fetch when looking at a screen other than the one already in the artifact.
+    enabled: viewingOther,
+  });
+  const design = viewingOther
+    ? { html: screenQuery.data?.html ?? '', css: screenQuery.data?.css ?? '', screens: [] }
+    : version;
+  /** What a refine targets: the screen on show, falling back to this version's own. */
+  const refineRef = shownRef;
 
   const designStatus = stagesQuery.data?.find((s) => s.stage === 'design')?.status ?? 'empty';
 
@@ -164,13 +231,41 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
         {/* Preview + refine */}
         <div className="flex min-h-0 flex-col gap-2">
+          {projectScreens.length > 1 ? (
+            <div
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 px-3 py-2"
+              data-testid="screen-picker"
+            >
+              <label htmlFor="design-screen" className="text-xs text-slate-400">
+                Screen
+              </label>
+              <select
+                id="design-screen"
+                data-testid="screen-select"
+                value={shownRef}
+                onChange={(e) => setScreenRef(e.target.value || null)}
+                className="max-w-xs flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none focus:border-brand-500"
+              >
+                {projectScreens.map((s) => (
+                  <option key={s.ref} value={s.ref}>
+                    {s.title || s.ref}
+                    {s.ref === versionRef ? ' — this version' : ''}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500">
+                {projectScreens.length} screens in this project · a refine changes the one shown
+              </span>
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800">
-            {contentQuery.isFetching ? (
+            {contentQuery.isFetching || screenQuery.isFetching ? (
               <div className="flex h-full items-center justify-center">
                 <Spinner />
               </div>
             ) : (
-              <DesignPreview html={design.html} css={design.css} />
+              <DesignPreview html={design.html} css={design.css} screens={design.screens} />
             )}
           </div>
           <form
@@ -178,7 +273,13 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
             onSubmit={(e) => {
               e.preventDefault();
               if (instruction.trim())
-                intent.mutate({ stage: 'design', action: 'refine', message: instruction.trim() });
+                intent.mutate({
+                  stage: 'design',
+                  action: 'refine',
+                  message: instruction.trim(),
+                  // Refine what is on screen, not whichever screen was generated last.
+                  ...(refineRef ? { payload: { design_ref: refineRef } } : {}),
+                });
             }}
           >
             <input
