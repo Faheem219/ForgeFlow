@@ -53,8 +53,14 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
       submitIntent(projectId, { stage: activeStage, action: 'refine', message }),
     onSuccess: () => {
       setDraft('');
-      void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
-      void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
+      // An intent can produce *anything* for the active stage — a new design version, a test run,
+      // a build artifact. Refreshing only messages+stages left the stage panel showing stale
+      // output (a design refine that had already landed was invisible until a reload), so every
+      // query scoped to this project is invalidated. Blunt, but it cannot go stale again when a
+      // new panel is added.
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey.includes(projectId),
+      });
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : 'Failed to send';

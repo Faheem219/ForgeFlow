@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.design.base import DesignCapabilities, ProviderHealth
+from app.design.base import DesignCapabilities, DesignScreenRef, ProviderHealth
 
 
 class DesignImageRef(BaseModel):
@@ -33,6 +33,10 @@ class DesignIntake(BaseModel):
     text: str | None = None
     image_refs: list[DesignImageRef] = Field(default_factory=list)
     own_design: OwnDesign | None = None
+    #: Which screen a refine targets. Blank → the latest version's own screen. Set by the UI's
+    #: screen picker so "make this darker" changes the screen the user is actually looking at,
+    #: not whichever one happened to be generated last.
+    design_ref: str | None = None
 
 
 class UploadImage(BaseModel):
@@ -55,3 +59,17 @@ class DesignProviderInfo(BaseModel):
     key: str
     health: ProviderHealth
     capabilities: DesignCapabilities
+
+
+class ScreenListResponse(BaseModel):
+    """Every screen in the provider's project. Empty when the provider cannot enumerate them."""
+
+    screens: list[DesignScreenRef] = Field(default_factory=list)
+
+
+class ScreenCodeResponse(BaseModel):
+    """One screen's markup, for the preview's screen picker."""
+
+    ref: str
+    html: str
+    css: str = ""

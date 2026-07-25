@@ -14,8 +14,9 @@ Two deliberate boundaries:
 - **Generation only.** ``refine`` keys off a provider-specific ``external_ref``, so handing it to a
   different provider would fail anyway — refine stays single-provider (its ``fallback_hint`` still
   guides the user to switch).
-- **``fatal`` never falls back.** A malformed request is the *caller's* problem; another provider
-  will reject it too. Everything else (quota/auth/transient/unsupported/unknown) advances the chain.
+- **``fatal`` never falls back.** A request *we* rejected locally is the caller's problem; another
+  provider will reject it too. Everything else — quota/auth/transient/unsupported/``contract``
+  (the provider rejected our call or drifted) /unknown — advances the chain.
 """
 
 from __future__ import annotations
@@ -110,6 +111,7 @@ def _reason(exc: ProviderError) -> str:
         "auth": "credentials are missing or invalid",
         "transient": "is temporarily unavailable",
         "unsupported": "doesn't support this",
+        "contract": "rejected the request",
         "down": "is unavailable",
     }
     return known.get(str(kind), "was unavailable")

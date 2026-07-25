@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -40,16 +40,48 @@ class DesignCapabilities(BaseModel):
     refine: bool = False
     fetch_code: bool = False
     max_images: int = 0
+    #: Can enumerate every screen in the project it designs into (see :class:`ScreenLister`).
+    list_screens: bool = False
+
+
+class DesignScreen(BaseModel):
+    """One screen of a multi-screen design (a provider may return a whole flow at once)."""
+
+    id: str = ""
+    title: str = ""
+    html: str = ""
+    preview_image: str | None = None
+
+
+class DesignScreenRef(BaseModel):
+    """A pointer to one screen that lives in the provider's project.
+
+    A real app is a *set* of screens — landing, login, signup, dashboard — built up over several
+    generate/refine turns. Each ForgeFlow design version records only the screen that turn produced,
+    so listing what the provider actually holds is what lets the UI show the whole app and let the
+    user pick which screen to look at, and refine, next.
+    """
+
+    #: The provider handle — usable directly with ``fetch_code()`` and ``refine()``.
+    ref: str
+    title: str = ""
+    preview_image: str | None = None
 
 
 class DesignResult(BaseModel):
-    """A generated design. ``external_ref`` is the provider's handle for later fetch/refine."""
+    """A generated design. ``external_ref`` is the provider's handle for later fetch/refine.
+
+    ``html``/``css`` are the **primary** screen — every consumer (preview, codegen context) can rely
+    on them. ``screens`` carries the full set when a provider returned more than one, so the UI can
+    offer a switcher without changing what single-screen consumers see.
+    """
 
     provider: str
     external_ref: str
     html: str
     css: str
     preview_image: str | None = None
+    screens: list[DesignScreen] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -77,6 +109,18 @@ class DesignProvider(Protocol):
     def capabilities(self) -> DesignCapabilities: ...
 
     async def health(self) -> ProviderHealth: ...
+
+
+@runtime_checkable
+class ScreenLister(Protocol):
+    """**Optional** provider capability: enumerate every screen in the provider's project.
+
+    Deliberately separate from :class:`DesignProvider` so a provider that has no such notion
+    (an imported design, the `fake` provider) is not forced to fake one. Callers check with
+    ``isinstance(provider, ScreenLister)`` and simply offer no screen picker otherwise.
+    """
+
+    async def list_screens(self) -> list[DesignScreenRef]: ...
 
 
 def provider_error(

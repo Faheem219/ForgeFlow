@@ -16,7 +16,7 @@ from app.core.config import reset_config
 from app.core.errors import UserError
 from app.db.models import Project
 from app.db.models.enums import ArtifactType, Stage
-from app.design.base import DesignImage, DesignResult
+from app.design.base import DesignImage, DesignResult, DesignScreen
 from app.design.service import (
     META_EXTERNAL_REF,
     META_PREVIEW_IMAGE,
@@ -206,4 +206,24 @@ async def test_payload_is_a_json_envelope_of_html_and_css() -> None:
     artifact = await service.save_result(_pid(project), _result(), source="text")
 
     raw = await ArtifactService().get_content(artifact)
-    assert json.loads(raw or "") == {"html": "<h1>hi</h1>", "css": "h1 { color: red; }"}
+    # `screens` rides along for multi-screen designs and is empty for a single-screen one.
+    assert json.loads(raw or "") == {
+        "html": "<h1>hi</h1>",
+        "css": "h1 { color: red; }",
+        "screens": [],
+    }
+
+
+async def test_payload_carries_every_screen_of_a_multi_screen_design() -> None:
+    """A provider can return a whole flow; the switcher in the UI needs all of them persisted."""
+    project = await _project()
+    result = _result()
+    result.screens = [
+        DesignScreen(id="s1", title="Light", html="<h1>hi</h1>"),
+        DesignScreen(id="s2", title="Dark", html="<h1>dark</h1>"),
+    ]
+    artifact = await DesignService().save_result(_pid(project), result, source="text")
+
+    payload = json.loads(await ArtifactService().get_content(artifact) or "")
+    assert [s["title"] for s in payload["screens"]] == ["Light", "Dark"]
+    assert payload["html"] == "<h1>hi</h1>"  # the primary is still the top-level markup

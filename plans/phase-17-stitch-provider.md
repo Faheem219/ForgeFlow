@@ -143,3 +143,49 @@ passed.**
 tool result are not contractually documented, so the transport plucks defensively
 (`screenId`/`id`/`name`, `htmlUrl`/`html`/`downloadUrl`, …) and reduces `projects/…/screens/…`
 resource paths to bare ids — the smallest possible dependency on the undocumented half.
+
+### Follow-up 2 — live-run corrections
+
+Two things only a real call could reveal:
+
+1. **`create_project` was rejected with `INVALID_ARGUMENT`.** Guessed argument names are a liability
+   against a strict Google API, so the client now **discovers the contract**: after the handshake it
+   reads `tools/list` and uses each tool's advertised `inputSchema` to resolve the real tool name and
+   rename our canonical arguments (`projectId`↔`project_id`, `prompt`↔`text`, `name`↔`title`…),
+   dropping anything the schema doesn't declare. A rejection now names the tool and prints what it
+   accepts/requires. `scripts/stitch_probe.py` dumps the same catalog on demand.
+2. **A generated design arrived with empty HTML** (the stage saved a blank artifact; the preview said
+   "nothing to preview"). Three causes were possible and all three are now handled: the screen may
+   come back as an MCP **resource block** or as **raw markup in a text block** (the first cut read
+   only JSON text blocks), generation is **asynchronous** so a fresh screen may not carry its code
+   yet (re-read until `STITCH_READY_TIMEOUT_S`), and a download URL may want the caller's credential
+   (401/403 → retry with auth). If HTML is *still* missing, the transport now **fails loudly** with a
+   truncated dump of what Stitch actually returned instead of saving a blank design.
+
+Both failures also motivated a taxonomy change: a provider rejecting our call is now `contract`, not
+`fatal`, so phase-48's chain falls back to `figma`/`fake` rather than dead-ending the stage with a
+502. `fatal` is reserved for requests *we* reject locally. **Design suite: 88 passed.**
+
+### Follow-up 3 — pinned to the official SDK's contract
+
+The empty-HTML failure had a concrete cause, found by reading the shipped
+[`@google/stitch-sdk`](https://github.com/google-labs-code/stitch-sdk) source (`generated/src/tool-definitions.ts`,
+`responses.generated.ts`, `types.generated.ts`, `project.ts`, `screen.ts`) rather than guessing again:
+
+| | Guessed | Actual |
+|---|---|---|
+| `create_project` args | `name` | **`title`** (and it answers with the resource `name`, e.g. `projects/abc`) |
+| `edit_screens` args | `screenIds` | **`selectedScreenIds`** |
+| `get_screen` args | `projectId`+`screenId` | **`name`** = `projects/{p}/screens/{s}` is required (the id pair is the deprecated form — we send all three) |
+| generate/edit response | `{screenId, htmlUrl}` | `{projectId, sessionId, outputComponents:[{design:{screens:[<screen>]}}]}` — **the screen is nested inside an array**, which the old flat key search could never find |
+| screen → code | `html`/`htmlUrl` | `htmlCode` and `screenshot` are **`File` objects**: `{downloadUrl, fileContentBase64, mimeType}` |
+
+So the transport now digs the screen out of `outputComponents[].design.screens[]`, reads
+`htmlCode.downloadUrl` (or decodes `fileContentBase64` when the body is inline) and
+`screenshot.downloadUrl`, and takes the screen id from `id` or the resource `name`. Because a
+generate response already carries the files, the common path is **two** tool calls, not three — the
+extra `get_screen` only happens when generation answered before the code existed.
+
+The generic key search is kept as a fallback for shapes not in the SDK, and the test double now
+emits the SDK's real documents (`session_doc`/`screen_doc`) so drift from the shipped contract fails
+the build. **Design suite: 88 passed.**

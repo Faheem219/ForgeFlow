@@ -226,6 +226,10 @@ class Settings(BaseSettings):
     # Optional generation model, e.g. GEMINI_3_FLASH (standard quota) or GEMINI_3_PRO
     # (experimental, much smaller quota). Blank → the API's own default.
     stitch_model_id: str = ""
+    # Generation is asynchronous: the tool answers once the screen exists, which can be before its
+    # code does. How long to keep re-reading the screen for its HTML before giving up (and falling
+    # back) rather than saving a blank design.
+    stitch_ready_timeout_s: float = 90.0
     stitch_timeout_s: float = 60.0  # per-call wall clock
     stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
     stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry

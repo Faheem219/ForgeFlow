@@ -127,7 +127,10 @@ class DesignStageHandler:
             latest = await DesignService().latest(project_id)
             if latest is None:
                 raise UserError("There's no design to refine yet — generate or import one first.")
-            external_ref = latest.meta.get(META_EXTERNAL_REF)
+            # The UI's screen picker names the screen the user is *looking at*; without it a
+            # refine would always hit whichever screen was generated last, which is wrong as soon
+            # as an app has more than one.
+            external_ref = (intake.design_ref or "").strip() or latest.meta.get(META_EXTERNAL_REF)
             if not isinstance(external_ref, str) or not external_ref:
                 raise UserError(
                     "The current design was imported and has no provider reference; regenerate "

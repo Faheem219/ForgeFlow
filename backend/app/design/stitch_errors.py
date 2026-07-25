@@ -20,7 +20,10 @@ class StitchErrorKind(StrEnum):
     auth = "auth"  # credentials missing / rejected / token refresh failed
     quota = "quota"  # generation cap reached for the window
     transient = "transient"  # timeout / 5xx / network — worth a retry
-    fatal = "fatal"  # bad request / unexpected response — do not retry
+    fatal = "fatal"  # we rejected the request locally — do not retry, do not fall back
+    # Stitch rejected our call, or answered in a shape we cannot read. Retrying is pointless, but
+    # another provider may well succeed, so this DOES advance the fallback chain (phase-48).
+    contract = "contract"
     unsupported = "unsupported"  # the API has no such capability (e.g. screenshot→UI)
 
 
@@ -38,6 +41,11 @@ _DEFAULT_HINTS: dict[StitchErrorKind, str] = {
     ),
     StitchErrorKind.fatal: (
         "Stitch could not process this request. Try a different input, or switch to 'figma'/'fake'."
+    ),
+    StitchErrorKind.contract: (
+        "Stitch rejected the call or answered unexpectedly — its API may have changed. Run "
+        "`uv run python -m scripts.stitch_probe` to see the tools it currently exposes; meanwhile "
+        "the design falls back to 'figma'/'fake'."
     ),
     StitchErrorKind.unsupported: (
         "Stitch's API cannot do this (its MCP surface is text-prompt only). Use a text prompt, "

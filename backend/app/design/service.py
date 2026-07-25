@@ -14,12 +14,12 @@ a later ``fetch_code``/``refine`` can find the provider's handle without parsing
 from __future__ import annotations
 
 from beanie import PydanticObjectId
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.errors import UserError
 from app.db.models import Artifact, Project
 from app.db.models.enums import ArtifactType, Stage
-from app.design.base import DesignImage, DesignResult
+from app.design.base import DesignImage, DesignResult, DesignScreen
 from app.design.registry import get_active
 from app.design.resilient import DesignCapability, invoke_with_fallback
 from app.orchestrator.artifacts import ArtifactService
@@ -36,6 +36,9 @@ META_PROVIDER_META = "provider_meta"
 class DesignPayload(BaseModel):
     html: str
     css: str
+    #: Every screen the provider returned, when it returned more than one. ``html``/``css`` stay the
+    #: primary screen, so a consumer that doesn't know about this field is unaffected.
+    screens: list[DesignScreen] = Field(default_factory=list)
 
 
 def design_artifact_fields(
@@ -46,7 +49,7 @@ def design_artifact_fields(
     Pure (no I/O) so both :meth:`DesignService.save_result` and the design stage handler
     (phase-19, which lets the conductor persist) build identical artifacts.
     """
-    payload = DesignPayload(html=result.html, css=result.css)
+    payload = DesignPayload(html=result.html, css=result.css, screens=result.screens)
     meta: dict[str, object] = {
         META_PROVIDER: result.provider,
         META_EXTERNAL_REF: result.external_ref,

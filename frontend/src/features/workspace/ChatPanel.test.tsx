@@ -68,6 +68,36 @@ describe('ChatPanel', () => {
     });
   });
 
+  it('refreshes the active stage panel, not just messages, after an intent lands', async () => {
+    // The bug this pins: a design refine sent from the chat produced a new version that stayed
+    // invisible, because only `messages` + `stages` were invalidated.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+
+    render(<ChatPanel projectId={PROJECT} activeStage="design" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'add dark mode' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    const predicate = invalidate.mock.calls
+      .map(([arg]) => (arg as { predicate?: (q: { queryKey: unknown[] }) => boolean })?.predicate)
+      .find(Boolean);
+    expect(predicate).toBeTypeOf('function');
+    // Everything scoped to this project refreshes — including the design version list.
+    expect(predicate?.({ queryKey: ['design-versions', PROJECT] })).toBe(true);
+    expect(predicate?.({ queryKey: ['artifacts', PROJECT] })).toBe(true);
+    expect(predicate?.({ queryKey: ['design-versions', 'another-project'] })).toBe(false);
+  });
+
   it('renders streamed agent tokens from the realtime channel', async () => {
     vi.stubGlobal(
       'fetch',
