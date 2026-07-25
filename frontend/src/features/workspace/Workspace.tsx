@@ -7,6 +7,7 @@ import { Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
+import { useUiStore } from '../../lib/stores/uiStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentAction, Stage, StageStatus } from '../../lib/types';
 import { ChatPanel } from './ChatPanel';
@@ -21,6 +22,31 @@ const DataBrowser = lazy(() => import('../data/DataBrowser'));
 // Spend is always relevant while work runs, so it sits alongside the stage navigator.
 const CostPanel = lazy(() => import('../cost/CostPanel'));
 
+/** A compact toolbar toggle: filled when the target is showing, quiet when hidden. */
+function ToolToggle({
+  label,
+  on,
+  onClick,
+  testId,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  testId?: string;
+}): JSX.Element {
+  return (
+    <Button
+      size="sm"
+      variant={on ? 'primary' : 'secondary'}
+      aria-pressed={on}
+      data-testid={testId}
+      onClick={onClick}
+    >
+      {label}
+    </Button>
+  );
+}
+
 export default function Workspace(): JSX.Element {
   const { id } = useParams();
   const projectId = id ?? '';
@@ -30,6 +56,13 @@ export default function Workspace(): JSX.Element {
   const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const openProject = useWorkspaceStore((s) => s.openProject);
   const storeProjectId = useWorkspaceStore((s) => s.projectId);
+
+  // Rail visibility is persisted (uiStore) so a user's "focus the editor" choice sticks.
+  const stagesOpen = useUiStore((s) => s.stagesOpen);
+  const assistantOpen = useUiStore((s) => s.assistantOpen);
+  const toggleStages = useUiStore((s) => s.toggleStages);
+  const toggleAssistant = useUiStore((s) => s.toggleAssistant);
+
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [view, setView] = useState<'stage' | 'data'>('stage');
 
@@ -113,60 +146,66 @@ export default function Workspace(): JSX.Element {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
+    <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
           <p className="text-sm text-slate-400">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant={view === 'data' ? 'primary' : 'secondary'}
-            data-testid="toggle-data"
-            aria-pressed={view === 'data'}
+        <div className="flex flex-wrap items-center gap-2">
+          <ToolToggle label="Stages" on={stagesOpen} onClick={toggleStages} testId="toggle-stages" />
+          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
+          <ToolToggle
+            label="Data"
+            on={view === 'data'}
             onClick={() => setView((v) => (v === 'data' ? 'stage' : 'data'))}
-          >
-            Data
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
+            testId="toggle-data"
+          />
+          <ToolToggle
+            label="Terminal"
+            on={terminalOpen}
             onClick={() => setTerminalOpen((open) => !open)}
-            aria-pressed={terminalOpen}
-          >
-            {terminalOpen ? 'Hide terminal' : 'Terminal'}
-          </Button>
+            testId="toggle-terminal"
+          />
+          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
+          <ToolToggle
+            label="Assistant"
+            on={assistantOpen}
+            onClick={toggleAssistant}
+            testId="toggle-assistant"
+          />
         </div>
-      </div>
+      </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
-        <div className="flex min-h-0 flex-col gap-4 overflow-auto">
-          <Panel title="Stages">
-            <StageNavigator
-              statusByStage={statusByStage}
-              activeStage={activeStage}
-              onSelect={setActiveStage}
-              onAction={(stage, action) => navAction.mutate({ stage, action })}
-              busy={navAction.isPending}
-            />
-          </Panel>
-          <Panel title="Cost">
-            <Suspense
-              fallback={
-                <div className="flex justify-center py-4">
-                  <Spinner />
-                </div>
-              }
-            >
-              <CostPanel projectId={projectId} />
-            </Suspense>
-          </Panel>
-        </div>
+      <div className="flex min-h-0 flex-1 gap-4">
+        {stagesOpen ? (
+          <div className="flex w-60 shrink-0 flex-col gap-4 overflow-auto">
+            <Panel title="Stages">
+              <StageNavigator
+                statusByStage={statusByStage}
+                activeStage={activeStage}
+                onSelect={setActiveStage}
+                onAction={(stage, action) => navAction.mutate({ stage, action })}
+                busy={navAction.isPending}
+              />
+            </Panel>
+            <Panel title="Cost">
+              <Suspense
+                fallback={
+                  <div className="flex justify-center py-4">
+                    <Spinner />
+                  </div>
+                }
+              >
+                <CostPanel projectId={projectId} />
+              </Suspense>
+            </Panel>
+          </div>
+        ) : null}
 
-        <div className="min-h-0 overflow-auto">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
           {view === 'data' ? (
             <Suspense
               fallback={
@@ -185,9 +224,11 @@ export default function Workspace(): JSX.Element {
           )}
         </div>
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-          <ChatPanel projectId={projectId} activeStage={activeStage} />
-        </section>
+        {assistantOpen ? (
+          <section className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+            <ChatPanel projectId={projectId} activeStage={activeStage} />
+          </section>
+        ) : null}
       </div>
 
       {terminalOpen ? (

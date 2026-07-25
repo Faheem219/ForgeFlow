@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, lazy, useMemo, useState } from 'react';
 
-import { Badge, Button, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Button, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
@@ -22,14 +22,16 @@ const BOOT_TONES: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> =
 };
 
 /**
- * Build stage: live code generation (the streamed IDE + preview), the structured build report, a
- * "request changes" chat that regenerates incrementally, and proceed/skip. Drives the phase-24
- * build handler via the conductor; the report renders from the persisted build_report artifact.
+ * Build stage: the streamed IDE + preview are the hero (full width), with a compact, collapsible
+ * build-report strip above them. Proceed/skip live in the header; incremental change requests go
+ * through the shared Assistant conversation (which sends `refine` for the active stage), so there is
+ * a single conversational surface rather than two. Drives the phase-24 build handler via the
+ * conductor; the report renders from the persisted build_report artifact.
  */
 export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const queryClient = useQueryClient();
-  const [instruction, setInstruction] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const stagesQuery = useQuery({
     queryKey: ['stages', projectId],
@@ -70,7 +72,6 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
     onSuccess: () => {
-      setInstruction('');
       void queryClient.invalidateQueries({ queryKey: ['build-reports', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
@@ -94,7 +95,10 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
           {busy ? (
-            <span className="flex items-center gap-1 text-xs text-slate-400" data-testid="build-progress">
+            <span
+              className="flex items-center gap-1 text-xs text-slate-400"
+              data-testid="build-progress"
+            >
               <Spinner />
               {latestStep ? `Generating — ${latestStep}…` : 'Generating…'}
             </span>
@@ -130,11 +134,90 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        {/* Live generation (IDE stream) + optional preview */}
-        <div
-          className={`grid min-h-0 gap-3 ${showPreview ? 'grid-rows-2 xl:grid-cols-2 xl:grid-rows-1' : 'grid-rows-1'}`}
+      {/* Compact, collapsible build report — a horizontal strip, so it never steals editor width. */}
+      {report ? (
+        <section
+          className="shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          data-testid="build-report"
         >
+          <button
+            type="button"
+            aria-expanded={reportOpen}
+            data-testid="build-report-toggle"
+            onClick={() => setReportOpen((v) => !v)}
+            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-800/40"
+          >
+            <span className="text-xs uppercase tracking-wide text-slate-500">Report</span>
+            <span data-testid="build-boot-status">
+              <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'}>{report.boot_status}</Badge>
+            </span>
+            {report.tests_passed !== null ? (
+              <Badge tone={report.tests_passed ? 'success' : 'danger'}>
+                tests {report.tests_passed ? 'passed' : 'failed'}
+              </Badge>
+            ) : null}
+            <span className="truncate text-xs text-slate-400">
+              {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'} changed
+              {report.commit ? (
+                <span className="ml-2 font-mono text-slate-500">{report.commit.slice(0, 8)}</span>
+              ) : null}
+            </span>
+            <span className="ml-auto text-slate-500" aria-hidden>
+              {reportOpen ? '▾' : '▸'}
+            </span>
+          </button>
+          {reportOpen ? (
+            <div className="space-y-2 border-t border-slate-800 px-4 py-3 text-sm">
+              {report.summary ? <p className="text-slate-300">{report.summary}</p> : null}
+              {report.features_built.length > 0 ? (
+                <p className="text-slate-400">
+                  <span className="text-slate-500">Features:</span>{' '}
+                  {report.features_built.join(', ')}
+                </p>
+              ) : null}
+              {report.follow_ups.length > 0 ? (
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-300/80">
+                  {report.follow_ups.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {report.notes.length > 0 ? (
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
+                  {report.notes.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <p
+          className="shrink-0 rounded-xl border border-dashed border-slate-800 px-4 py-2 text-xs text-slate-500"
+          data-testid="build-empty"
+        >
+          No build yet — press <span className="font-medium text-slate-300">Build</span> to generate
+          the app onto the skeleton, then refine it from the Assistant.
+        </p>
+      )}
+
+      {/* Live generation (IDE stream) fills the panel; preview splits in beside it on demand. */}
+      <div
+        className={`grid min-h-0 flex-1 gap-3 ${
+          showPreview ? 'grid-rows-2 xl:grid-cols-2 xl:grid-rows-1' : 'grid-rows-1'
+        }`}
+      >
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <Spinner />
+            </div>
+          }
+        >
+          <Ide projectId={projectId} />
+        </Suspense>
+        {showPreview ? (
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">
@@ -142,120 +225,9 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               </div>
             }
           >
-            <Ide projectId={projectId} />
+            <Preview projectId={projectId} />
           </Suspense>
-          {showPreview ? (
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center">
-                  <Spinner />
-                </div>
-              }
-            >
-              <Preview projectId={projectId} />
-            </Suspense>
-          ) : null}
-        </div>
-
-        {/* Build report + request-changes */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto">
-          <section className="space-y-2 rounded-xl border border-slate-800 p-3" data-testid="build-report">
-            <h4 className="text-xs uppercase tracking-wide text-slate-500">Build report</h4>
-            {reportQuery.isFetching && !report ? (
-              <div className="flex justify-center py-4">
-                <Spinner />
-              </div>
-            ) : report ? (
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Boot</span>
-                  <span data-testid="build-boot-status">
-                    <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'}>
-                      {report.boot_status}
-                    </Badge>
-                  </span>
-                  {report.tests_passed !== null ? (
-                    <Badge tone={report.tests_passed ? 'success' : 'danger'}>
-                      tests {report.tests_passed ? 'passed' : 'failed'}
-                    </Badge>
-                  ) : null}
-                </div>
-                {report.summary ? <p className="text-slate-300">{report.summary}</p> : null}
-                {report.features_built.length > 0 ? (
-                  <p className="text-slate-400">
-                    <span className="text-slate-500">Features:</span>{' '}
-                    {report.features_built.join(', ')}
-                  </p>
-                ) : null}
-                <p className="text-slate-400">
-                  <span className="text-slate-500">Files changed:</span>{' '}
-                  {report.files_changed.length}
-                  {report.commit ? (
-                    <span className="ml-2 font-mono text-xs text-slate-500">
-                      {report.commit.slice(0, 8)}
-                    </span>
-                  ) : null}
-                </p>
-                {report.follow_ups.length > 0 ? (
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-300/80">
-                    {report.follow_ups.map((f) => (
-                      <li key={f}>{f}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {report.notes.length > 0 ? (
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
-                    {report.notes.map((n) => (
-                      <li key={n}>{n}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : (
-              <EmptyState
-                title="No build yet"
-                description='Press "Build" to generate the app onto the skeleton.'
-              />
-            )}
-          </section>
-
-          <section className="space-y-2 rounded-xl border border-slate-800 p-3">
-            <h4 className="text-xs uppercase tracking-wide text-slate-500">Request changes</h4>
-            <form
-              className="space-y-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (instruction.trim())
-                  intent.mutate({ stage: 'build', action: 'refine', message: instruction.trim() });
-              }}
-            >
-              <textarea
-                aria-label="Change request"
-                data-testid="build-request-input"
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                placeholder={
-                  hasBuild ? 'e.g. "add a delete button to each todo"' : 'Build the app first'
-                }
-                disabled={busy}
-                rows={3}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500 disabled:opacity-50"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                className="w-full"
-                disabled={busy || !instruction.trim()}
-                data-testid="build-request-submit"
-              >
-                Request changes
-              </Button>
-            </form>
-            <p className="text-xs text-slate-500">
-              A change request regenerates incrementally and marks downstream stages stale.
-            </p>
-          </section>
-        </div>
+        ) : null}
       </div>
     </div>
   );

@@ -108,7 +108,9 @@ describe('BuildPanel', () => {
     renderPanel();
 
     expect(await screen.findByTestId('mock-ide')).toBeInTheDocument();
+    // Boot status shows in the collapsed report strip; details expand on demand.
     expect(await screen.findByTestId('build-boot-status')).toHaveTextContent('healthy');
+    fireEvent.click(screen.getByTestId('build-report-toggle'));
     expect(screen.getByText(/Built the Todos feature\./)).toBeInTheDocument();
     expect(screen.getByText(/Features:/)).toBeInTheDocument(); // the features line rendered
   });
@@ -127,23 +129,8 @@ describe('BuildPanel', () => {
     );
   });
 
-  it('sends a change request as a refine intent', async () => {
-    installFetch(state);
-    renderPanel();
-
-    fireEvent.change(await screen.findByTestId('build-request-input'), {
-      target: { value: 'add a delete button' },
-    });
-    fireEvent.click(screen.getByTestId('build-request-submit'));
-
-    await waitFor(() =>
-      expect(state.intentCalls.at(-1)).toMatchObject({
-        stage: 'build',
-        action: 'refine',
-        message: 'add a delete button',
-      }),
-    );
-  });
+  // Incremental change requests now go through the shared Assistant conversation (a single
+  // conversational surface) — covered by ChatPanel.test's refine-on-build case.
 
   it('skips the build stage', async () => {
     installFetch(state);

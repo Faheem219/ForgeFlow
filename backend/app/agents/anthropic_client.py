@@ -109,9 +109,13 @@ class AnthropicClient:
         *,
         emitter: Emitter = emit,
     ) -> None:
-        # No explicit transport → pick one from config (Anthropic by default; OpenAI-compatible when
-        # LLM_PROVIDER=openai). Tests always inject a fake, so this branch is production-only.
-        self._transport = transport if transport is not None else default_transport()
+        # Keep an injected transport as-is (tests inject a fake). Otherwise resolve the provider
+        # transport **lazily, per turn** (see :meth:`_stream_turn`) — never here. This object is
+        # constructed at import time via the stage-handler registry, which runs *before* the admin
+        # (DB) config layer is installed in the app lifespan; resolving now would freeze the
+        # provider to the env default (`anthropic`) and silently ignore an LLM_PROVIDER set from the
+        # admin panel. Deferring the choice also lets an admin switch providers with no restart.
+        self._transport = transport
         self._emit = emitter
 
     def _config_int(self, key: str) -> int:
@@ -173,8 +177,13 @@ class AnthropicClient:
         raise UserError(f"Agent tool loop exceeded {max_turns} turns without finishing")
 
     async def _stream_turn(self, request: MessageRequest, channel: str) -> TurnComplete:
+        # Resolve the provider transport at call time (unless one was injected), so the current
+        # LLM_PROVIDER / provider credentials are honored even though this client may have been
+        # built before the admin config layer loaded. Transports are cheap and stateless (each
+        # builds its SDK client inside .stream()), so per-turn resolution costs nothing.
+        transport = self._transport if self._transport is not None else default_transport()
         turn: TurnComplete | None = None
-        async for event in self._transport.stream(request):
+        async for event in transport.stream(request):
             if isinstance(event, TextDelta):
                 if event.text:
                     await self._emit(channel, EventType.agent_token, {"text": event.text})
