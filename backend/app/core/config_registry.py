@@ -517,8 +517,23 @@ _KEYS: tuple[ConfigKey, ...] = (
         "sandbox_read_only_root",
         Cat.sandbox,
         "bool",
-        "Mount the container root read-only (/workspace and /tmp stay writable).",
+        "Mount the container root read-only (/workspace, /home/app and /tmp stay writable).",
         restart_required=True,
+    ),
+    ConfigKey(
+        "sandbox_install_network",
+        Cat.sandbox,
+        "bool",
+        "Let dependency-install commands borrow the routed egress network for their duration "
+        "(off → the sandbox can never reach the npm registry).",
+    ),
+    ConfigKey(
+        "sandbox_install_timeout_s",
+        Cat.sandbox,
+        "int",
+        "Wall clock for a dependency install (longer than an ordinary command).",
+        minimum=30,
+        maximum=14_400,
     ),
     ConfigKey(
         "sandbox_idle_timeout_s",

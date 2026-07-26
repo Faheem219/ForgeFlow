@@ -13,7 +13,12 @@ from beanie import PydanticObjectId
 
 from app.db.models import Project
 from app.projects.service import ProjectService
-from app.sandbox.manager import SandboxManager, container_name, volume_name
+from app.sandbox.manager import (
+    SandboxManager,
+    container_name,
+    sandbox_network_name,
+    volume_name,
+)
 from app.sandbox.schemas import SandboxState
 from tests.sandbox.fakes import FakeDockerClient
 
@@ -43,7 +48,7 @@ async def test_ensure_creates_starts_and_persists() -> None:
     # A per-project volume was created and the isolation spec was applied through ensure.
     assert volume_name(str(project.id)) in client.volumes._store
     assert len(client.run_calls) == 1
-    assert client.run_calls[0]["network_mode"] == "none"
+    assert client.run_calls[0]["network_mode"] == sandbox_network_name(str(project.id))
     assert client.run_calls[0]["cap_drop"] == ["ALL"]
     assert client.run_calls[0]["pids_limit"] > 0
 

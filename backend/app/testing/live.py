@@ -8,7 +8,7 @@ the live-repair path (phase-40) consumes.
 
 Three things make a live run different from a sandbox run:
 
-**Egress.** The sandbox runs with ``network_mode=none``; a deployed URL is on the public internet.
+**Egress.** The sandbox runs on a sealed internal network; a deployed URL is on the public internet.
 The run therefore borrows a routed network (``attach_egress_network``) and gives it back in a
 ``finally`` — narrow in *time* rather than in reach, and never the host namespace. This is the
 widest relaxation of the sandbox isolation default in the system and is flagged for phase-47.
@@ -43,6 +43,7 @@ from app.db.repos import TestSuiteRepo
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
 from app.sandbox.exec import ExecOutcome
+from app.sandbox.network import egress_window
 from app.sandbox.schemas import FileContent, FileNode
 from app.testing.models import FRAMEWORK_PLAYWRIGHT, Failure, TestResult, TestStatus, summarize
 from app.testing.parsers import extract_referenced_files, parse
@@ -221,8 +222,9 @@ class LiveTestRunner:
         config = get_config()
         sandbox = self._sandbox_manager()
 
-        await sandbox.attach_egress_network(project_id)
-        try:
+        # The same ref-counted window dependency installs use, so two egress users can never revoke
+        # each other's route; it always detaches, including on timeout/crash.
+        async with egress_window(project_id, manager=sandbox):
             await self._warm_up(project_id, url)
             cmd = ["pnpm", "exec", "playwright", "test", "--reporter=json"]
             cmd += [f"--retries={int(config.get('live_test_retries'))}"]
@@ -239,10 +241,6 @@ class LiveTestRunner:
                 },
                 timeout=float(config.get("live_test_timeout_s")),
             )
-        finally:
-            # Always hand the route back, including on timeout/crash — the sandbox must not keep
-            # internet access past the run that needed it.
-            await sandbox.detach_egress_network(project_id)
 
         return outcome, await self._read_blob(outcome.output_ref)
 

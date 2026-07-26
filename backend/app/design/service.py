@@ -20,8 +20,7 @@ from app.core.errors import UserError
 from app.db.models import Artifact, Project
 from app.db.models.enums import ArtifactType, Stage
 from app.design.base import DesignImage, DesignResult, DesignScreen
-from app.design.registry import get_active
-from app.design.resilient import DesignCapability, invoke_with_fallback
+from app.design.resilient import DesignCapability, invoke_with_fallback, provider_for_refine
 from app.orchestrator.artifacts import ArtifactService
 
 # meta keys (kept as constants — phase-19/23 read these back)
@@ -136,7 +135,11 @@ class DesignService:
         if not isinstance(external_ref, str):
             raise UserError("The latest design has no provider reference to refine")
 
-        result = await get_active(project).refine(external_ref, instruction)
+        # Follow the design's provenance, not the active provider: an external_ref is only
+        # meaningful to the provider that issued it (see provider_for_refine).
+        produced_by = previous.meta.get(META_PROVIDER)
+        target = provider_for_refine(project, produced_by if isinstance(produced_by, str) else None)
+        result = await target.provider.refine(external_ref, instruction)
         return await self.save_result(
             project_id, result, source="refine", refined_from=previous.version
         )

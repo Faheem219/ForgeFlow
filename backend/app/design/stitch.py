@@ -228,6 +228,21 @@ def _error_text(result: Mapping[str, Any]) -> str:
     return "Stitch reported a tool error"
 
 
+#: What Stitch says when the project/screen we referenced isn't there (its NOT_FOUND wording).
+_NOT_FOUND_MARKERS = ("requested entity was not found", "not_found", "does not exist")
+
+_MISSING_ENTITY_HINT = (
+    "The Stitch project or screen this design points at no longer exists (deleted in Stitch, or "
+    "created with different credentials). Generate a new design to get a fresh Stitch project — "
+    "the existing design versions are kept."
+)
+
+
+def _is_not_found(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in _NOT_FOUND_MARKERS)
+
+
 def _pluck(data: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
     """First present value for ``keys``, looking one level into nested objects too."""
     for key in keys:
@@ -245,6 +260,16 @@ def _resource_id(value: Any) -> str:
     """``projects/123/screens/456`` → ``456``; a bare id passes through."""
     text = str(value or "").strip()
     return text.rsplit("/", 1)[-1] if "/" in text else text
+
+
+def _looks_like_stitch_id(value: str) -> bool:
+    """Whether a bare id could be a Stitch project/screen id (hex screen ids, numeric projects).
+
+    Used to tell *our* ids apart from another provider's ``external_ref`` before we send one to
+    Stitch — a wrong guess there surfaces as an unexplained not-found from the server.
+    """
+    text = value.strip()
+    return len(text) >= 8 and all(char in "0123456789abcdefABCDEF" for char in text)
 
 
 def _summarize(payload: Mapping[str, Any]) -> str:
@@ -523,10 +548,15 @@ class HttpStitchClient:
 
         if result.get("isError"):
             # Name the tool and what it wanted — an argument mismatch should be one read away.
+            text = _error_text(result)
             raise stitch_error(
                 StitchErrorKind.contract,
-                f"{_error_text(result)} (tool: {name}, sent: {sorted(params['arguments'])})"
+                f"{text} (tool: {name}, sent: {sorted(params['arguments'])})"
                 f"{self._schema_hint(name)}",
+                # A NOT_FOUND is not an argument problem: the project or screen we referenced is
+                # gone from Stitch (deleted there, or created under different credentials). Say
+                # that, instead of pointing the user at a schema that is perfectly correct.
+                hint=_MISSING_ENTITY_HINT if _is_not_found(text) else None,
             )
         return _tool_result_payload(result)
 
@@ -549,11 +579,28 @@ class HttpStitchClient:
 
     @staticmethod
     def _split_ref(external_ref: str, fallback_project: str | None = None) -> tuple[str, str]:
-        """``"{projectId}/{screenId}"`` → both halves; a bare screen id keeps the known project."""
+        """``"{projectId}/{screenId}"`` → both halves; a bare Stitch screen id keeps the project.
+
+        A ref that is not Stitch's own shape belongs to **another provider** (``fake-text-…``, a
+        Figma file key, …). Pairing such an id with whatever project this client happens to have
+        cached is what turned a provider mix-up into an opaque *"Requested entity was not found"*
+        from the far end, so it is rejected here — ``fatal``, because no provider fallback can
+        refine another provider's design either. :func:`app.design.resilient.provider_for_refine`
+        is what keeps refines from arriving here in the first place.
+        """
         ref = external_ref.strip()
         if "/" in ref:
             project, screen = ref.rsplit("/", 1)
             return _resource_id(project), screen
+        if not _looks_like_stitch_id(ref):
+            raise stitch_error(
+                StitchErrorKind.fatal,
+                f"Design reference {ref!r} was not produced by Stitch, so Stitch cannot refine it",
+                hint=(
+                    "This design came from a different provider (a fallback, or an import). "
+                    "Refine it with that provider, or generate a new design with Stitch active."
+                ),
+            )
         if not fallback_project:
             raise stitch_error(StitchErrorKind.fatal, "This design has no Stitch project reference")
         return fallback_project, ref

@@ -82,11 +82,15 @@ sandbox-smoke: ## Build + smoke-test the sandbox image (Node app + Playwright ch
 	SANDBOX_IMAGE=$(SANDBOX_IMAGE) bash sandbox/smoke/run_smoke.sh
 
 sandbox-reap-all: ## DANGER: remove ALL forgeflow sandbox containers + volumes (deletes workspace code)
-	@echo "This removes ALL forgeflow-sb-* containers and forgeflow-vol-* volumes."
+	@echo "This removes ALL forgeflow-sb-* containers, forgeflow-vol-*/forgeflow-home-* volumes"
+	@echo "and per-project forgeflow-sbnet-* networks."
 	@echo "Workspace code in those volumes is PERMANENTLY LOST."
 	@read -p "Type 'yes' to continue: " ans; [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
 	-docker ps -aq --filter "label=forgeflow.managed=true" | xargs -r docker rm -f
 	-docker volume ls -q --filter "label=forgeflow.managed=true" | xargs -r docker volume rm
+	@# Per-project networks go too: docker's default address pools are finite, so orphans
+	@# eventually make new sandboxes unschedulable. The shared preview/egress ones are kept.
+	-docker network ls -q --filter "label=forgeflow.role=sandbox" | xargs -r docker network rm
 
 skeleton-install: ## Install generated-app skeleton deps (pnpm 9 via corepack)
 	cd templates/app-skeleton && corepack enable && $(PNPM) install --no-frozen-lockfile

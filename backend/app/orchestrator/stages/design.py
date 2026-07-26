@@ -27,10 +27,14 @@ from app.core.errors import UserError
 from app.db.blobs import get_blob_store
 from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.design.base import DesignImage, DesignResult
-from app.design.registry import get_active
-from app.design.resilient import DesignCapability, invoke_with_fallback
+from app.design.resilient import DesignCapability, invoke_with_fallback, provider_for_refine
 from app.design.schemas import DesignImageRef, DesignIntake
-from app.design.service import META_EXTERNAL_REF, DesignService, design_artifact_fields
+from app.design.service import (
+    META_EXTERNAL_REF,
+    META_PROVIDER,
+    DesignService,
+    design_artifact_fields,
+)
 from app.orchestrator.schemas import (
     ArtifactSpec,
     Intent,
@@ -136,11 +140,19 @@ class DesignStageHandler:
                     "The current design was imported and has no provider reference; regenerate "
                     "from a prompt or screenshots to change it."
                 )
-            result = await get_active(project).refine(external_ref, instruction)
+            # Refine follows the design's *provenance*, not the active provider: an external_ref
+            # only means something to the provider that issued it. After a generate fell back
+            # (e.g. Stitch down → `fake`), sending that ref to the still-active Stitch is what
+            # produced "Requested entity was not found". See provider_for_refine.
+            produced_by = latest.meta.get(META_PROVIDER)
+            target = provider_for_refine(
+                project, produced_by if isinstance(produced_by, str) else None
+            )
+            result = await target.provider.refine(external_ref, instruction)
             text, meta = design_artifact_fields(
                 result, source="refine", refined_from=latest.version
             )
-            summary = f"Refined the design: {instruction}"
+            summary = _summary(f"Refined the design: {instruction}", target.note)
 
         return StageResult(
             messages=[OutboundMessage(role=MessageRole.assistant, content=summary)],

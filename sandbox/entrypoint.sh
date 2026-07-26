@@ -11,6 +11,17 @@ terminate() {
 }
 trap terminate TERM INT
 
+# Fail LOUDLY-but-not-fatally if $HOME is not writable. The root filesystem is read-only, so the
+# package managers (corepack/pnpm/npm all write under $HOME) only work because the manager mounts a
+# writable per-project volume there. Without it every `pnpm` call dies with an ENOENT/EROFS deep in
+# corepack, which reads like a Node bug rather than a mount problem — so say it plainly, once.
+probe="${HOME:-/home/app}/.forgeflow-writable"
+if (: >"${probe}") 2>/dev/null; then
+  rm -f "${probe}"
+else
+  echo "sandbox: WARNING \$HOME (${HOME:-/home/app}) is not writable — package managers will fail." >&2
+fi
+
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi

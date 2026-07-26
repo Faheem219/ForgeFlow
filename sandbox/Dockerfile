@@ -1,20 +1,34 @@
 # ForgeFlow sandbox base image — where untrusted, generated apps run (D5, §4, §7).
 #
 # The control plane NEVER execs generated code; it runs only inside a container built from this
-# image. Runtime isolation (no host network, dropped caps, cpu/mem/pids limits) is applied by the
+# image. Runtime isolation (no host network, dropped caps, cpu/mem/pid limits) is applied by the
 # sandbox MANAGER (phase-11) at `docker run` time, not baked here — so the image stays reusable.
 #
-# Contents: Node 20 + pnpm (corepack) + git + curl + Playwright chromium (shared, world-readable),
-# a non-root `app` user (uid 1000), and a workspace at /workspace. No secrets are baked in.
+# Contents: Node 20 + a BAKED pnpm (see "package managers" below) + git + curl + Playwright chromium
+# (shared, world-readable), a non-root `app` user (uid 1000), and a workspace at /workspace. No
+# secrets are baked in.
 FROM node:20-bookworm-slim
 
 # Pinned so builds are reproducible; bump deliberately.
 ARG PLAYWRIGHT_VERSION=1.48.2
+# Keep in lockstep with `packageManager` in templates/app-skeleton/package.json — corepack resolves
+# the version the generated app asks for, and offline only a *baked* version can be resolved.
+ARG PNPM_VERSION=9.12.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PNPM_HOME=/pnpm \
-    PATH=/pnpm:/usr/local/bin:$PATH \
     WORKSPACE=/workspace \
+    # -- package managers -----------------------------------------------------------------
+    # Corepack's cache is baked here (world-readable) instead of the default `$HOME/.cache`:
+    # the container runs with a READ-ONLY root, so a first-use download under $HOME is exactly
+    # the `ENOENT … mkdir '/home/app/.cache/node/corepack/v1'` that used to kill every single
+    # `pnpm` invocation in the sandbox. Baking it also means no registry access is needed just
+    # to *start* pnpm — the sandbox has no network by default.
+    COREPACK_HOME=/opt/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    # A generated app whose `packageManager` field drifts from the baked pnpm must fall back to
+    # it rather than trying (and failing, offline) to fetch its own.
+    COREPACK_ENABLE_STRICT=0 \
+    # -- Playwright -----------------------------------------------------------------------
     # Shared browser cache (Playwright's conventional location) + a fixed playwright install so
     # smoke/tooling can `require('playwright')` via NODE_PATH (CommonJS resolution).
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
@@ -30,7 +44,15 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable
+# Bake pnpm into the image (build time is the only time there IS a network). `--activate` records
+# it as corepack's lastKnownGood, so a bare `pnpm` in a workspace with no packageManager field
+# still resolves. The COREPACK_ENABLE_NETWORK=0 checks are the regression guard: they fail the
+# build if anything would still need to reach the registry to run pnpm — as root and as `app`.
+RUN mkdir -p "${COREPACK_HOME}" \
+    && corepack enable \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    && chmod -R a+rX "${COREPACK_HOME}" \
+    && COREPACK_ENABLE_NETWORK=0 pnpm --version
 
 # Playwright + chromium and its OS dependencies (installed as root via --with-deps). Kept in a fixed
 # location and made world-readable so the non-root `app` user can launch the browser at runtime.
@@ -42,11 +64,24 @@ RUN mkdir -p /opt/pw \
     && chmod -R a+rX /opt/pw /ms-playwright
 
 # Non-root user at uid 1000. The base node image already owns uid 1000 (its `node` user); reclaim it
-# for `app` so the workspace has a predictable, unprivileged owner.
+# for `app` so the workspace has a predictable, unprivileged owner. The cache dirs are pre-created
+# (and owned) here so the per-project home volume the manager mounts over /home/app seeds with the
+# right layout and ownership.
 RUN userdel -r node 2>/dev/null || true \
     && useradd --uid 1000 --user-group --create-home --shell /bin/bash app \
     && mkdir -p "${WORKSPACE}" \
-    && chown app:app "${WORKSPACE}"
+        /home/app/.cache \
+        /home/app/.npm \
+        /home/app/.local/share/pnpm/store \
+    && chown -R app:app "${WORKSPACE}" /home/app \
+    && su -s /bin/bash app -c 'COREPACK_ENABLE_NETWORK=0 pnpm --version'
+
+# Declared after the user exists so the RUN steps above keep root's own HOME. /home/app is mounted
+# from a writable per-project volume at runtime (phase-11 manager) — the read-only root makes every
+# other $HOME write fail, and pnpm/npm/corepack all write under $HOME.
+ENV HOME=/home/app \
+    PNPM_HOME=/home/app/.local/share/pnpm
+ENV PATH=/home/app/.local/share/pnpm:/usr/local/bin:$PATH
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

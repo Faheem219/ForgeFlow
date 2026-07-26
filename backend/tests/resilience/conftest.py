@@ -47,6 +47,8 @@ class ScriptedDesignProvider:
         self._health = health
         self.text_calls = 0
         self.image_calls = 0
+        #: (design_ref, instruction) per refine — so tests can assert *which* provider served one.
+        self.refine_calls: list[tuple[str, str]] = []
 
     def _boom(self, kind: str) -> ProviderError:
         return provider_error(self.key, f"{self.key} {kind} failure", detail={"kind": kind})
@@ -70,6 +72,7 @@ class ScriptedDesignProvider:
         )
 
     async def refine(self, design_ref: str, instruction: str) -> DesignResult:
+        self.refine_calls.append((design_ref, instruction))
         return DesignResult(
             provider=self.key, external_ref=f"{design_ref}-r", html="<h1>ok</h1>", css=""
         )

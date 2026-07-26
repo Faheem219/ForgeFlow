@@ -33,6 +33,18 @@ from app.design.stitch import HttpStitchClient  # noqa: E402
 from app.design.stitch_auth import StitchAuth, stitch_credentials_present  # noqa: E402
 
 
+def _use_utf8_stdout() -> None:
+    """Windows consoles default to cp1252, which cannot encode the arrows/→ this script prints.
+
+    Without this the probe dies mid-report with a UnicodeEncodeError — on the exact platform where
+    someone is most likely to be running it because a design call just failed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def _dump(label: str, value: Any) -> None:
     print(f"\n=== {label} ===")
     print(json.dumps(value, indent=2, ensure_ascii=False)[:8000])
@@ -88,6 +100,7 @@ async def probe(prompt: str | None) -> int:
 
 
 def main() -> None:
+    _use_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--generate",

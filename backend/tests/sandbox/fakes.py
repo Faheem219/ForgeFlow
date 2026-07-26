@@ -1,16 +1,24 @@
 """In-memory Docker double for sandbox-manager tests.
 
-Models only the surface the manager touches (containers get/run/list, volumes get/create/remove)
-and tracks lifecycle transitions so tests can assert create → start/stop → remove behaviour
-without a real daemon.
+Models only the surface the manager touches (containers get/run/list, volumes get/create/remove,
+images get) and tracks lifecycle transitions so tests can assert create → start/stop → remove
+behaviour without a real daemon. Containers also carry the ``attrs`` the manager inspects to decide
+whether an existing sandbox predates the current image/mount spec.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
-from docker.errors import NotFound
+from docker.errors import APIError, ImageNotFound, NotFound
+
+from app.sandbox.manager import SANDBOX_HOME, WORKSPACE
+
+
+def _mounts(destinations: Sequence[str]) -> list[dict[str, str]]:
+    return [{"Destination": d} for d in destinations]
 
 
 class FakeContainer:
@@ -22,6 +30,9 @@ class FakeContainer:
         labels: dict[str, str],
         status: str = "running",
         run_kwargs: dict[str, Any] | None = None,
+        mounts: Sequence[str] | None = None,
+        image_id: str | None = None,
+        network_mode: str = "",
     ) -> None:
         self._client = client
         self.name = name
@@ -33,6 +44,20 @@ class FakeContainer:
         self.start_calls = 0
         self.stop_calls = 0
         self.remove_calls = 0
+        binds: Sequence[str] = (
+            mounts
+            if mounts is not None
+            else [spec["bind"] for spec in (self.run_kwargs.get("volumes") or {}).values()]
+        )
+        self.attrs: dict[str, Any] = {
+            "Image": image_id or client.images.id_for(image),
+            "Mounts": _mounts(binds),
+            # "" models a container whose network mode we can't determine; the manager treats that
+            # as "no signal" rather than as grounds for recreating it.
+            "HostConfig": {
+                "NetworkMode": network_mode or str(self.run_kwargs.get("network_mode", ""))
+            },
+        }
 
     def reload(self) -> None:  # docker refreshes .status; our state is already live
         pass
@@ -78,10 +103,25 @@ class FakeContainers:
         # `all`/`filters` mirror the docker SDK's containers.list() signature.
         return list(self._store.values())
 
-    # test helper: pre-seed a container (as if a prior process created it)
-    def seed(self, name: str, labels: dict[str, str], status: str = "running") -> FakeContainer:
+    # test helper: pre-seed a container (as if a prior process created it). It gets the current
+    # mount spec by default so `ensure` adopts it; pass `mounts=[…]` to model an outdated one.
+    def seed(
+        self,
+        name: str,
+        labels: dict[str, str],
+        status: str = "running",
+        image: str = "img",
+        mounts: Sequence[str] | None = None,
+        network_mode: str = "",
+    ) -> FakeContainer:
         container = FakeContainer(
-            self._client, name=name, image="img", labels=labels, status=status
+            self._client,
+            name=name,
+            image=image,
+            labels=labels,
+            status=status,
+            mounts=mounts if mounts is not None else [WORKSPACE, SANDBOX_HOME],
+            network_mode=network_mode,
         )
         self._store[name] = container
         return container
@@ -137,11 +177,27 @@ class FakeNetwork:
         if container is not None and container in self.connected:
             self.connected.remove(container)
 
+    def remove(self) -> None:
+        # Docker refuses to remove a network that still has endpoints (even a stopped container's);
+        # the orphan-prune relies on exactly that refusal.
+        if self.connected:
+            raise APIError(f"network {self.name} has active endpoints")
+        self._client.networks._store.pop(self.name, None)
+        self._client.networks.pruned += 1  # a freed subnet, in address-pool terms
+
+    @property
+    def labels(self) -> dict[str, str]:
+        labels = self.kwargs.get("labels") or {}
+        return dict(labels)
+
 
 class FakeNetworks:
     def __init__(self, client: FakeDockerClient) -> None:
         self._client = client
         self._store: dict[str, FakeNetwork] = {}
+        #: Models docker's finite address pools: refuse to create until an orphan is reclaimed.
+        self.fail_create_until_pruned = False
+        self.pruned = 0
 
     def get(self, name: str) -> FakeNetwork:
         network = self._store.get(name)
@@ -150,15 +206,53 @@ class FakeNetworks:
         return network
 
     def create(self, **kwargs: Any) -> FakeNetwork:
+        if self.fail_create_until_pruned and self.pruned == 0:
+            raise APIError("all predefined address pools have been fully subnetted")
         name = kwargs["name"]
         network = FakeNetwork(self._client, name, kwargs)
         self._store[name] = network
         self._client.network_create_calls.append(kwargs)
         return network
 
+    def list(self, filters: dict[str, Any] | None = None) -> list[FakeNetwork]:
+        """`filters={"label": "k=v"}`, mirroring the docker SDK's networks.list()."""
+        label = (filters or {}).get("label")
+        networks = list(self._store.values())
+        if not label:
+            return networks
+        key, _, value = str(label).partition("=")
+        return [n for n in networks if n.labels.get(key) == value]
+
+
+class FakeImage:
+    def __init__(self, image_id: str) -> None:
+        self.id = image_id
+
+
+class FakeImages:
+    """Tag → image-id, so a *rebuild* (same tag, new id) is expressible."""
+
+    def __init__(self) -> None:
+        self._store: dict[str, str] = {}
+
+    def id_for(self, tag: str) -> str:
+        return self._store.get(tag, f"sha256:{tag}")
+
+    def get(self, tag: str) -> FakeImage:
+        image_id = self._store.get(tag)
+        if image_id is None:
+            raise ImageNotFound(f"no such image: {tag}")
+        return FakeImage(image_id)
+
+    # test helper: (re)build a tag — a fresh id, as `docker build` would produce
+    def register(self, tag: str) -> FakeImage:
+        self._store[tag] = "sha256:" + uuid.uuid4().hex[:12]
+        return FakeImage(self._store[tag])
+
 
 class FakeDockerClient:
     def __init__(self) -> None:
+        self.images = FakeImages()
         self.containers = FakeContainers(self)
         self.volumes = FakeVolumes(self)
         self.networks = FakeNetworks(self)

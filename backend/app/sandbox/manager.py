@@ -3,8 +3,11 @@
 Responsibilities:
   - map ``Project ↔ container`` (persisted on ``Project.sandbox_id``);
   - create/start/stop/destroy the container with the hard isolation posture applied at
-    ``docker run`` time (no host network, dropped caps, cpu/mem/pid limits, read-only root
-    with a writable ``/workspace`` named volume + ``/tmp`` tmpfs);
+    ``docker run`` time (its own *internal* per-project network — no host network, no internet —
+    dropped caps, cpu/mem/pid limits, read-only root with writable ``/workspace`` + ``/home/app``
+    named volumes and a ``/tmp`` tmpfs);
+  - recreate a container that predates the current image/mount spec, so an image fix actually
+    reaches projects that already have a sandbox;
   - reap idle containers after ``sandbox_idle_timeout_s`` and reconcile mappings on startup.
 
 The Docker SDK is synchronous; every blocking call is off-loaded via :func:`asyncio.to_thread`
@@ -34,6 +37,12 @@ from app.sandbox.schemas import SandboxInfo, SandboxState
 logger = logging.getLogger(__name__)
 
 WORKSPACE = "/workspace"
+#: The non-root user's home *inside the image* (see ``sandbox/Dockerfile``). Package managers all
+#: write under it, so it is mounted from a writable volume — the root filesystem is read-only.
+SANDBOX_HOME = "/home/app"
+#: Mounts a usable sandbox must have. A container missing one predates the current spec and is
+#: recreated on the next ``ensure`` (see :meth:`SandboxManager._is_stale`).
+REQUIRED_MOUNTS = frozenset({WORKSPACE, SANDBOX_HOME})
 LABEL_MANAGED = "forgeflow.managed"
 LABEL_PROJECT = "forgeflow.project"
 LABEL_ROLE = "forgeflow.role"
@@ -49,6 +58,25 @@ def container_name(project_id: str) -> str:
 
 def volume_name(project_id: str) -> str:
     return f"forgeflow-vol-{project_id}"
+
+
+def home_volume_name(project_id: str) -> str:
+    """The per-project volume mounted at :data:`SANDBOX_HOME` (package-manager caches)."""
+    return f"forgeflow-home-{project_id}"
+
+
+def sandbox_network_name(project_id: str) -> str:
+    """The per-project ``internal`` network a sandbox is created on (its isolated default)."""
+    return f"forgeflow-sbnet-{project_id}"
+
+
+#: Docker's wording when every subnet in its configured address pools is taken.
+_POOL_EXHAUSTED_MARKERS = ("address pools", "no available", "pool overlaps")
+
+
+def _is_pool_exhausted(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _POOL_EXHAUSTED_MARKERS)
 
 
 def _map_status(docker_status: str) -> SandboxState:
@@ -79,8 +107,14 @@ def build_run_kwargs(
         "name": container_name(project_id),
         "hostname": "sandbox",
         "detach": True,
-        # No host network by default; preview networking is added explicitly in phase-15.
-        "network_mode": "none",
+        # The sandbox's own *internal* network (see build_sandbox_network_kwargs): no route to the
+        # host and no internet, and nothing else on it — the isolation of `network_mode=none` with
+        # one difference that matters: docker REFUSES to attach any network to a container in
+        # `none` mode ("cannot be connected to multiple networks with one of the networks in
+        # private (none) mode"), which made the preview attach (phase-15) and the egress window
+        # (phase-39 / dependency installs) silently impossible. Additional networks are still only
+        # ever attached deliberately and temporarily.
+        "network_mode": sandbox_network_name(project_id),
         "cap_drop": ["ALL"],
         "security_opt": ["no-new-privileges"],
         "read_only": read_only,
@@ -89,9 +123,36 @@ def build_run_kwargs(
         "nano_cpus": int(cpu_limit * 1_000_000_000),
         # Writable scratch even with a read-only root; /workspace persistence is the named volume.
         "tmpfs": {"/tmp": ""},
-        "volumes": {volume_name(project_id): {"bind": WORKSPACE, "mode": "rw"}},
+        "volumes": {
+            volume_name(project_id): {"bind": WORKSPACE, "mode": "rw"},
+            # corepack/pnpm/npm all write under $HOME, which the read-only root forbids — that is
+            # what made every `pnpm` call die with ENOENT on /home/app/.cache/node/corepack. A
+            # named volume keeps those caches writable *and* persistent (the pnpm store survives a
+            # restart, so a re-install needs no registry) without weakening the read-only root or
+            # spending the container's memory budget on a tmpfs.
+            home_volume_name(project_id): {"bind": SANDBOX_HOME, "mode": "rw"},
+        },
         "labels": {LABEL_MANAGED: "true", LABEL_PROJECT: project_id},
         "restart_policy": {"Name": "no"},
+    }
+
+
+def build_sandbox_network_kwargs(name: str) -> dict[str, Any]:
+    """The ``docker network create`` spec for a sandbox's own default network.
+
+    ``internal=True`` is the isolation: no route to the host and none to the internet. It is
+    **per project**, so — unlike the shared preview network — one sandbox cannot reach another's
+    processes. This is the network a sandbox lives on for its whole life; preview and egress are
+    attached on top, deliberately and temporarily.
+
+    Pure + side-effect free so the isolation guarantee is unit-testable without a daemon.
+    """
+    return {
+        "name": name,
+        "driver": "bridge",
+        "internal": True,
+        "check_duplicate": True,
+        "labels": {LABEL_MANAGED: "true", LABEL_ROLE: "sandbox"},
     }
 
 
@@ -101,7 +162,7 @@ def build_preview_network_kwargs(name: str) -> dict[str, Any]:
     ``internal=True`` is the whole point: containers on this network can reach *each other*
     (proxy → sandbox, and the browser's FE → BE calls land via the proxy), but the network has
     **no route to the host or the internet**. This is a deliberate, minimal relaxation of the
-    ``network_mode=none`` default from phase-11 — never the host network. Flagged for the
+    sealed per-project default from phase-11 — never the host network. Flagged for the
     phase-47 hardening review.
 
     Pure + side-effect free so the isolation guarantee is unit-testable without a daemon.
@@ -120,7 +181,7 @@ def build_egress_network_kwargs(name: str) -> dict[str, Any]:
 
     Unlike the preview network this one is **not** ``internal``: it routes out, because live
     validation drives Playwright against the *deployed public URL* and there is no other way to
-    reach it. That makes this the widest relaxation of the ``network_mode=none`` default in the
+    reach it. That makes this the widest relaxation of the sealed-by-default posture in the
     system, so it is deliberately narrow in time rather than in reach: the sandbox is attached for
     one live run and detached in a ``finally`` (see :class:`~app.testing.live.LiveTestRunner`), and
     it is still never the *host* network — generated code gets a routed bridge, not the host
@@ -169,21 +230,94 @@ class SandboxManager:
         """The running container object for a project, or ``None`` (used by the FS layer)."""
         return await self._get_container(project_id)
 
-    async def _ensure_volume(self, project_id: str) -> None:
+    async def _ensure_volumes(self, project_id: str) -> None:
+        """Create the workspace + home volumes if absent (both outlive any single container)."""
         client = self._client()
-        name = volume_name(project_id)
+        for name in (volume_name(project_id), home_volume_name(project_id)):
+            try:
+                await asyncio.to_thread(client.volumes.get, name)
+            except NotFound:
+                await asyncio.to_thread(
+                    client.volumes.create,
+                    name=name,
+                    labels={LABEL_MANAGED: "true", LABEL_PROJECT: project_id},
+                )
+
+    async def _ensure_network(self, project_id: str) -> str:
+        """Get-or-create the project's own internal network. Returns its name.
+
+        Docker's default address pools only hold ~30 bridge networks, so a pool exhaustion is a
+        *when* on a busy host: recover by pruning networks nothing is attached to and retrying
+        once, rather than leaving the project without a sandbox.
+        """
+        client = self._client()
+        name = sandbox_network_name(project_id)
         try:
-            await asyncio.to_thread(client.volumes.get, name)
+            await asyncio.to_thread(client.networks.get, name)
         except NotFound:
-            await asyncio.to_thread(
-                client.volumes.create,
-                name=name,
-                labels={LABEL_MANAGED: "true", LABEL_PROJECT: project_id},
-            )
+            spec = build_sandbox_network_kwargs(name)
+            try:
+                await asyncio.to_thread(client.networks.create, **spec)
+            except APIError as exc:
+                if not _is_pool_exhausted(exc):
+                    raise SystemError("Failed to create the sandbox network") from exc
+                logger.warning("docker address pools are full; pruning orphaned networks")
+                await self.prune_orphan_networks()
+                try:
+                    await asyncio.to_thread(client.networks.create, **spec)
+                except APIError as retry_exc:
+                    raise SystemError(
+                        "Docker has no free subnets left for a new sandbox. Remove unused "
+                        "sandboxes (`make sandbox-reap-all`) or widen `default-address-pools` "
+                        "in the docker daemon config."
+                    ) from retry_exc
+        return name
+
+    async def _remove_network(self, project_id: str) -> None:
+        client = self._client()
+        try:
+            network = await asyncio.to_thread(client.networks.get, sandbox_network_name(project_id))
+        except NotFound:
+            return
+        try:
+            await asyncio.to_thread(network.remove)
+        except APIError:  # still in use by something we don't own — leave it
+            logger.debug("sandbox network for %s could not be removed", project_id, exc_info=True)
+
+    async def _is_stale(self, container: Any, image: str) -> bool:
+        """True when an existing container predates the current image / mount / network spec.
+
+        Sandboxes outlive image rebuilds: an adopted container keeps whatever environment it was
+        created with, so a fixed image (or a newly added mount, like the writable ``$HOME``) would
+        never reach a project that already has a container. Recreating is cheap and safe — the code
+        lives on the named volumes, not in the container.
+        """
+        attrs = getattr(container, "attrs", None) or {}
+        mounts = {m.get("Destination") for m in attrs.get("Mounts") or []}
+        if not REQUIRED_MOUNTS.issubset(mounts):
+            return True
+        # A container still on the old `none` posture can never be attached to the preview or egress
+        # networks, so it can neither be previewed nor install dependencies. Replace it.
+        network_mode = str((attrs.get("HostConfig") or {}).get("NetworkMode") or "")
+        project_id = str(container.labels.get(LABEL_PROJECT) or "")
+        if network_mode and project_id and network_mode != sandbox_network_name(project_id):
+            return True
+        current = attrs.get("Image")
+        if not current:
+            return False
+        try:  # a rebuilt `:latest` keeps its tag but gets a new image id
+            desired = await asyncio.to_thread(self._client().images.get, image)
+        except (NotFound, APIError, DockerException):
+            return False  # can't tell → leave the sandbox alone rather than churn it
+        return bool(desired.id != current)
 
     async def _create_container(self, project_id: str) -> Any:
         client = self._client()
         config = get_config()
+        # Self-sufficient: a container cannot start without its volumes + its own network, so every
+        # path that creates one gets them, not just `ensure`.
+        await self._ensure_volumes(project_id)
+        await self._ensure_network(project_id)
         kwargs = build_run_kwargs(
             project_id,
             image=str(config.get("sandbox_image")),
@@ -356,10 +490,15 @@ class SandboxManager:
     async def ensure(self, project: Project) -> SandboxInfo:
         """Create-if-absent, start-if-stopped. Persists ``sandbox_id``; idempotent when running."""
         project_id = str(project.id)
+        image = str(get_config().get("sandbox_image"))
         container = await self._get_container(project_id)
         created = False
+        if container is not None and await self._is_stale(container, image):
+            # Replace it, keeping the volumes: the workspace (and its git history) is preserved.
+            logger.info("sandbox %s predates the current runtime spec; recreating", project_id)
+            await asyncio.to_thread(container.remove, force=True)
+            container = None
         if container is None:
-            await self._ensure_volume(project_id)
             container = await self._create_container(project_id)
             created = True
         else:
@@ -384,7 +523,7 @@ class SandboxManager:
             status=SandboxState.running,
             container_id=container_id,
             container_name=container_name(project_id),
-            image=str(get_config().get("sandbox_image")),
+            image=image,
             volume=volume_name(project_id),
         )
 
@@ -403,8 +542,11 @@ class SandboxManager:
         container = await self._get_container(project_id)
         if container is not None:
             await asyncio.to_thread(container.remove, force=True)
+        # The project's own network goes with its container — nothing else is ever on it, and
+        # docker's default address pools are finite.
+        await self._remove_network(project_id)
         if remove_volume:
-            await self._remove_volume(project_id)
+            await self._remove_volumes(project_id)
         self._activity.pop(project_id, None)
         if project.sandbox_id is not None:
             project.sandbox_id = None
@@ -419,13 +561,14 @@ class SandboxManager:
             project_id=project_id, status=SandboxState.absent, volume=volume_name(project_id)
         )
 
-    async def _remove_volume(self, project_id: str) -> None:
+    async def _remove_volumes(self, project_id: str) -> None:
         client = self._client()
-        try:
-            volume = await asyncio.to_thread(client.volumes.get, volume_name(project_id))
-        except NotFound:
-            return
-        await asyncio.to_thread(volume.remove, force=True)
+        for name in (volume_name(project_id), home_volume_name(project_id)):
+            try:
+                volume = await asyncio.to_thread(client.volumes.get, name)
+            except NotFound:
+                continue
+            await asyncio.to_thread(volume.remove, force=True)
 
     async def status(self, project: Project) -> SandboxInfo:
         project_id = str(project.id)
@@ -446,8 +589,36 @@ class SandboxManager:
             volume=volume_name(project_id),
         )
 
+    async def prune_orphan_networks(self) -> int:
+        """Remove per-project networks no container is attached to. Returns how many went.
+
+        Docker's default address pools are finite (~30 networks), so orphans left by crashes or
+        force-removed containers would eventually make new sandboxes unschedulable. Docker itself
+        refuses to remove a network with endpoints — including a *stopped* container's — so
+        "try to remove, ignore refusals" prunes exactly the orphans. A live project whose network
+        is pruned simply gets it recreated by :meth:`_ensure_network`.
+        """
+        client = self._client()
+        try:
+            networks = await asyncio.to_thread(
+                client.networks.list, filters={"label": f"{LABEL_ROLE}=sandbox"}
+            )
+        except (DockerException, APIError):
+            logger.debug("could not list sandbox networks", exc_info=True)
+            return 0
+        pruned = 0
+        for network in networks:
+            try:
+                await asyncio.to_thread(network.remove)
+            except (DockerException, APIError):
+                continue  # still in use — that is the common, correct case
+            pruned += 1
+        if pruned:
+            logger.info("pruned %d orphaned sandbox network(s)", pruned)
+        return pruned
+
     async def reconcile(self) -> None:
-        """Startup reconciliation: adopt existing managed containers, clear stale mappings."""
+        """Startup reconciliation: adopt managed containers, clear stale mappings, reap orphans."""
         client = self._client()
         containers = await asyncio.to_thread(
             client.containers.list, all=True, filters={"label": f"{LABEL_MANAGED}=true"}
@@ -457,6 +628,27 @@ class SandboxManager:
             pid = container.labels.get(LABEL_PROJECT)
             if pid:
                 by_project[pid] = container
+
+        live_projects = {str(p.id) for p in await self._projects.all()}
+        # A container whose project is gone (deleted project, a crashed run, a test database that
+        # has since been dropped) can never be reached again, yet it keeps holding a subnet from
+        # docker's finite address pools — which eventually blocks *new* sandboxes. Its volumes are
+        # left alone: destroying data is an explicit action, never a side effect of startup.
+        #
+        # Never reap when the project list is empty: "no projects" and "pointed at the wrong (or a
+        # not-yet-migrated) meta DB" look identical from here, and the second must not wipe every
+        # sandbox on the host.
+        for pid, container in list(by_project.items()) if live_projects else []:
+            if pid in live_projects:
+                continue
+            try:
+                await asyncio.to_thread(container.remove, force=True)
+            except (DockerException, APIError):
+                logger.debug("could not reap orphaned sandbox %s", pid, exc_info=True)
+                continue
+            by_project.pop(pid, None)
+            self._activity.pop(pid, None)
+            logger.info("reaped orphaned sandbox container for missing project %s", pid)
 
         for project in await self._projects.all():
             project_id = str(project.id)
@@ -473,6 +665,13 @@ class SandboxManager:
                 project.sandbox_id = None
                 project.updated_at = utcnow()
                 await project.save()
+
+        # Networks whose container died with it would otherwise accumulate against docker's finite
+        # address pools. Best-effort: never let cleanup break startup.
+        try:
+            await self.prune_orphan_networks()
+        except Exception:
+            logger.debug("orphan network prune failed", exc_info=True)
 
 
 _manager: SandboxManager | None = None

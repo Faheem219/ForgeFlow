@@ -94,3 +94,70 @@ reaper starts + shuts down cleanly, `ensure` unauth → 401 envelope.
 **Deferred (scoped):** an opt-in real-daemon integration test (behind a marker) is a no-op without
 Colima here — the fake-client lifecycle + isolation-spec assertions cover the acceptance criteria; FS
 API (phase-12), exec/terminal (phase-13), and preview networking (phase-15) build on this container.
+
+## Follow-up fix — a writable `$HOME`, an attachable network, and refreshing outdated sandboxes
+
+Three gaps surfaced when the build stage first ran real commands in a sandbox:
+
+1. **`$HOME` was unwritable.** The read-only root left pnpm/npm/corepack with nowhere to write their
+   caches or the pnpm store (see the phase-10 follow-up for the resulting corepack `ENOENT`).
+   `build_run_kwargs` now mounts a second per-project named volume, `forgeflow-home-<id>`, at
+   `/home/app` (`SANDBOX_HOME`). A named volume rather than a tmpfs, deliberately: the pnpm store
+   must survive a container restart and must not be charged against the container's memory limit. The
+   read-only root, dropped caps, no-network default and limits are all unchanged, and the volume is
+   still a named volume — no host path is ever bind-mounted. `destroy(remove_volume=True)` removes
+   both volumes; `make sandbox-reap-all` already matches them by label.
+2. **`network_mode=none` made every documented network relaxation impossible.** Docker refuses to
+   attach a network to a container in `none` mode:
+
+   ```
+   container cannot be connected to multiple networks with one of the networks in private (none) mode
+   ```
+
+   So `attach_preview_network` (phase-15) always failed — swallowed as a debug log, leaving the proxy
+   unable to reach the dev servers — and the egress window (phase-39, and dependency installs) could
+   never work either. A sandbox is now created on **its own `internal` per-project network**
+   (`forgeflow-sbnet-<id>`, `build_sandbox_network_kwargs`): the same guarantee as `none` — no route
+   to the host, no internet — but attachable, and *stronger* than the shared preview network because
+   no other sandbox is ever on it. Verified against a real daemon: sealed by default, egress attaches
+   and a real `pnpm install` succeeds, egress detaches back to sealed, and a container on the preview
+   network reaches the sandbox's vite server by name (HTTP 200). The network is created with the
+   container and removed with it (docker's default address pools are finite — roughly 30 concurrent
+   networks unless `default-address-pools` is widened in the daemon config).
+
+   The isolation controls in §7 are unchanged: no *host* network, `cap_drop: ALL`,
+   `no-new-privileges`, read-only root, pids/mem/cpu caps, named volumes only. `phase-47`'s audit
+   (`tests/security/test_sandbox_isolation.py`) now asserts the default network is per-project **and**
+   internal, so this cannot silently widen.
+
+3. **A fixed image never reached existing projects.** `ensure` adopted whatever container existed, so
+   a sandbox created from the broken image kept failing forever. It now recreates a container whose
+   mounts are missing, whose network mode is not the project's own network (i.e. anything still on
+   `none`), or whose image id no longer matches the configured tag (a rebuilt `:latest` keeps its tag
+   but changes id). The volumes are untouched, so the generated code and its git history survive; if
+   the image can't be resolved the sandbox is left alone rather than churned.
+
+Verified: `ruff`/`black`/`mypy` clean at the pre-existing baseline; new tests in
+`tests/sandbox/test_environment_refresh.py` (recreate on missing mount / rebuilt image, adopt when
+current, never churn on an unresolvable image, home volume removed with `--remove-volume`) plus the
+home-volume assertions in `test_isolation_flags.py` and `tests/security/test_sandbox_isolation.py`.
+
+### Address-pool exhaustion (found by running the suite, not by reasoning)
+
+Per-project networks meet a hard docker limit: the default `default-address-pools` only yield ~30
+bridge subnets. The test suite hit it for real — repeated runs leave sandbox containers behind (a
+pre-existing leak; each now also pins a subnet), and at 32 networks `networks.create` started failing
+with *"all predefined address pools have been fully subnetted"*. Three defences:
+
+1. **Self-heal on exhaustion.** `_ensure_network` prunes networks nothing is attached to and retries
+   once; if it still fails the error names the fix (`make sandbox-reap-all`, or widen
+   `default-address-pools`) instead of surfacing a bare docker 400.
+2. **Reap orphans at startup.** `reconcile` removes managed containers whose `Project` row no longer
+   exists — unreachable anyway, yet each was holding a subnet — then prunes orphaned networks. Volumes
+   are **never** touched: losing generated code must be a deliberate act, not a startup side effect.
+   Guarded against the obvious footgun: when the project list is empty (an unreachable or wrong meta
+   DB looks exactly like "no projects") nothing is reaped.
+3. **`make sandbox-reap-all`** also removes `forgeflow.role=sandbox` networks.
+
+Exercised on the real daemon: 41 orphaned containers (all from dropped test databases) and 27
+networks were reclaimed, 77 volumes kept, and network creation worked again immediately after.

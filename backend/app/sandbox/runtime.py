@@ -41,6 +41,13 @@ from app.core.errors import SystemError, UserError  # noqa: A004
 DOCKER_WORKSPACE = "/workspace"
 _PRUNE_DIRS = {"node_modules", ".git"}
 
+#: The sandbox's non-root user (``sandbox/Dockerfile`` pins it to uid/gid 1000). The archive API
+#: extracts as root and honours the tar's ownership, so a tar built with the default uid 0 lands
+#: root-owned inside the container — read-only to everything the generated app actually runs as.
+SANDBOX_UID = 1000
+SANDBOX_GID = 1000
+SANDBOX_USER = "app"
+
 if os.name == "nt":
     fcntl = None
     pty = None
@@ -163,13 +170,22 @@ def _set_winsize(fd: int, cols: int, rows: int) -> None:
 
 
 def make_tar(name: str, data: bytes) -> bytes:
-    """Build an in-memory tar carrying a single file member ``name`` → ``data``."""
+    """Build an in-memory tar carrying a single file member ``name`` → ``data``.
+
+    Ownership is stamped to the sandbox's non-root user: ``put_archive`` extracts as root and keeps
+    whatever uid the tar carries, so the default (0) would make every file the control plane writes
+    root-owned — and unwritable by the generated app's own toolchain, which runs as ``app``.
+    """
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         info = tarfile.TarInfo(name=name)
         info.size = len(data)
         info.mode = 0o644
         info.mtime = int(time.time())
+        info.uid = SANDBOX_UID
+        info.gid = SANDBOX_GID
+        info.uname = SANDBOX_USER
+        info.gname = SANDBOX_USER
         tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
 

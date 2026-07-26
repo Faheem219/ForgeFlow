@@ -22,6 +22,8 @@ from app.sandbox.manager import (
     build_egress_network_kwargs,
     build_preview_network_kwargs,
     build_run_kwargs,
+    build_sandbox_network_kwargs,
+    sandbox_network_name,
 )
 from tests.sandbox.fakes import FakeDockerClient
 
@@ -47,7 +49,9 @@ def test_the_full_isolation_posture_is_present() -> None:
     """Every control §7 requires, asserted together rather than piecemeal."""
     kwargs = _kwargs()
 
-    assert kwargs["network_mode"] == "none"  # no host network
+    # Its own per-project network, and that network is `internal` — no host network, no internet.
+    assert kwargs["network_mode"] == sandbox_network_name("proj")
+    assert build_sandbox_network_kwargs(sandbox_network_name("proj"))["internal"] is True
     assert kwargs["cap_drop"] == ["ALL"]  # no Linux capabilities
     assert kwargs["security_opt"] == ["no-new-privileges"]  # no setuid escalation
     assert kwargs["read_only"] is True  # immutable root filesystem
@@ -67,15 +71,19 @@ def test_privileged_mode_is_never_requested() -> None:
     assert kwargs.get("userns_mode") is None
 
 
-def test_only_the_workspace_volume_is_mounted() -> None:
-    """No host path is ever bind-mounted — the sandbox sees a named volume and nothing else."""
+def test_only_named_volumes_are_mounted() -> None:
+    """No host path is ever bind-mounted — the sandbox sees named volumes and nothing else.
+
+    Two of them: the workspace, and the package-manager cache home (a read-only root leaves
+    ``$HOME`` unwritable otherwise, which breaks every pnpm/npm command).
+    """
     volumes = _kwargs()["volumes"]
     assert isinstance(volumes, dict)
-    assert len(volumes) == 1
-    [(source, spec)] = volumes.items()
-    assert spec == {"bind": "/workspace", "mode": "rw"}
-    assert not str(source).startswith("/")  # a named volume, not a host directory
-    assert not str(source).startswith(".")
+    assert {spec["bind"] for spec in volumes.values()} == {"/workspace", "/home/app"}
+    for source, spec in volumes.items():
+        assert spec["mode"] == "rw"
+        assert not str(source).startswith("/")  # a named volume, not a host directory
+        assert not str(source).startswith(".")
 
 
 def test_the_docker_socket_is_never_mounted() -> None:
@@ -107,7 +115,7 @@ async def test_resource_limits_are_config_driven_not_hardcoded(
     assert created["pids_limit"] == 64
     assert created["nano_cpus"] == 500_000_000
     # ...and tightening limits must never quietly drop the hard controls.
-    assert created["network_mode"] == "none"
+    assert created["network_mode"] == sandbox_network_name("proj-limits")
     assert created["cap_drop"] == ["ALL"]
     assert created["security_opt"] == ["no-new-privileges"]
 
@@ -134,11 +142,25 @@ def test_the_egress_network_routes_out_but_is_not_the_host_network() -> None:
     assert kwargs["labels"]["forgeflow.role"] == "egress"
 
 
+def test_the_sandbox_default_network_is_sealed_and_per_project() -> None:
+    """The default is a *per-project* internal bridge: no route out, and no other sandbox on it."""
+    assert _kwargs()["network_mode"] == sandbox_network_name("proj")
+    assert sandbox_network_name("a") != sandbox_network_name("b")
+
+    kwargs = build_sandbox_network_kwargs(sandbox_network_name("proj"))
+    assert kwargs["internal"] is True  # no route to the host or the internet
+    assert kwargs["driver"] == "bridge"  # a bridge, never `host`
+    assert kwargs["labels"]["forgeflow.role"] == "sandbox"
+
+
 def test_the_two_network_relaxations_are_the_only_ones() -> None:
-    """Default is `network_mode=none`; any other network must be one of the two audited ones."""
-    assert _kwargs()["network_mode"] == "none"
+    """Only preview (internal) and egress (routed) may ever be added on top of the default."""
     for builder in (build_preview_network_kwargs, build_egress_network_kwargs):
         assert builder("n")["driver"] == "bridge"
+    assert build_preview_network_kwargs("n")["internal"] is True
+    # Egress is the single routed one, and it is attached per-command/per-run, never at creation.
+    assert build_egress_network_kwargs("n")["internal"] is False
+    assert _kwargs()["network_mode"] != build_egress_network_kwargs("n")["name"]
 
 
 # ---------------------------------------------------------------- static source audit
@@ -185,11 +207,15 @@ async def test_docker_inspect_confirms_the_flags_on_a_real_container() -> None:
     manager = SandboxManager()
     project_id = "sec-audit-probe"
     name = container_name(project_id)
+    network = sandbox_network_name(project_id)
     try:
         await manager._create_container(project_id)
-        host_config = docker.from_env().containers.get(name).attrs["HostConfig"]
+        client = docker.from_env()
+        host_config = client.containers.get(name).attrs["HostConfig"]
 
-        assert host_config["NetworkMode"] == "none"
+        # Its own network, and that network really is internal: no route out of the sandbox.
+        assert host_config["NetworkMode"] == network
+        assert client.networks.get(network).attrs["Internal"] is True
         assert host_config["CapDrop"] == ["ALL"]
         assert "no-new-privileges" in " ".join(host_config.get("SecurityOpt") or [])
         assert host_config["ReadonlyRootfs"] is True
@@ -197,6 +223,8 @@ async def test_docker_inspect_confirms_the_flags_on_a_real_container() -> None:
         assert host_config["Memory"] > 0
         assert host_config["Privileged"] is False
     finally:
-        # Remove the probe container directly — this test owns it, not a Project record.
+        # Remove the probe container + its network directly — this test owns them, not a Project.
         with contextlib.suppress(Exception):
             docker.from_env().containers.get(name).remove(force=True)
+        with contextlib.suppress(Exception):
+            docker.from_env().networks.get(network).remove()

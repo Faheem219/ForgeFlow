@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from beanie import PydanticObjectId
 
+from app.core.config import reset_config
 from app.core.errors import ProviderError, UserError
 from app.db.blobs import get_blob_store
 from app.db.models.enums import Stage, StageStatus
@@ -30,14 +31,13 @@ from app.orchestrator.conductor import Conductor
 from app.orchestrator.schemas import Intent, IntentAction
 from app.projects.service import ProjectService
 from app.projects.state_machine import Action
+from tests.resilience.conftest import ScriptedDesignProvider
 
 pytestmark = pytest.mark.usefixtures("mongo_db")
 
 
 @pytest.fixture
 def design_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    from app.core.config import reset_config
-
     monkeypatch.setenv("DESIGN_PROVIDER", "fake")
     monkeypatch.setenv("BLOB_BACKEND", "filesystem")
     monkeypatch.setenv("BLOB_FS_DIR", str(tmp_path))
@@ -104,6 +104,42 @@ async def test_refine_instruction_chains_from_latest(design_env: None) -> None:
 
     assert resp.artifacts[0].version == 2
     assert resp.artifacts[0].meta[META_SOURCE] == "refine"
+
+
+async def test_refine_after_a_fallback_goes_to_the_provider_that_produced_the_design(
+    design_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reported failure, through the real UI path.
+
+    A generate falls back to ``fake`` (Stitch unavailable), then the user refines. Sending the
+    ``fake-text-…`` ref to the still-active Stitch is what produced "Stitch tool error: Requested
+    entity was not found"; the refine must go to ``fake`` and say so.
+    """
+    user = PydanticObjectId()
+    pid = await _project(user)
+
+    # Stitch is active but broken; the chain falls back to the real deterministic fake provider.
+    stitch = ScriptedDesignProvider("stitch", fail_text="quota")
+    register_provider(stitch)
+    monkeypatch.setenv("DESIGN_PROVIDER", "stitch")
+    reset_config()
+
+    generated = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+    assert generated.artifacts[0].meta[META_PROVIDER] == "fake"  # the fallback served it
+
+    resp = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, message="make the header indigo")
+    )
+
+    art = resp.artifacts[0]
+    assert art.meta[META_SOURCE] == "refine"
+    assert art.meta[META_PROVIDER] == "fake"  # …and the refine followed it
+    assert stitch.refine_calls == []  # the call that used to fail is never made
+    # The user is told why the refine did not use their configured provider.
+    note = resp.messages[-1].content
+    assert "fake" in note and "stitch" in note
 
 
 async def test_approve_completes_the_stage(design_env: None) -> None:
@@ -208,7 +244,6 @@ async def test_provider_error_propagates_with_a_fallback_hint(
     candidate is exhausted. Here the fallback chain is disabled, making the failing provider the
     sole candidate, which restores the single-provider "surface the hint" contract this guards.
     """
-    from app.core.config import reset_config
 
     class FailingProvider:
         key = "failing"

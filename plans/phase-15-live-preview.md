@@ -106,3 +106,46 @@ recovers, stop really kills the dev servers, and foreign-project/unauth are reje
 with a minimal stand-in FE+BE as the plan directs. The docker-network attach/detach path and the
 Caddyfile's syntax could not be executed here (no Colima); both are covered by pure spec assertions
 and rendered-compose validation, with the identical service logic proven via `LocalRuntime`.
+
+## Follow-up — the preview attach never actually worked
+
+`attach_preview_network` could not succeed as built: the sandbox was created with
+`network_mode=none`, and docker refuses to connect such a container to anything ("container cannot be
+connected to multiple networks with one of the networks in private (none) mode"). The `APIError` was
+swallowed as a debug log ("already on the preview network"), so the dev servers started, the URLs were
+returned, and the proxy could reach nothing — a silent failure. Fixed in the phase-11 follow-up: the
+sandbox is created on its own **internal per-project** network instead, which keeps the isolation and
+*is* attachable. Verified against a real daemon: a container on `forgeflow-preview` now reaches the
+sandbox's vite server by container name (HTTP 200).
+
+## Follow-up — the dependency-install question, answered
+
+This phase's notes flagged that `internal: true` leaves the sandbox with **no registry access**, so
+`pnpm install` could not run, and that "dependency installation … will need its own answer". It does
+now:
+
+- **`app/sandbox/network.py`** — a ref-counted, bounded **registry-egress window**, the same shape as
+  the phase-39 live-validation window: borrow the routed `forgeflow-egress` network for the duration
+  of one command, always hand it back in a `finally`. Narrow in scope (`needs_registry(argv)` — only
+  package-manager *fetch* commands; `pnpm dev`, `pnpm exec …`, `curl` get nothing) and narrow in time.
+  Ref-counting means overlapping installs cannot revoke each other's route. Gated by
+  `sandbox_install_network` (default true). `LiveTestRunner` now uses the same helper, so the two
+  egress users share one route instead of racing.
+- **`app/sandbox/exec.py`** — opens the window for qualifying commands only (`wants_registry`), so the
+  agent's `install_deps` tool, a hand-typed `pnpm install` in the terminal, and the bootstrap below
+  all benefit from one place.
+- **`app/sandbox/deps.py`** — `ensure_dependencies` installs deterministically when the workspace's
+  `node_modules` markers are missing, and `PreviewService.start` calls it *before* attaching the
+  internal preview network (both because a fresh skeleton has no vite to run, and because the egress
+  window is cleanest before the internal network is attached). Idempotent, streamed as
+  `terminal.output` + `progress`, and it never raises — a failed install leaves the real error to the
+  dev server that follows. This replaces relying on the model to notice: in the observed failure it
+  read `package.json`, concluded deps were "already installed", and started a preview that could not
+  boot.
+
+**Known limitation (phase-47 review):** while the sandbox is also on the internal preview network,
+docker's choice of outbound route is not guaranteed to be the egress one, so a *mid-preview* install
+may still fail to resolve and need a preview restart. The pipeline order above avoids it.
+
+New config: `sandbox_install_network`, `sandbox_install_timeout_s` (1800 — a cold install is minutes,
+and the 600 s per-command default would kill it), both in the admin registry + `.env.example`.

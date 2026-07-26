@@ -84,3 +84,45 @@ Timeouts + cancellation exist per op (exec `asyncio.timeout` + kill, agent-clien
 **Tests** — backend `tests/resilience/` 29 (provider fallback incl. end-to-end via the conductor; container recovery from volume; timeout + cancel + concurrency cap; reconnect-resume from seq); frontend `errors.test.ts` (11) + `ErrorBoundary.test.tsx` (6). One phase-19 test updated: `test_provider_error_propagates_with_a_fallback_hint` now disables the chain so it still guards the dead-end contract (a failure surfaces its hint) under the new fallback model.
 
 **Verification:** backend 821 passed, ruff/black/mypy clean; frontend 236 passed (my 17 new all green), tsc/eslint/prettier clean, `vite build` succeeds. Remaining reds are pre-existing and unrelated: 7 Docker-daemon repair tests (identical at HEAD), 26 Windows-only sandbox tests, and one phase-45 chart test that assumes US number grouping (fails only under this machine's `en-IN` locale). Deferred (need a real daemon/browser): the live Stitch-429 / container-kill / reconnect manual walkthroughs.
+
+## Follow-up fix — a refine after a fallback went to the wrong provider
+
+This phase's own boundary note said refine "stays single-provider" because an ``external_ref`` is
+provider-specific. Correct — but the code then sent every refine to the **active** provider rather
+than the one that *issued* the ref. So the fallback this phase introduced set up its own failure:
+
+1. Generate with Stitch active → Stitch fails (quota/auth/down) → the chain serves `fake`, and the
+   design artifact stores `external_ref='fake-text-…'` with `provider='fake'`.
+2. The user refines → the call goes to the still-active **Stitch** with a `fake` ref → Google answers
+   `Requested entity was not found`, surfaced in the UI as *"Could not send"*. Dead end: refine did
+   not go through `invoke_with_fallback` either, so nothing recovered it.
+
+`provider_for_refine(project, produced_by)` now resolves the refine target from the artifact's
+recorded `META_PROVIDER`, and both call sites use it (`DesignService.refine` and the design stage
+handler). When the producer is not the active provider the user is told, in the same
+`_summary(...)` line the generate paths use for fallback notes: *"Refined via fake because it
+produced this design (the active provider is stitch). Generate a new design to move this project
+onto stitch."* Unknown/missing provenance still resolves to the active provider (legacy artifacts
+stay refinable) with a note rather than an error.
+
+Defence in depth, so this class of mix-up can never again reach a provider as an opaque not-found:
+
+- **`app/design/stitch.py`** — `_split_ref` rejects a ref that is not Stitch's own
+  `{projectId}/{screenId}` shape (or a bare hex Stitch id) as `fatal`, before any HTTP call:
+  *"Design reference 'fake-text-…' was not produced by Stitch, so Stitch cannot refine it."*
+  `fatal` is deliberate — no other provider could refine it either, so the chain must not spend
+  attempts. A genuine `NOT_FOUND` from Stitch (project deleted there, or created under different
+  credentials) now carries its own hint — "generate a new design; existing versions are kept" —
+  instead of the schema-drift hint, which was misleading advice for that failure.
+- **`app/design/fake.py`** — a ref this provider issued stays refinable after a control-plane
+  restart (its in-memory map is a cache, not the source of truth). A foreign ref is still rejected.
+- **`scripts/stitch_probe.py`** — forces UTF-8 stdout; on Windows it used to die with a
+  `UnicodeEncodeError` mid-report, on exactly the platform where someone runs it after a failure.
+
+Verified: 26 new tests (`tests/design/test_refine_provenance.py`,
+`tests/design/test_stitch_foreign_ref.py`, plus the handler-level regression in
+`tests/orchestrator/stages/test_design_handler.py`), and **against the real failing data**: replaying
+the recorded refine on the project that failed now succeeds and routes to `fake`, while the five
+Stitch-produced designs in the same DB still route to `stitch`. The live Stitch endpoint was probed
+read-only (`tools/list`) to confirm the argument names were never the problem: `edit_screens` accepts
+exactly what we send.

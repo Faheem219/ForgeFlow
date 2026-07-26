@@ -6,6 +6,10 @@ inside the sandbox as the non-root user (§7) — the control plane never execs 
 
 The blocking runtime handle is bridged to asyncio by pumping its generator on a worker thread into
 an :class:`asyncio.Queue`, so streaming never blocks the event loop.
+
+One exception to "the sandbox has no network": a command that must reach the npm registry (a
+dependency install — the generated app's deps are not baked into the image) runs inside a bounded
+egress window. See :mod:`app.sandbox.network` for the guarantees.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 
 from app.core.config import get_config
@@ -24,13 +29,24 @@ from app.db.blobs import BlobStore, get_blob_store
 from app.db.models import Project
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
-from app.sandbox.runtime import ExecChunk, ExecHandle
+from app.sandbox.network import egress_enabled, egress_window, needs_registry
+from app.sandbox.runtime import DockerRuntime, ExecChunk, ExecHandle, WorkspaceRuntime
 from app.sandbox.workspace import RuntimeProvider, active_runtime_provider
 
 logger = logging.getLogger(__name__)
 
 # Conventional shell exit code for "killed by timeout" (matches coreutils `timeout`).
 EXIT_TIMEOUT = 124
+
+
+def wants_registry(runtime: WorkspaceRuntime, cmd: list[str]) -> bool:
+    """Whether this command should run inside a registry-egress window.
+
+    Three conditions, all required: it is a real container (the local test backend has no docker
+    networking), the relaxation is enabled, and the command genuinely fetches packages. Everything
+    else keeps the sandbox's sealed-network default.
+    """
+    return isinstance(runtime, DockerRuntime) and egress_enabled() and needs_registry(cmd)
 
 
 @dataclass(frozen=True)
@@ -123,40 +139,48 @@ class ExecService:
         runtime = await provider(project)
 
         exec_id = uuid.uuid4().hex[:16]
-        handle = await asyncio.to_thread(runtime.start_exec, cmd, cwd, env)
-        self._running.setdefault(project_id, {})[exec_id] = handle
-
-        await emit(
-            project_id,
-            EventType.exec_status,
-            {"exec_id": exec_id, "status": "started", "cmd": cmd},
-        )
-
         started = time.monotonic()
         collected = bytearray()
         timed_out = False
-        try:
-            async with asyncio.timeout(window):
-                async for chunk in aiter_chunks(handle):
-                    collected += chunk.data
-                    await emit(
-                        project_id,
-                        EventType.terminal_output,
-                        {
-                            "exec_id": exec_id,
-                            "stream": chunk.stream,
-                            "chunk": chunk.data.decode("utf-8", errors="replace"),
-                        },
-                    )
-                exit_code = await asyncio.to_thread(handle.wait)
-        except TimeoutError:
-            timed_out = True
-            await asyncio.to_thread(handle.kill)
-            # Reap so the process (and its group) is fully gone before we report back.
-            await asyncio.to_thread(handle.wait)
-            exit_code = EXIT_TIMEOUT
-        finally:
-            self._running.get(project_id, {}).pop(exec_id, None)
+
+        async with AsyncExitStack() as stack:
+            # A dependency install is the one thing generated code cannot do under the
+            # sealed-network default — the registry is unreachable. Borrow routed egress for
+            # exactly this command and hand it straight back (see app.sandbox.network).
+            if wants_registry(runtime, cmd):
+                await stack.enter_async_context(egress_window(project_id))
+
+            handle = await asyncio.to_thread(runtime.start_exec, cmd, cwd, env)
+            self._running.setdefault(project_id, {})[exec_id] = handle
+
+            await emit(
+                project_id,
+                EventType.exec_status,
+                {"exec_id": exec_id, "status": "started", "cmd": cmd},
+            )
+
+            try:
+                async with asyncio.timeout(window):
+                    async for chunk in aiter_chunks(handle):
+                        collected += chunk.data
+                        await emit(
+                            project_id,
+                            EventType.terminal_output,
+                            {
+                                "exec_id": exec_id,
+                                "stream": chunk.stream,
+                                "chunk": chunk.data.decode("utf-8", errors="replace"),
+                            },
+                        )
+                    exit_code = await asyncio.to_thread(handle.wait)
+            except TimeoutError:
+                timed_out = True
+                await asyncio.to_thread(handle.kill)
+                # Reap so the process (and its group) is fully gone before we report back.
+                await asyncio.to_thread(handle.wait)
+                exit_code = EXIT_TIMEOUT
+            finally:
+                self._running.get(project_id, {}).pop(exec_id, None)
 
         cancelled = exec_id in self._cancelled
         self._cancelled.discard(exec_id)

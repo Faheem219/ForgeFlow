@@ -71,3 +71,26 @@ Implements D5/§4 sandbox image and the §7 security posture (generated code run
 > validated (`bash -n`, `node --check`, YAML parse) and a CI `sandbox` job builds the image and runs
 > the Node + Playwright smoke on push. Run `make sandbox-smoke` locally where Docker is available to
 > confirm the acceptance criteria end-to-end.
+
+## Follow-up fix — pnpm could not run in the sandbox at all
+
+`corepack enable` (as originally specified) only installs *shims*: corepack downloads the requested
+pnpm on first use into `$HOME/.cache/node/corepack`. In the real runtime posture — read-only root
+(phase-11) and no network — that made every package-manager command in the sandbox fail before it
+started:
+
+```
+Error: ENOENT: no such file or directory, mkdir '/home/app/.cache/node/corepack/v1'
+```
+
+The image now **bakes** pnpm: `COREPACK_HOME=/opt/corepack` (world-readable, populated at build time
+via `corepack prepare pnpm@$PNPM_VERSION --activate`, kept in lockstep with the skeleton's
+`packageManager`), `COREPACK_ENABLE_STRICT=0` so a drifted `packageManager` field falls back to the
+baked version instead of failing offline, and `$HOME` cache dirs pre-created + owned by `app` so the
+per-project home volume (phase-11) seeds correctly. The build asserts pnpm resolves with
+`COREPACK_ENABLE_NETWORK=0`, as root **and** as `app`, so this cannot silently regress.
+`entrypoint.sh` additionally warns when `$HOME` is unwritable, since that failure otherwise reads as
+a Node bug rather than a mount problem.
+
+`smoke/run_smoke.sh` now reproduces the posture (read-only root + `--network none` + `$HOME` volume)
+and requires `pnpm --version` and a `$HOME` mkdir to succeed — the regression guard for this bug.

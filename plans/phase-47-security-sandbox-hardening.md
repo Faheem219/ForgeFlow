@@ -89,3 +89,25 @@ The sweep confirmed the earlier phases' guarantees hold as a system: 74 API rout
 **Verification:** backend 792 passed, ruff/black/mypy clean, both guard scripts pass. The 7 remaining failures are the pre-existing Docker-daemon-dependent repair tests (identical at HEAD — verified against a clean worktree; the 26 pre-existing Windows-only sandbox failures were likewise byte-for-byte unchanged by the subprocess-env fix).
 
 **Deferred:** the `-m docker` container-inspection test and the environment-posture items (§6 of the checklist) need a Docker daemon and a real deployment — they are written and ready to run, not executed here.
+
+## Amendment — the sandbox default network changed (still sealed)
+
+The audit above recorded `network_mode=none` as the default. That default was **unusable**: docker
+refuses to attach any network to a `none`-mode container, so the preview relaxation (phase-15) and the
+egress window (phase-39) could never actually take effect — the attach failed and was swallowed as a
+debug log. Sandboxes are now created on a **per-project `internal` network**
+(`build_sandbox_network_kwargs`), which keeps every property this audit checked — no host network, no
+internet, nothing else on the network (in fact *stronger*: per project rather than shared) — while
+letting the two audited relaxations work as designed.
+
+`tests/security/test_sandbox_isolation.py` was updated accordingly: it now asserts the default network
+is per-project **and** `internal=True`, that preview stays `internal`, that egress is the only routed
+one and is never the creation network, and (with `-m docker`) confirms both on a real container via
+`docker inspect`. Also newly asserted: writes are confined to named volumes only — `/workspace` plus
+`/home/app`, the writable package-manager home a read-only root otherwise makes impossible.
+
+Two further items for the next sweep: (a) a mid-preview install may pick the wrong outbound route
+while the sandbox sits on both an internal and a routed network (documented in `app/sandbox/network.py`);
+(b) per-project networks consume docker's finite default address pools — orphans are pruned on startup
+and by `make sandbox-reap-all`, but a deployment with many concurrent sandboxes needs
+`default-address-pools` widened in the daemon config.

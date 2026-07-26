@@ -24,6 +24,35 @@ if docker run --rm "${IMAGE}" sh -c 'env | grep -iE "secret|token|password|api_k
   exit 1
 fi
 
+echo "==> Asserting pnpm runs under the real runtime posture (read-only root, no network)"
+# This is the regression check for `ENOENT … mkdir '/home/app/.cache/node/corepack/v1'`: corepack
+# used to try to download pnpm into an unwritable $HOME on first use, so *every* package-manager
+# command in the sandbox died. Reproduce the manager's posture exactly — read-only root, no network,
+# a writable volume for $HOME — and require pnpm to work anyway (it is baked into the image).
+home_vol="forgeflow-smoke-home-$$"
+docker volume create "${home_vol}" >/dev/null
+trap 'docker volume rm -f "${home_vol}" >/dev/null 2>&1 || true' EXIT
+if ! docker run --rm \
+  --read-only \
+  --network none \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --tmpfs /tmp \
+  -v "${home_vol}:/home/app" \
+  "${IMAGE}" \
+  bash -c 'set -e; pnpm --version; mkdir -p "$HOME/.cache/node/corepack"; pnpm store path >/dev/null'
+then
+  echo "FAIL: pnpm cannot run with a read-only root and no network" >&2
+  exit 1
+fi
+
+echo "==> Asserting a read-only root without the \$HOME volume is reported, not silent"
+if ! docker run --rm --read-only --network none --tmpfs /tmp "${IMAGE}" true 2>&1 \
+  | grep -q 'not writable'; then
+  echo "FAIL: expected a clear warning when \$HOME is unwritable" >&2
+  exit 1
+fi
+
 echo "==> Running the sample Node app + Playwright chromium test in-container"
 docker run --rm \
   -v "${SCRIPT_DIR}:/workspace/smoke:ro" \

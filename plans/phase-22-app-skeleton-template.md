@@ -89,3 +89,24 @@ Implements D2 (fixed generated-app stack) and the **user directive**: *a base Re
   install+build test in `backend/tests/agents/test_skeleton_instantiation.py` is opt-in
   (`FORGEFLOW_SKELETON_BUILD=1`), the structural/determinism tests always run.
 - **Deferred:** none. (Real Mongo connection is exercised by preview/CI, not the unit suite.)
+
+## Follow-up fix — the dev server refused the preview's hostname
+
+`vite.config.ts` set only `server.host`. Vite **≥ 5.4.12** (the skeleton resolves `^5.4.8`, so any
+fresh install gets it) answers **403** to a `Host` header it does not recognise, and the preview proxy
+forwards the *original* host. `*.localhost` is allowed by Vite itself, so local preview survived by
+luck; a real `PREVIEW_BASE_DOMAIN` would have served 403 into the iframe instead of the app.
+
+`server.allowedHosts` is now read from `VITE_ALLOWED_HOSTS` (comma-separated), which
+`PreviewService.start` injects via `allowed_preview_hosts()` — the proxied FE/BE hostnames, the
+sandbox's container name (how the proxy addresses it) and loopback (in-sandbox health probes +
+Playwright). When the variable is unset the option is omitted entirely, so Vite's own default applies
+and nothing changes for a developer running `pnpm dev` by hand. Documented in the skeleton's
+`.env.example`.
+
+Verified against a real dev server in a sandbox: allowlisted host → **200**, unlisted host → **403**,
+`*.preview.localhost` → 200; `pnpm typecheck`, `pnpm -r build` and `pnpm -r lint` all clean.
+
+> Note: workspaces instantiated **before** this fix keep their old `vite.config.ts` (the skeleton is
+> never re-copied over existing work). They are fine locally; if such a project is previewed under a
+> non-`.localhost` domain, add `allowedHosts` to its config or let the build agent rewrite the file.

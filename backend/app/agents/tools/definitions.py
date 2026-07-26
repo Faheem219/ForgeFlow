@@ -123,7 +123,12 @@ async def _install_deps(ctx: ToolContext, args: InstallDepsArgs) -> str:
         cmd = [args.manager, subcmd, *(["-D"] if args.dev else []), *args.packages]
     else:
         cmd = [args.manager, "install"]
-    outcome = await ctx.exec_service.run(ctx.project, cmd)
+    # Installs get their own, longer wall clock: a cold install of the skeleton pulls hundreds of
+    # packages and the default per-command timeout would kill it mid-flight. The registry-egress
+    # window this needs is opened by the exec service (app.sandbox.network).
+    outcome = await ctx.exec_service.run(
+        ctx.project, cmd, timeout=float(get_config().get("sandbox_install_timeout_s"))
+    )
     return tool_ok(cmd=cmd, exit_code=outcome.exit_code, output=await _read_exec_output(outcome))
 
 

@@ -85,6 +85,6 @@ networks:
     name: forgeflow-preview
     # `internal` is the isolation guarantee: sandboxes joined here can be reached by the proxy
     # and reach each other's dev servers, but have NO route to the host or the internet. The
-    # sandbox manager (phase-11) still creates containers with network_mode=none by default and
-    # only joins them here while preview runs.
+    # sandbox manager (phase-11) creates each container on its OWN internal network and only
+    # joins it here while preview runs.
     internal: true

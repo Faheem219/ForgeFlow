@@ -21,12 +21,12 @@ cd backend && uv run pytest tests/security -q -m docker
 
 | ✔ | Check | How |
 |---|-------|-----|
-| ✅ auto | `network_mode=none` by default | `test_sandbox_isolation.py` |
+| ✅ auto | Sealed **per-project `internal` network** by default — no host network, no internet, no other sandbox on it (not `none`: docker cannot attach preview/egress to a `none`-mode container) | `test_sandbox_isolation.py` |
 | ✅ auto | `cap_drop=[ALL]` and `no-new-privileges` | `test_sandbox_isolation.py` |
-| ✅ auto | Read-only root; writes only to `/workspace` + `tmpfs /tmp` | `test_sandbox_isolation.py` |
+| ✅ auto | Read-only root; writes only to `/workspace`, `/home/app` (package-manager caches) + `tmpfs /tmp` | `test_sandbox_isolation.py` |
 | ✅ auto | `pids_limit`, `mem_limit`, `nano_cpus` set **from config** (not hardcoded) | `test_sandbox_isolation.py` |
 | ✅ auto | No `privileged`, `cap_add`, `network_mode: host`, or docker-socket mount anywhere in `app/` | `test_sandbox_isolation.py` |
-| ✅ auto | Only the named workspace volume is mounted — no host bind mounts | `test_sandbox_isolation.py` |
+| ✅ auto | Only named volumes are mounted — no host bind mounts | `test_sandbox_isolation.py` |
 | ✅ auto | Preview network is `internal=True` | `test_sandbox_isolation.py` |
 | ✅ auto | Egress network is a bridge (never host) and labelled | `test_sandbox_isolation.py` |
 | ✅ auto (`-m docker`) | A real container's `docker inspect` shows all of the above | `test_sandbox_isolation.py` |

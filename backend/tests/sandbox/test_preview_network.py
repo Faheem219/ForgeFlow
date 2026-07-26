@@ -38,12 +38,18 @@ def test_preview_network_is_internal_and_labelled() -> None:
 
 def test_sandbox_default_still_has_no_network() -> None:
     """Preview must not weaken the phase-11 default posture for ordinary sandboxes."""
-    from app.sandbox.manager import build_run_kwargs
+    from app.sandbox.manager import (
+        build_run_kwargs,
+        build_sandbox_network_kwargs,
+        sandbox_network_name,
+    )
 
     kwargs = build_run_kwargs(
         "p1", image="img", cpu_limit=1.0, mem_limit="1g", pids_limit=256, read_only=True
     )
-    assert kwargs["network_mode"] == "none"
+    # The default is the project's *own* sealed network — reachable by nothing, routing nowhere.
+    assert kwargs["network_mode"] == sandbox_network_name("p1")
+    assert build_sandbox_network_kwargs(sandbox_network_name("p1"))["internal"] is True
 
 
 async def test_attach_creates_the_network_then_connects() -> None:

@@ -81,9 +81,9 @@ Vercel token, a Render key, a Mongo Atlas URI. A breach is therefore not only a 
 
 | Threat | Mitigation | Verified by |
 |---|---|---|
-| Generated code reaches the host network / other services | `network_mode=none` by default | `test_sandbox_isolation.py` |
+| Generated code reaches the host network / other services | Sealed per-project `internal` network by default (no route out); preview + registry-egress attached deliberately and temporarily | `test_sandbox_isolation.py`, `test_install_egress.py` |
 | Privilege escalation inside the container | `cap_drop=[ALL]`, `security_opt=[no-new-privileges]`, non-root user | `test_sandbox_isolation.py` |
-| Tampering with the runtime image | `read_only` root; writes confined to `/workspace` + `tmpfs /tmp` | `test_sandbox_isolation.py` |
+| Tampering with the runtime image | `read_only` root; writes confined to `/workspace`, `/home/app` + `tmpfs /tmp` | `test_sandbox_isolation.py` |
 | Resource exhaustion (fork bomb, memory, CPU) | `pids_limit`, `mem_limit`, `nano_cpus`; exec timeouts; idle reaping | `test_sandbox_isolation.py`, phase-11/13 tests |
 | Docker-socket escape | The socket is never mounted; asserted by a source-wide scan | `test_sandbox_isolation.py` |
 | Path traversal out of `/workspace` | `safe_rel_path()` chokepoint (lexical) + symlink resolution at call time | phase-12 `test_path_safety.py` |

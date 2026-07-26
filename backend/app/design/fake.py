@@ -63,6 +63,10 @@ class FakeDesignProvider:
         self._designs[result.external_ref] = result
         return result
 
+    def _is_own_ref(self, design_ref: str) -> bool:
+        """Whether this ref was minted by *this* provider (so it survives a process restart)."""
+        return design_ref.startswith(("fake-text-", "fake-image-"))
+
     async def generate_from_text(self, prompt: str) -> DesignResult:
         ref = f"fake-text-{_digest(prompt)}"
         return self._remember(
@@ -97,8 +101,10 @@ class FakeDesignProvider:
         )
 
     async def refine(self, design_ref: str, instruction: str) -> DesignResult:
-        previous = self._designs.get(design_ref)
-        if previous is None:
+        # The in-memory map is a cache, not the source of truth: a ref this provider *issued*
+        # stays refinable across a control-plane restart (the design itself is persisted as an
+        # artifact). Only a ref that was never ours is an error.
+        if design_ref not in self._designs and not self._is_own_ref(design_ref):
             raise provider_error(self.key, f"Unknown design ref: {design_ref}")
         ref = f"{design_ref}-r{_digest(design_ref, instruction)}"
         return self._remember(

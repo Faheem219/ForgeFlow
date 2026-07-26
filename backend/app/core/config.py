@@ -182,6 +182,15 @@ class Settings(BaseSettings):
     sandbox_reap_interval_s: int = 60  # how often the idle reaper sweeps
     workspace_max_file_bytes: int = 1_048_576  # per-file read/write cap for the FS API (phase-12)
 
+    # Dependency installs need the npm registry, which the sandbox's sealed network forbids: when
+    # true, a package-manager fetch command borrows the routed egress network for its duration and
+    # hands it straight back (app.sandbox.network). Off → the sandbox never reaches the registry
+    # and only pre-installed dependencies work.
+    sandbox_install_network: bool = True
+    # Installs are slow (a cold pnpm install of the skeleton pulls hundreds of packages), so they
+    # get their own, longer wall clock than an ordinary command.
+    sandbox_install_timeout_s: int = 1800
+
     # --- Exec & terminal (phase-13) ---
     sandbox_exec_timeout_s: int = 600  # default per-command wall clock before the process is killed
     sandbox_max_concurrent_execs: int = 3  # per project

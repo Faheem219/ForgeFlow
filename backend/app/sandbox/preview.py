@@ -8,9 +8,11 @@ Two things worth knowing:
 - **Health probes run inside the sandbox** (``curl`` against loopback), not from the control
   plane. That keeps the check working regardless of how the sandbox is (or isn't) networked, and
   it needs no host access.
-- **Networking** is the one deliberate relaxation of phase-11's ``network_mode=none``: on start the
-  sandbox joins a dedicated *internal* docker network (see ``build_preview_network_kwargs``) so the
-  reverse proxy can reach the dev servers. There is still no host network and no internet.
+- **Networking** is a deliberate relaxation of phase-11's sealed per-project network: on start the
+  sandbox *also* joins a dedicated *internal* docker network (see ``build_preview_network_kwargs``)
+  so the reverse proxy can reach the dev servers. Still no host network and no internet.
+- **Dependencies** are ensured before the servers launch (:mod:`app.sandbox.deps`) — the skeleton is
+  copied in as source only, so without that step there is nothing to run.
 """
 
 from __future__ import annotations
@@ -21,14 +23,16 @@ import logging
 import shlex
 import time
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from app.core.config import get_config
 from app.core.errors import UserError
 from app.db.models import Project
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
+from app.sandbox.deps import ensure_dependencies
 from app.sandbox.exec import aiter_chunks
-from app.sandbox.manager import get_manager
+from app.sandbox.manager import container_name, get_manager
 from app.sandbox.runtime import DockerRuntime, ExecHandle, WorkspaceRuntime
 from app.sandbox.schemas import PreviewInfo, PreviewProcess, PreviewStatus
 from app.sandbox.workspace import RuntimeProvider, active_runtime_provider
@@ -66,6 +70,20 @@ def preview_urls(project_id: str) -> tuple[str, str]:
         f"http://{project_id}.preview.localhost",
         f"http://{project_id}.api.preview.localhost",
     )
+
+
+def allowed_preview_hosts(project_id: str) -> list[str]:
+    """Hostnames the FE dev server must accept (its Vite ``server.allowedHosts``).
+
+    The proxied preview hostnames, plus the sandbox's container name (how the proxy addresses it)
+    and loopback (in-sandbox health probes and Playwright).
+    """
+    hosts = ["localhost", "127.0.0.1", container_name(project_id)]
+    for url in preview_urls(project_id):
+        host = urlsplit(url).hostname
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
 
 
 async def _run_to_completion(runtime: WorkspaceRuntime, argv: list[str], cwd: str = "") -> int:
@@ -150,8 +168,12 @@ class PreviewService:
 
         runtime = await self._runtime(project)
 
-        # Let the proxy reach the dev servers. Only meaningful for the container backend.
+        # Container-backend only (the local test backend has no docker networking, and no sandbox
+        # to install into). Deps come FIRST for two reasons: a freshly instantiated skeleton has no
+        # node_modules at all, so `pnpm dev` would exit instantly with "vite: not found"; and the
+        # install's egress window is cleanest before the *internal* preview network is attached.
         if isinstance(runtime, DockerRuntime):
+            await ensure_dependencies(project, runtime)
             await get_manager().attach_preview_network(project_id)
 
         fe_port = int(config.get("preview_fe_port"))
@@ -169,7 +191,15 @@ class PreviewService:
             "NODE_ENV": "development",
             "MONGODB_URI": await DbProvisioner().get_app_mongodb_uri(project),
         }
-        fe_env = {"NODE_ENV": "development", "VITE_API_BASE_URL": be_url}
+        fe_env = {
+            "NODE_ENV": "development",
+            "VITE_API_BASE_URL": be_url,
+            # Vite >= 5.4.12 answers 403 to a Host header it does not recognise, and the proxy
+            # forwards the *original* host — so the dev server has to be told which ones are ours,
+            # or the preview iframe shows a 403 instead of the app. (`*.localhost` is allowed by
+            # Vite already; a real PREVIEW_BASE_DOMAIN is not.) The skeleton's vite.config reads it.
+            "VITE_ALLOWED_HOSTS": ",".join(allowed_preview_hosts(project_id)),
+        }
 
         state = _ProjectPreview()
         self._state[project_id] = state
