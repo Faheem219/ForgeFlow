@@ -28,7 +28,7 @@ from typing import Any
 from beanie import PydanticObjectId
 
 from app.core.config import get_config
-from app.core.errors import UserError
+from app.core.errors import ForgeFlowError, UserError
 from app.db.models import Run
 from app.db.models.common import utcnow
 from app.db.models.enums import MessageRole, Stage, StageStatus
@@ -76,17 +76,16 @@ def _runs_detached(stage: Stage, action: Action) -> bool:
 
 
 async def reap_orphaned_runs() -> int:
-    """Close build runs left open by a previous process. Returns how many were reaped.
+    """Close **every** run left open by a previous process. Returns how many were reaped.
 
-    Detached builds live in the API process, so any still-open build run at startup belongs to a
-    process that no longer exists — it cannot still be running. Left alone it would read as "a build
-    is in flight" forever: the UI would spin and, worse, the concurrent-build guard would lock the
-    project out of ever building again. Called once from the app lifespan.
+    Runs live in the API process, so any still-open run at startup belongs to a process that no
+    longer exists — it cannot still be running. Left alone each reads as work in flight forever: the
+    cost panel lists it as ``running`` indefinitely (which is how a closed app looked like it had
+    lost the work), and for a *build* the concurrent-build guard would lock the project out of ever
+    building again. Called once from the app lifespan.
     """
     reaped = 0
-    for run in await Run.find(
-        {"kind": {"$in": list(BUILD_RUN_KINDS)}, "finished_at": None}
-    ).to_list():
+    for run in await Run.find({"finished_at": None}).to_list():
         run.finished_at = utcnow()
         if run.progress.step not in ("", "report"):
             run.progress.step = "failed"
@@ -94,7 +93,7 @@ async def reap_orphaned_runs() -> int:
         await run.save()
         reaped += 1
     if reaped:
-        logger.info("reaped %d orphaned build run(s) from a previous process", reaped)
+        logger.info("reaped %d orphaned run(s) from a previous process", reaped)
     return reaped
 
 
@@ -223,10 +222,14 @@ class Conductor:
         """Dispatch to the stage handler, then persist everything it produced."""
         try:
             result = await get_handler(intent.stage).handle(intent, ctx)
-        except Exception:
+        except Exception as exc:
             # A failed handler must not strand the stage in `in_progress` forever — that reads as
             # "still working" and blocks the user from retrying with a clear head.
             await self._release(intent, marked_in_progress)
+            # The user's message is already persisted, so without a reply the conversation records
+            # a request that was apparently ignored — the reason lived only in a transient toast,
+            # and after a reload the work looked silently discarded. Record it instead.
+            await self._note_failure(intent, exc)
             raise
 
         created = [
@@ -342,3 +345,28 @@ class Conductor:
             return
         await self._stages.set_status(intent.project_id, intent.stage, StageStatus.awaiting_user)
         await self._emit_transition(intent, StageStatus.in_progress, StageStatus.awaiting_user)
+
+    async def _note_failure(self, intent: Intent, exc: BaseException) -> None:
+        """Persist an assistant reply saying the request failed, and why.
+
+        The conversation is the project's durable record: an HTTP error alone disappears with the
+        toast that showed it, leaving the user's message standing there unanswered. Only the
+        taxonomy's user-facing text is used — an unexpected exception is summarised, never dumped,
+        so internals (and anything they might carry) stay out of the transcript.
+        """
+        if isinstance(exc, ForgeFlowError):
+            content = f"That didn't go through: {exc.message}"
+            hint = getattr(exc, "fallback_hint", None)
+            if isinstance(hint, str) and hint:
+                content = f"{content}\n\n{hint}"
+        else:
+            content = (
+                "That didn't go through — something went wrong on our side. "
+                "Nothing was changed; try again."
+            )
+        try:
+            await self._messages.append(
+                intent.project_id, MessageRole.assistant, content, stage=intent.stage
+            )
+        except Exception:  # never let bookkeeping replace the original failure
+            logger.warning("could not record the failure reply", exc_info=True)

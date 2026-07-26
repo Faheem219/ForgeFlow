@@ -149,3 +149,41 @@ may still fail to resolve and need a preview restart. The pipeline order above a
 
 New config: `sandbox_install_network`, `sandbox_install_timeout_s` (1800 — a cold install is minutes,
 and the 600 s per-command default would kill it), both in the admin registry + `.env.example`.
+
+## Follow-up fix — "refused to connect" when the proxy isn't running
+
+`<project>.preview.localhost refused to connect`, reported from the preview iframe. Nothing was wrong
+with the generated app or the sandbox: **nothing was listening on port 80**. The preview hostnames are
+served by the Caddy proxy in `infra/docker-compose.yml` and by nothing else, and this machine runs the
+API (`uvicorn`) and the platform web app (`pnpm dev`) directly on the host — a normal way to work
+here, and one in which the proxy simply never starts. Three fixes, because there were three problems.
+
+**1. Compose could not start the proxy at all.** Two owners had been declared for one network: compose
+created `forgeflow-preview`, and so does the sandbox manager on demand (a preview can start before the
+stack does). Whoever got there first won, and when the manager did, compose refused outright:
+
+```
+network forgeflow-preview was found but has incorrect label com.docker.compose.network
+```
+
+That takes down the *whole* proxy service — so the very component the preview depends on could be
+blocked by the preview having been used earlier. The network is now `external: true` (the manager owns
+it) and `make dev` creates it first, idempotently, via a new `preview-net` target. Verified:
+`docker compose config` renders it external, and the proxy starts against a manager-created network.
+
+**2. There was no way to run just the proxy.** New `make proxy` target (`up -d --no-deps proxy`) for
+exactly this setup — API and web on the host, proxy in Docker. Verified end-to-end: with only the
+proxy running, `http://<id>.preview.localhost/` returns **200** from a dev server inside a sandbox
+(both by resolving the hostname and with an explicit `Host:` header).
+
+**3. The preview claimed to be healthy.** `PreviewService.start` reported `running` with URLs that
+could not connect, so the only symptom was the browser's own error inside the iframe — which points
+at the generated app, the last place the problem is. `SandboxManager.preview_proxy_attached()` now
+checks whether anything that is *not* a sandbox sits on the preview network (detection by exclusion,
+so it holds whatever the proxy container is named), and `PreviewInfo.warning` carries
+`PROXY_MISSING_WARNING` — naming `make proxy` — through the API, the realtime event, the
+`start_preview`/`restart_preview` tool results (so the build agent reports it too) and an amber banner
+above the iframe in the UI.
+
+Verified: 6 new backend tests (`tests/sandbox/test_preview_proxy_warning.py`) + 2 frontend tests
+(`Preview.test.tsx`, 11 passing); `tsc` clean and the touched files Prettier-clean.

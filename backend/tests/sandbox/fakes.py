@@ -44,6 +44,8 @@ class FakeContainer:
         self.start_calls = 0
         self.stop_calls = 0
         self.remove_calls = 0
+        #: Set to a docker error message to make `start()` fail the way the daemon would.
+        self.fail_start_with: str | None = None
         binds: Sequence[str] = (
             mounts
             if mounts is not None
@@ -64,6 +66,8 @@ class FakeContainer:
 
     def start(self) -> None:
         self.start_calls += 1
+        if self.fail_start_with is not None:
+            raise APIError(self.fail_start_with)
         self.status = "running"
 
     def stop(self, timeout: int = 10) -> None:
@@ -160,6 +164,11 @@ class FakeNetwork:
         self.name = name
         self.kwargs = kwargs
         self.connected: list[FakeContainer] = []
+        #: Mirrors docker's inspect payload; tests set ``{"Containers": …}`` to model who is on it.
+        self.attrs: dict[str, Any] = {}
+
+    def reload(self) -> None:
+        """Docker refreshes ``attrs`` from the daemon; the fake's state is already live."""
 
     def _find(self, container_id: str) -> FakeContainer | None:
         for container in self._client.containers._store.values():
@@ -178,8 +187,9 @@ class FakeNetwork:
             self.connected.remove(container)
 
     def remove(self) -> None:
-        # Docker refuses to remove a network that still has endpoints (even a stopped container's);
-        # the orphan-prune relies on exactly that refusal.
+        # Docker refuses only when a network has **live** endpoints — a *stopped* container's
+        # configured network is deleted without complaint (which is why the prune decides
+        # orphan-hood from the containers rather than trusting this refusal).
         if self.connected:
             raise APIError(f"network {self.name} has active endpoints")
         self._client.networks._store.pop(self.name, None)

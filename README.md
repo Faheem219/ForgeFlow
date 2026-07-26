@@ -38,6 +38,14 @@ make dev                        # boots api + web + mongo + proxy (needs Colima/
 # Web:  http://localhost:5173   (also proxied at http://localhost via Caddy)
 ```
 
+Running the API and web app **on the host** instead (`uvicorn` + `pnpm dev`)? The per-project
+preview URLs (`http://<project>.preview.localhost`) are served by the Caddy proxy, so start it or
+they will refuse to connect:
+
+```bash
+make proxy                      # just the reverse proxy on :80 (api/web stay on the host)
+```
+
 Run the checks locally (no Docker required):
 
 ```bash

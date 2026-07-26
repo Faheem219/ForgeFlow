@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -182,5 +182,26 @@ describe('Preview', () => {
     expect(screen.getByTestId('fe-status')).toHaveTextContent('FE failed');
     expect(screen.getByText('Preview crashed')).toBeInTheDocument();
     expect(screen.getByTestId('preview-start')).toBeInTheDocument(); // recoverable
+  });
+
+  it('shows an infrastructure warning above the frame', async () => {
+    // A "running" preview whose URLs cannot load: without this the iframe just renders the
+    // browser's own "refused to connect", which blames the generated app for a missing proxy.
+    getPreview.mockResolvedValue({
+      ...info('running'),
+      warning: 'The dev servers are running â€¦ Start it with `make proxy`.',
+    });
+    await renderPreview('running');
+
+    expect(screen.getByTestId('preview-warning')).toHaveTextContent('make proxy');
+    // The frame is still shown â€” the servers really are up, so a reload may be all that is needed.
+    expect(screen.getByTestId('preview-frame')).toBeInTheDocument();
+  });
+
+  it('shows no warning banner for a healthy preview', async () => {
+    getPreview.mockResolvedValue(info('running'));
+    await renderPreview('running');
+
+    expect(screen.queryByTestId('preview-warning')).not.toBeInTheDocument();
   });
 });

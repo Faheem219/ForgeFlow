@@ -18,6 +18,7 @@ from app.core.config import get_config
 from app.db.blobs import get_blob_store
 from app.sandbox.exec import ExecOutcome
 from app.sandbox.paths import require_rel_path, safe_rel_path
+from app.sandbox.schemas import PreviewInfo
 
 # --------------------------------------------------------------------- arg models
 
@@ -147,12 +148,24 @@ async def _run_tests(ctx: ToolContext, args: RunTestsArgs) -> str:
 
 async def _start_preview(ctx: ToolContext, _args: NoArgs) -> str:
     info = await ctx.preview.start(ctx.project)
-    return tool_ok(fe_status=info.fe_status, be_status=info.be_status, fe_url=info.fe_url)
+    return _preview_result(info)
 
 
 async def _restart_preview(ctx: ToolContext, _args: NoArgs) -> str:
     info = await ctx.preview.restart(ctx.project)
-    return tool_ok(fe_status=info.fe_status, be_status=info.be_status, fe_url=info.fe_url)
+    return _preview_result(info)
+
+
+def _preview_result(info: PreviewInfo) -> str:
+    """Include any environment warning, so the agent reports it instead of a healthy-looking URL."""
+    fields: dict[str, object] = {
+        "fe_status": info.fe_status,
+        "be_status": info.be_status,
+        "fe_url": info.fe_url,
+    }
+    if info.warning:
+        fields["warning"] = info.warning
+    return tool_ok(**fields)
 
 
 async def _git_commit(ctx: ToolContext, args: GitCommitArgs) -> str:

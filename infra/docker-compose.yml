@@ -1,4 +1,4 @@
-# ForgeFlow local dev stack: api + web + mongo + proxy.
+# ForgeFlow local dev stack: api + web + mongo + appdb + proxy.
 # Bring up with `make dev` (needs Colima/Docker running). Copy `.env.example` -> `.env` first.
 name: forgeflow
 
@@ -10,6 +10,35 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # The database the GENERATED apps use — deliberately separate from `mongo` (the control plane's
+  # metadata), and the only stateful service on the preview network. A sandbox is on an `internal`
+  # network with no route to the host, so a `localhost` connection string can never work from
+  # inside one: the generated backend boots and then every query dies with mongoose's
+  # "buffering timed out after 10000ms". Point APP_DB_CLUSTER_URI at this and it resolves by name.
+  #
+  # Per-project isolation stays what D8 specifies: one database per project inside the cluster.
+  appdb:
+    image: mongo:7
+    container_name: forgeflow-appdb
+    restart: unless-stopped
+    ports:
+      # 27018 on the host (27017 is the control-plane mongo) so a control plane running *outside*
+      # docker — `uvicorn` on the host — can still reach it for provisioning + the data browser.
+      # The sandboxes reach the same server by name on the preview network; see APP_DB_SANDBOX_URI.
+      - "27018:27017"
+    volumes:
+      - appdb-data:/data/db
+    networks:
+      # `default` so the control plane can reach it to provision/browse; `preview` so the sandboxes
+      # can. It never gets a published port — nothing outside docker needs it.
+      - default
+      - preview
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -28,9 +57,13 @@ services:
       # Container-network overrides win over .env (the resolver still reads them from env).
       FORGEFLOW_ENV: local
       MONGODB_URI: mongodb://mongo:27017
+      # Generated apps get their own cluster, reachable from the sandboxes by name.
+      APP_DB_CLUSTER_URI: mongodb://forgeflow-appdb:27017
       CORS_ORIGINS: "*"
     depends_on:
       mongo:
+        condition: service_healthy
+      appdb:
         condition: service_healthy
     volumes:
       - ../backend:/app # hot reload; venv lives at /opt/venv (UV_PROJECT_ENVIRONMENT), not /app/.venv
@@ -76,6 +109,7 @@ services:
 
 volumes:
   mongo-data:
+  appdb-data:
   caddy-data:
   caddy-config:
 
@@ -83,8 +117,15 @@ networks:
   default:
   preview:
     name: forgeflow-preview
-    # `internal` is the isolation guarantee: sandboxes joined here can be reached by the proxy
-    # and reach each other's dev servers, but have NO route to the host or the internet. The
-    # sandbox manager (phase-11) creates each container on its OWN internal network and only
-    # joins it here while preview runs.
-    internal: true
+    # **external on purpose — the sandbox manager owns this network, not compose.**
+    #
+    # `internal` is the isolation guarantee: sandboxes joined here can be reached by the proxy and
+    # reach each other's dev servers, but have NO route to the host or the internet. The sandbox
+    # manager (phase-11) creates each container on its OWN internal network and only joins it here
+    # while preview runs — and it creates *this* network on demand too (a preview can start before
+    # the stack does). Two owners meant a race: whichever created it first won, and if the manager
+    # got there first compose refused to start at all —
+    #   "network forgeflow-preview was found but has incorrect label com.docker.compose.network"
+    # — which took the whole proxy down and left every preview URL refusing connections. So compose
+    # only ever *attaches*; `make dev` creates it first (idempotently) if it does not exist yet.
+    external: true

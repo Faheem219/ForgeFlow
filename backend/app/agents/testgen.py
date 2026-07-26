@@ -267,8 +267,12 @@ class TestGenAgent:
             channel=channel,
         )
 
-        # Step 5 — assemble + persist.
-        report = self._build_report(tracker, inferred, impl.text.strip(), plan)
+        # Step 5 — assemble + persist. A loop that stopped at its bound has still written (and
+        # committed) real tests; report it as incomplete rather than presenting partial coverage as
+        # the finished job.
+        report = self._build_report(
+            tracker, inferred, impl.text.strip(), plan, unfinished=not impl.finished
+        )
         await self._persist(project_id, report, tracker)
         await emit(
             channel,
@@ -390,7 +394,13 @@ class TestGenAgent:
         return False
 
     def _build_report(
-        self, tracker: _TestTracker, inferred: bool, summary: str, plan: str
+        self,
+        tracker: _TestTracker,
+        inferred: bool,
+        summary: str,
+        plan: str,
+        *,
+        unfinished: bool = False,
     ) -> TestGenReport:
         suites = [
             {"kind": str(kind), "files": files, "generated_from": ids}
@@ -404,6 +414,12 @@ class TestGenAgent:
             if uncovered
             else None
         )
+        if unfinished:
+            stopped = (
+                "Test generation did not finish (it hit its tool-turn bound) — the tests written "
+                "so far are committed; run it again to continue."
+            )
+            warning = f"{stopped} {warning}" if warning else stopped
         return TestGenReport(
             status=STATUS_GENERATED,
             suites=suites,

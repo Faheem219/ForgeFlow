@@ -166,6 +166,11 @@ class Settings(BaseSettings):
     # D8). Blank → reuse `mongodb_uri` (fine for local dev). A per-project DB name is appended, so
     # this is a cluster base URI without a database path. Secret-ish (may carry Atlas creds).
     app_db_cluster_uri: str = ""
+    # The same cluster, addressed the way a **sandbox** must address it. A sandbox is on an
+    # `internal` docker network: a `localhost` URI resolves to the sandbox itself and there is no
+    # route to the host, so the generated app's queries just time out. Blank → inject
+    # `app_db_cluster_uri` unchanged (correct when the control plane runs in docker too).
+    app_db_sandbox_uri: str = ""
 
     # --- Artifacts & blobs (phase-07) ---
     blob_backend: str = "gridfs"  # gridfs | filesystem

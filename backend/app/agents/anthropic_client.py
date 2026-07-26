@@ -94,12 +94,29 @@ class Transport(Protocol):
 # --------------------------------------------------------------------- result
 
 
+#: Why a tool loop ended before the model said it was done.
+STOP_MAX_TURNS = "max_turns"  # the turn bound was reached
+STOP_NO_PROGRESS = "no_progress"  # the same tool call, repeated, going nowhere
+
+#: How many *identical* consecutive tool calls count as "stuck". Small on purpose: a model that
+#: re-reads one file three times in a row is not making progress, and each turn costs tokens.
+REPEAT_LIMIT = 3
+
+
 @dataclass
 class LoopResult:
     text: str
     messages: list[dict[str, Any]]
     usage: Usage
     turns: int
+    #: ``None`` when the model finished on its own, else :data:`STOP_MAX_TURNS` /
+    #: :data:`STOP_NO_PROGRESS`. Callers that report to the user must say so — the work done up to
+    #: that point is real and already persisted, it is just not complete.
+    stopped: str | None = None
+
+    @property
+    def finished(self) -> bool:
+        return self.stopped is None
 
 
 # --------------------------------------------------------------------- client
@@ -144,6 +161,9 @@ class AnthropicClient:
 
         convo = [dict(m) for m in messages]
         total = Usage()
+        last_text = ""
+        repeated: tuple[str, str] | None = None
+        repeats = 0
 
         for turn_index in range(max_turns):
             await enforce_budget(project_id, emitter=self._emit)  # never spend past the cap
@@ -164,6 +184,7 @@ class AnthropicClient:
             )  # halt if this call crossed the cap
 
             convo.append(_assistant_message(turn))
+            last_text = turn.text or last_text
 
             if not turn.tool_uses:
                 return LoopResult(text=turn.text, messages=convo, usage=total, turns=turn_index + 1)
@@ -171,13 +192,38 @@ class AnthropicClient:
             if tool_dispatch is None:
                 raise UserError("The model requested a tool but no tool dispatcher was provided")
 
+            # No-progress detection (D7's discipline, applied to the codegen loop too): a model that
+            # issues the *same* call over and over will keep doing it until the turn bound, spending
+            # real money for nothing. Stop and report instead.
+            signature = _call_signature(turn)
+            repeats = repeats + 1 if signature == repeated else 1
+            repeated = signature
+            if repeats >= REPEAT_LIMIT:
+                logger.warning(
+                    "tool loop stopped: %r repeated %d turns running", signature[0], repeats
+                )
+                return LoopResult(
+                    text=last_text,
+                    messages=convo,
+                    usage=total,
+                    turns=turn_index + 1,
+                    stopped=STOP_NO_PROGRESS,
+                )
+
             results: list[dict[str, Any]] = []
             for call in turn.tool_uses:
                 output = await tool_dispatch(call.name, call.input)
                 results.append({"type": "tool_result", "tool_use_id": call.id, "content": output})
             convo.append({"role": "user", "content": results})
 
-        raise UserError(f"Agent tool loop exceeded {max_turns} turns without finishing")
+        # The bound is a safety rail, not a failure of the *work*: everything the model did is
+        # already persisted (files written, commits made). Raising here used to discard a whole
+        # build report — the user saw a failed stage and no record of what got built. Report the
+        # stop instead and let the caller present it as "unfinished, run again to resume".
+        logger.warning("tool loop hit its %d-turn bound without finishing", max_turns)
+        return LoopResult(
+            text=last_text, messages=convo, usage=total, turns=max_turns, stopped=STOP_MAX_TURNS
+        )
 
     async def _stream_turn(self, request: MessageRequest, channel: str) -> TurnComplete:
         # Resolve the provider transport at call time (unless one was injected), so the current
@@ -195,6 +241,20 @@ class AnthropicClient:
         if turn is None:
             raise ProviderError("The model stream ended without a completion")
         return turn
+
+
+def _call_signature(turn: TurnComplete) -> tuple[str, str]:
+    """A comparable fingerprint of what this turn asked for: (tool names, serialized arguments).
+
+    Used only to notice a loop repeating itself verbatim, so it must be stable but need not be
+    pretty; unserializable arguments fall back to ``repr``.
+    """
+    names = ",".join(call.name for call in turn.tool_uses)
+    try:
+        args = json.dumps([call.input for call in turn.tool_uses], sort_keys=True, default=str)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        args = repr([call.input for call in turn.tool_uses])
+    return names, args
 
 
 def _assistant_message(turn: TurnComplete) -> dict[str, Any]:
@@ -529,6 +589,58 @@ def _provider_message(exc: BaseException, *, produced: bool) -> str:
     )
 
 
+#: Endpoints (by base URL) that answered "unknown field" to ``stream_options``. Mistral's API and
+#: Azure's serverless deployments validate the body strictly and reject anything outside their
+#: schema with a 422, so the usage trailer is dropped for them (:func:`_rejects_stream_options`).
+_NO_STREAM_USAGE: set[str] = set()
+
+
+def build_openai_params(request: MessageRequest, *, stream_usage: bool = True) -> dict[str, Any]:
+    """Translate the loop's Anthropic-shaped request into Chat Completions params.
+
+    Pure, so the wire format is testable without a network or an SDK. ``stream_usage`` asks for the
+    token-usage trailer; it is dropped for endpoints that reject unknown fields (cost accounting
+    then reads zero tokens for that provider, which beats every call failing).
+    """
+    params: dict[str, Any] = {
+        "model": request.model,
+        "max_tokens": request.max_tokens,
+        "messages": _to_openai_messages(request.system, request.messages),
+        "stream": True,
+    }
+    if stream_usage:
+        params["stream_options"] = {"include_usage": True}
+    if request.tools:
+        params["tools"] = _to_openai_tools(request.tools)
+    return params
+
+
+def _rejects_stream_options(exc: BaseException) -> bool:
+    """Whether this failure is the endpoint refusing ``stream_options`` as an unknown field.
+
+    Mistral answers ``422 extra_forbidden`` / "Extra inputs are not permitted" (its schema has no
+    such field), and Azure's serverless endpoints do the same. That is a *request* problem we can
+    fix ourselves rather than an outage, so it is handled separately from the transient retries.
+    """
+    text = str(exc).lower()
+    if "stream_options" not in text and "include_usage" not in text:
+        return False
+    markers = (
+        "extra_forbidden",
+        "extra inputs are not permitted",
+        "not permitted",
+        "unknown",
+        "unrecognized",
+        "unsupported",
+        "not supported",
+        "invalid",
+    )
+    if any(marker in text for marker in markers):
+        return True
+    status = getattr(exc, "status_code", None)
+    return status in (400, 422)
+
+
 class OpenAITransport:
     """Transport over any OpenAI-compatible Chat Completions endpoint (phase-53).
 
@@ -546,16 +658,8 @@ class OpenAITransport:
         base_url = str(config.get("openai_base_url")) or None
         client = openai.AsyncOpenAI(api_key=str(config.get("openai_api_key")), base_url=base_url)
 
-        params: dict[str, Any] = {
-            "model": request.model,
-            "max_tokens": request.max_tokens,
-            "messages": _to_openai_messages(request.system, request.messages),
-            "stream": True,
-            # Ask for usage on a trailing chunk; servers that ignore it just leave us at 0.
-            "stream_options": {"include_usage": True},
-        }
-        if request.tools:
-            params["tools"] = _to_openai_tools(request.tools)
+        endpoint = base_url or "default"
+        params = build_openai_params(request, stream_usage=endpoint not in _NO_STREAM_USAGE)
 
         # The retry spans **opening and consuming** the stream, not just opening it: a compatible
         # server can answer 200 and only then fail inside the SSE body, which is precisely the case
@@ -570,6 +674,17 @@ class OpenAITransport:
                     yield event
                 return
             except openai.OpenAIError as exc:
+                # A strict endpoint (Mistral, Azure serverless) refusing the usage trailer is a
+                # request we can repair, not an outage: drop it, remember this endpoint refuses it,
+                # and try again. Without this every call to such a provider fails with a 422.
+                if not produced and "stream_options" in params and _rejects_stream_options(exc):
+                    _NO_STREAM_USAGE.add(endpoint)
+                    params.pop("stream_options", None)
+                    logger.info(
+                        "%s rejects stream_options; retrying without token-usage reporting",
+                        endpoint,
+                    )
+                    continue
                 # Once tokens have been emitted the turn cannot be restarted — replaying it would
                 # duplicate streamed output in the UI — so only a pre-output failure is retryable.
                 if produced or attempt >= attempts or not _is_transient_openai_error(exc):

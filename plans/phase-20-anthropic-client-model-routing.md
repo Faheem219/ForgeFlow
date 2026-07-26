@@ -98,3 +98,35 @@ project/global rollups; a breached cap halts (before *and* after a call) with a 
 non-sandbox backend suite **236 passed** (no regressions). `anthropic` isn't installed in the test
 venv — by design the SDK path is lazy-imported and the loop is tested via the fake transport. Same
 Windows-env notes as prior phases (isolated FastAPI 0.139.0 venv; `tests/sandbox` untouched/skipped).
+
+## Follow-up fix — the turn bound discarded finished work
+
+A real build failed with:
+
+```
+app.core.errors.UserError: Agent tool loop exceeded 16 turns without finishing
+```
+
+Two problems, one symptom.
+
+**The bound was raising, not reporting.** Every file the model had written was already on disk and
+committed, but the exception propagated out of `CodegenAgent.run` → the Build stage failed and the
+user saw no report, no summary, and no hint that the work was resumable. `run_tool_loop` now returns
+a `LoopResult` carrying `stopped` (`max_turns` / `no_progress`, `None` when the model finished on its
+own) and the callers present it: an unfinished build reports its files with a leading follow-up
+("The build did not finish — it stopped after N tool turns (its safety bound). Run Build again to
+continue from here."), and testgen's report says the same about partially written suites. The loop is
+just as bounded as before (D7) — the difference is that a bound is now an *outcome*, not a crash.
+
+**No-progress detection, applied to this loop too.** With the bound raised to hundreds of turns, a
+model that repeats one identical call would burn every remaining turn (and its tokens) before
+stopping. `REPEAT_LIMIT` identical consecutive calls — same tool names, same arguments — now ends the
+loop with `STOP_NO_PROGRESS`. Varied work is unaffected: a different path per turn, or the same tool
+with different arguments, runs to the bound (asserted).
+
+**Config note:** the code default has been 250 for exactly this reason ("one turn per tool call, so a
+full-stack build needs hundreds"), and `.env.example` says 250 — but this machine's `.env` still held
+the old `16`, which is what produced the failure. That value governs; the DB/admin layer had only
+`llm_provider`, the two model ids, and the OpenAI-compatible key/base URL.
+
+Verified: 8 new tests (`tests/agents/test_tool_loop_bounds.py`, `tests/agents/test_codegen_unfinished.py`).

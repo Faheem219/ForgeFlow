@@ -26,7 +26,7 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
-from app.agents.anthropic_client import AnthropicClient
+from app.agents.anthropic_client import STOP_MAX_TURNS, AnthropicClient
 from app.agents.models import TaskKind
 from app.agents.prompts import system_prompt
 from app.agents.prompts.codegen import (
@@ -319,15 +319,31 @@ class CodegenAgent:
 
         # Step 4 — build report.
         await self._emit(channel, "report", run)
+        # The loop can stop at its safety bound (or on a model that repeats itself) with real work
+        # already committed. That is an *unfinished* build, not a failed one: say so, keep the
+        # files, and point at the resume path — the next run extends them rather than restarting.
+        follow_ups = self._follow_ups(tracker)
+        summary = impl.text.strip()
+        if not impl.finished:
+            reason = (
+                f"stopped after {impl.turns} tool turns (its safety bound)"
+                if impl.stopped == STOP_MAX_TURNS
+                else "stopped because it began repeating the same action"
+            )
+            follow_ups.insert(
+                0, f"The build did not finish — it {reason}. Run Build again to continue from here."
+            )
+            notes = [*notes, f"Build unfinished: {reason}."]
+            summary = summary or f"Build unfinished — it {reason}."
         report = BuildReport(
             boot_status=tracker.boot_status(),
             files_changed=sorted(tracker.files_written),
             features_built=features,
-            follow_ups=self._follow_ups(tracker),
+            follow_ups=follow_ups,
             notes=notes,
             commit=tracker.last_commit,
             tests_passed=tracker.tests_passed,
-            summary=impl.text.strip(),
+            summary=summary,
             plan=plan,
         )
         await self._persist_report(project_id, report)

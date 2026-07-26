@@ -138,6 +138,25 @@ class DbProvisioner:
             raise SystemError("No MongoDB cluster is configured for generated apps")
         return _compose_uri(base, project.app_db_name)
 
+    async def get_sandbox_mongodb_uri(self, project: Project) -> str:
+        """The app's ``MONGODB_URI`` **as a sandbox must address it** (secret — inject only).
+
+        Same database, different route: a sandbox sits on an ``internal`` docker network, so a
+        ``localhost`` cluster URI resolves to the sandbox itself and a host address has no route at
+        all — the generated backend boots and then every query times out. ``APP_DB_SANDBOX_URI``
+        names the same server the way containers can reach it. A BYO connection string wins as
+        always, and a blank setting means "the normal URI is already reachable" (true when the
+        control plane runs in docker too).
+        """
+        byo = await self._byo_uri(project)
+        if byo:
+            return _validate_uri(byo.strip())
+
+        sandbox_base = str(get_config().get("app_db_sandbox_uri")).strip()
+        if not sandbox_base:
+            return await self.get_app_mongodb_uri(project)
+        return _compose_uri(_validate_uri(sandbox_base), project.app_db_name)
+
     async def _platform_base(self) -> str:
         """Cluster base for platform DBs: vault override > APP_DB_CLUSTER_URI > MONGODB_URI."""
         override = await self._vault.platform_secret(CredentialKind.mongo_uri)

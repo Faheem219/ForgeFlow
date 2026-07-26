@@ -878,6 +878,16 @@ _KEYS: tuple[ConfigKey, ...] = (
         sensitive=True,
         extra=_mongo_uri_or_blank,
     ),
+    ConfigKey(
+        "app_db_sandbox_uri",
+        Cat.database,
+        "str",
+        "The same generated-app cluster, addressed the way a sandbox must (it sits on an internal "
+        "network with no route to the host, so a localhost URI can never work there). Blank uses "
+        "the cluster URI unchanged. Stored encrypted; never displayed again.",
+        sensitive=True,
+        extra=_mongo_uri_or_blank,
+    ),
     # ---------------------------------------------------------------- realtime
     ConfigKey(
         "realtime_ring_size",

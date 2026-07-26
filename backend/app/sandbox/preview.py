@@ -52,9 +52,46 @@ class _Proc:
     exit_code: int | None = None
 
 
+#: Shown when the dev servers are up but nothing serves the proxied hostnames. Without this the
+#: only symptom is the browser's own ERR_CONNECTION_REFUSED inside the preview iframe, which points
+#: at the generated app — the last place the actual problem is.
+PROXY_MISSING_WARNING = (
+    "The dev servers are running inside the sandbox, but the reverse proxy that serves the preview "
+    "URLs is not — the browser will refuse to connect. Start it with `make proxy` (or `make dev` "
+    "for the whole stack)."
+)
+
+#: Shown when the app database is addressed as loopback. Inside the sandbox `localhost` is the
+#: *sandbox*, and its network is `internal`, so there is no route to a database on the host either:
+#: the generated backend starts fine and then every query dies with mongoose's
+#: "buffering timed out after 10000ms", which reads as a bug in the generated code.
+DB_UNREACHABLE_WARNING = (
+    "The generated app's database is configured as {host}, which from inside the sandbox means the "
+    "sandbox itself — its queries will time out. Point APP_DB_CLUSTER_URI at a MongoDB the sandbox "
+    "can reach (e.g. `mongodb://forgeflow-appdb:27017` from `make dev`), or give the project its "
+    "own connection string."
+)
+
+#: Hosts that can never mean "the machine running ForgeFlow" from inside a container.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def loopback_db_host(uri: str) -> str | None:
+    """The host:port of ``uri`` when it is loopback (so unreachable from a sandbox), else None.
+
+    Only the host is returned — never the credentials a BYO connection string may carry.
+    """
+    host = urlsplit(uri).hostname or ""
+    if host.lower() not in _LOOPBACK_HOSTS:
+        return None
+    port = urlsplit(uri).port
+    return f"{host}:{port}" if port else host
+
+
 @dataclass
 class _ProjectPreview:
     procs: dict[PreviewProcess, _Proc] = field(default_factory=dict)
+    warning: str | None = None
 
 
 def preview_urls(project_id: str) -> tuple[str, str]:
@@ -181,15 +218,16 @@ class PreviewService:
 
         # The skeleton's env contract (phase-22): BE reads MONGODB_URI/PORT, FE reads
         # VITE_API_BASE_URL. The MONGODB_URI is the project's isolated database — BYO if the owner
-        # supplied one, else a per-project DB in the shared cluster (phase-36). It's a secret, so
-        # it's injected into the sandbox env and never logged. Imported lazily to keep the sandbox
-        # layer decoupled from the deploy layer.
+        # supplied one, else a per-project DB in the shared cluster (phase-36) — addressed the way a
+        # *sandbox* must address it, which is not how the control plane does (APP_DB_SANDBOX_URI).
+        # It's a secret, so it's injected into the sandbox env and never logged. Imported lazily to
+        # keep the sandbox layer decoupled from the deploy layer.
         from app.deploy.db_provision import DbProvisioner
 
         be_env = {
             "PORT": str(be_port),
             "NODE_ENV": "development",
-            "MONGODB_URI": await DbProvisioner().get_app_mongodb_uri(project),
+            "MONGODB_URI": await DbProvisioner().get_sandbox_mongodb_uri(project),
         }
         fe_env = {
             "NODE_ENV": "development",
@@ -202,6 +240,22 @@ class PreviewService:
         }
 
         state = _ProjectPreview()
+        # Nothing inside the sandbox can tell that its *environment* is wrong, so check here: a
+        # preview reported "running" that cannot possibly work is the least useful answer available.
+        warnings: list[str] = []
+        if isinstance(runtime, DockerRuntime):
+            if not await get_manager().preview_proxy_attached():
+                warnings.append(PROXY_MISSING_WARNING)
+                logger.warning("preview started for %s with no reverse proxy running", project_id)
+            db_host = loopback_db_host(be_env["MONGODB_URI"])
+            if db_host:
+                warnings.append(DB_UNREACHABLE_WARNING.format(host=db_host))
+                logger.warning(
+                    "preview started for %s with an unreachable app database (%s)",
+                    project_id,
+                    db_host,
+                )
+        state.warning = " ".join(warnings) or None
         self._state[project_id] = state
 
         # Backend first so the frontend has something to talk to on first paint.
@@ -300,6 +354,7 @@ class PreviewService:
             be_url=be_url if be_status != PreviewStatus.stopped else None,
             fe_status=fe_status,
             be_status=be_status,
+            warning=state.warning,
         )
 
 

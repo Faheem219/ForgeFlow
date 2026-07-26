@@ -135,6 +135,72 @@ async def test_orphaned_sandbox_networks_are_pruned_but_live_ones_are_kept() -> 
     assert await manager.ensure(dead)  # and the pruned project just gets a fresh one
 
 
+async def test_a_stopped_sandboxs_network_is_never_pruned() -> None:
+    """Docker guards only *live* endpoints, so it will delete a stopped sandbox's network.
+
+    Doing so leaves that container permanently unstartable —
+    "failed to set up container networking: network <id> not found" — which is how a working
+    project's preview began failing on every attempt. Orphan-hood is decided from the containers.
+    """
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    pid = str(project.id)
+
+    await manager.ensure(project)
+    client.containers.get(container_name(pid)).stop()  # idle-reaped, or the app restarted
+
+    pruned = await manager.prune_orphan_networks()
+
+    assert pruned == 0
+    assert sandbox_network_name(pid) in client.networks._store
+    # …so it can still be started later.
+    info = await manager.ensure(project)
+    assert info.status is not None
+
+
+async def test_a_container_whose_network_vanished_is_rebuilt() -> None:
+    """The repair for a sandbox already in that state (a manual `docker network rm`, or our own
+    earlier bug): recreate it rather than failing every request for the project forever."""
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    pid = str(project.id)
+
+    first = await manager.ensure(project)
+    container = client.containers.get(container_name(pid))
+    container.stop()
+    # The network disappears underneath it, and starting now fails the way docker fails.
+    client.networks.get(sandbox_network_name(pid)).remove()
+    container.fail_start_with = "failed to set up container networking: network abc123 not found"
+
+    second = await manager.ensure(project)
+
+    assert second.container_id != first.container_id  # replaced, not left broken
+    assert sandbox_network_name(pid) in client.networks._store  # …with its network back
+    # The volumes — the generated code — were never touched.
+    assert volume_name(pid) in client.volumes._store
+    assert home_volume_name(pid) in client.volumes._store
+
+
+async def test_an_unexplained_start_failure_is_not_papered_over() -> None:
+    """Only a missing-network failure earns a rebuild; anything else must surface."""
+    from app.core.errors import SystemError
+
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    pid = str(project.id)
+
+    await manager.ensure(project)
+    container = client.containers.get(container_name(pid))
+    container.stop()
+    container.fail_start_with = "driver failed programming external connectivity"
+
+    with pytest.raises(SystemError):
+        await manager.ensure(project)
+
+
 async def test_reconcile_reaps_sandboxes_whose_project_is_gone() -> None:
     """An unreachable container still holds a subnet — and docker's pools run out at ~30."""
     client = FakeDockerClient()

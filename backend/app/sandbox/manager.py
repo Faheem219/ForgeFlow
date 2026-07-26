@@ -79,6 +79,13 @@ def _is_pool_exhausted(exc: Exception) -> bool:
     return any(marker in text for marker in _POOL_EXHAUSTED_MARKERS)
 
 
+#: Docker's wording when a container's configured network has been removed underneath it:
+#: "failed to set up container networking: network <id> not found".
+def _is_missing_network(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "network" in text and "not found" in text
+
+
 def _map_status(docker_status: str) -> SandboxState:
     if docker_status == "running":
         return SandboxState.running
@@ -366,6 +373,25 @@ class SandboxManager:
             logger.debug("sandbox %s already on the preview network", project_id, exc_info=True)
         return True
 
+    async def preview_proxy_attached(self) -> bool:
+        """Whether something that is *not* a sandbox sits on the preview network — i.e. the proxy.
+
+        The preview URLs (``*.preview.localhost``) are served by that proxy and nothing else, so
+        without it the browser cannot connect no matter how healthy the dev servers are. Checking
+        by exclusion keeps this honest whatever the proxy container ends up being called.
+        """
+        client = self._client()
+        name = str(get_config().get("preview_network_name"))
+        try:
+            network = await asyncio.to_thread(client.networks.get, name)
+            await asyncio.to_thread(network.reload)
+        except (NotFound, DockerException, APIError):
+            return False
+        attached = (getattr(network, "attrs", None) or {}).get("Containers") or {}
+        return any(
+            not str(info.get("Name", "")).startswith("forgeflow-sb-") for info in attached.values()
+        )
+
     async def detach_preview_network(self, project_id: str) -> None:
         """Drop the sandbox back to no-network once preview stops."""
         container = await self._get_container(project_id)
@@ -504,7 +530,20 @@ class SandboxManager:
         else:
             await asyncio.to_thread(container.reload)
             if container.status != "running":
-                await asyncio.to_thread(container.start)
+                try:
+                    await asyncio.to_thread(container.start)
+                except (APIError, DockerException) as exc:
+                    # A container whose network no longer exists can never start again — every
+                    # preview/exec for the project would fail from here on. Its state lives on the
+                    # volumes, so replacing it is the repair, not a loss.
+                    if not _is_missing_network(exc):
+                        raise SystemError("Failed to start the sandbox container") from exc
+                    logger.info(
+                        "sandbox %s cannot start (its network is gone); recreating", project_id
+                    )
+                    await asyncio.to_thread(container.remove, force=True)
+                    container = await self._create_container(project_id)
+                    created = True
 
         container_id = container.id
         if project.sandbox_id != container_id:
@@ -593,25 +632,44 @@ class SandboxManager:
         """Remove per-project networks no container is attached to. Returns how many went.
 
         Docker's default address pools are finite (~30 networks), so orphans left by crashes or
-        force-removed containers would eventually make new sandboxes unschedulable. Docker itself
-        refuses to remove a network with endpoints — including a *stopped* container's — so
-        "try to remove, ignore refusals" prunes exactly the orphans. A live project whose network
-        is pruned simply gets it recreated by :meth:`_ensure_network`.
+        force-removed containers would eventually make new sandboxes unschedulable.
+
+        A network is an orphan only when **no container references it at all**, and that has to be
+        decided from the containers rather than from docker's refusal to remove: docker guards only
+        networks with *live* endpoints, so it will happily delete the network a **stopped** sandbox
+        is configured to use. Doing that leaves the container unstartable forever:
+
+            /containers/<id>/start: Not Found
+            ("failed to set up container networking: network <id> not found")
         """
         client = self._client()
         try:
             networks = await asyncio.to_thread(
                 client.networks.list, filters={"label": f"{LABEL_ROLE}=sandbox"}
             )
+            containers = await asyncio.to_thread(
+                client.containers.list, all=True, filters={"label": f"{LABEL_MANAGED}=true"}
+            )
         except (DockerException, APIError):
             logger.debug("could not list sandbox networks", exc_info=True)
             return 0
+
+        referenced: set[str] = set()
+        for container in containers:  # `all=True`: a stopped sandbox still needs its network
+            attrs = getattr(container, "attrs", None) or {}
+            mode = str((attrs.get("HostConfig") or {}).get("NetworkMode") or "")
+            if mode:
+                referenced.add(mode)
+            referenced |= set((attrs.get("NetworkSettings") or {}).get("Networks") or {})
+
         pruned = 0
         for network in networks:
+            if network.name in referenced:
+                continue
             try:
                 await asyncio.to_thread(network.remove)
             except (DockerException, APIError):
-                continue  # still in use — that is the common, correct case
+                continue  # in use after all (a race with a starting sandbox) — leave it
             pruned += 1
         if pruned:
             logger.info("pruned %d orphaned sandbox network(s)", pruned)

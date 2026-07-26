@@ -3,6 +3,7 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 PNPM := corepack pnpm
 SANDBOX_IMAGE ?= forgeflow-sandbox:latest
+PREVIEW_NETWORK ?= forgeflow-preview
 
 # Host-run scripts read config from the repo-root .env (docker-compose loads it into the container
 # itself; a bare `uv run` from backend/ would look for backend/.env and find nothing). We pass the
@@ -11,13 +12,21 @@ SANDBOX_IMAGE ?= forgeflow-sandbox:latest
 DOTENV := $(wildcard $(CURDIR)/.env)
 ENV_FILE_ARG := $(if $(DOTENV),--env-file $(DOTENV),)
 
-.PHONY: help dev down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
+.PHONY: help dev preview-net proxy down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-dev: ## Boot api + web + mongo + proxy (needs Colima/Docker running)
+dev: preview-net ## Boot api + web + mongo + proxy (needs Colima/Docker running)
 	$(COMPOSE) up --build
+
+preview-net: ## Create the preview network if absent (the sandbox manager owns it, not compose)
+	@docker network inspect $(PREVIEW_NETWORK) >/dev/null 2>&1 \
+		|| docker network create --driver bridge --internal \
+			--label forgeflow.managed=true --label forgeflow.role=preview $(PREVIEW_NETWORK)
+
+proxy: preview-net ## Run ONLY the reverse proxy — preview URLs need it even when api/web run on the host
+	$(COMPOSE) up -d --no-deps proxy
 
 down: ## Stop and remove the local stack
 	$(COMPOSE) down

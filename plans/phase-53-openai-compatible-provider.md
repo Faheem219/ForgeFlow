@@ -69,3 +69,34 @@ The change is small because the phase-20 agent client already isolated the netwo
 - **Backend:** `OpenAITransport` + translation/reassembly helpers + `default_transport()` in `app/agents/anthropic_client.py` (module renamed in spirit to the provider-agnostic *agent client*; `AgentClient = AnthropicClient` alias kept to avoid churn); config keys in `app/core/config.py`; placeholder pricing in `app/agents/pricing.py`; optional `openai` extra in `pyproject.toml`; `.env.example` "LLM provider" section.
 - **Tests:** `tests/agents/test_openai_transport.py` — **9 passed**; full agents suite unaffected; ruff/black/mypy clean.
 - **Docs:** this file; `plans/README.md` row 53; `DEVELOPER.md` provider note.
+
+## Follow-up — Mistral (and any strict-schema endpoint) would have failed on every call
+
+Asked whether Mistral AI can be used as the provider. It can, over this phase's `LLM_PROVIDER=openai`
+path — but one thing had to be fixed first.
+
+The transport always sent `stream_options: {"include_usage": true}` (the token-usage trailer, so cost
+accounting has real numbers). Mistral's chat-completions schema has no such field and validates
+strictly: it answers **`422 extra_forbidden` — "Extra inputs are not permitted"**. Every request would
+have failed, before any model even ran. Azure's serverless deployments behave the same way. (Mistral's
+own docs say `stream_options.include_usage` *must* be set to get usage while streaming, which
+contradicts the 422s users report — so relying on either reading would be a coin flip.)
+
+The transport now treats that specific refusal as a **repairable request, not an outage**: it drops
+the trailer, remembers that this endpoint refuses it (`_NO_STREAM_USAGE`, keyed by base URL, so the
+extra round trip happens once per process), and retries. Everything else in the body — `model`,
+`messages`, `max_tokens`, `stream`, `tools` — is a documented Mistral field, asserted by a test.
+Request building moved into a pure `build_openai_params(request, *, stream_usage)` so the wire format
+is testable without a network.
+
+Consequence to know: on such an endpoint no usage arrives, so token counts (and therefore ₹ cost)
+read **0** for it. The budget caps in phase-20 are cost-based, so they cannot bind there — the
+tool-loop turn bound is what limits spend on these providers.
+
+Classification is deliberately narrow: the error must name `stream_options`/`include_usage` **and**
+either carry a strictness marker or a 4xx status. A 500 that merely mentions the field stays with the
+transient retries, and a rate-limit or a tool-support rejection is never mistaken for it — otherwise
+usage accounting would be silently disabled for a perfectly healthy provider.
+
+Verified: 12 new tests (`tests/agents/test_openai_strict_endpoints.py`); `.env.example` documents the
+Mistral endpoint, a tool-calling model, and the zero-usage caveat.

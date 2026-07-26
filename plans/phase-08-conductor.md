@@ -69,3 +69,26 @@ The "conductor" of §8/domain glossary — the single place that owns transition
 ## Status
 
 ✅ done
+
+## Follow-up fix — a failed request left no trace, and dead runs stayed "running"
+
+Reported as *"closing my app deleted my design"*. It hadn't: the design artifact and its payload were
+intact the whole time. Two separate gaps made lost work the obvious reading, and both are now fixed.
+
+1. **A failed intent answered nothing.** The user's message is persisted *before* the handler runs
+   (correctly — the request happened), but on failure only an HTTP error came back. That error lived
+   in a toast; after a reload the conversation showed three refine requests in a row with no reply of
+   any kind, as though ForgeFlow had ignored them. `Conductor._note_failure` now appends an assistant
+   message with the taxonomy's user-facing text plus any `fallback_hint`, so the transcript is a
+   truthful record of what happened. An *unexpected* exception gets a summary, never its text — the
+   conversation must not become a place where internals (or anything they carry) surface.
+
+2. **`reap_orphaned_runs` only closed build runs.** Every other kind — `conductor:design` here —
+   stayed `finished_at=None` forever when its process died, so the cost panel listed work as
+   *running* days later. It now closes **every** run left open by a previous process (the
+   build-specific reasoning about the concurrency lock still holds, it was just never the only case).
+   Four such runs were reclaimed from the live DB.
+
+Verified: 6 new tests in `tests/orchestrator/test_failed_intent_record.py` (provider/user/unexpected
+failures each recorded, no secret leakage, a successful intent stays clean, and non-build runs are
+reaped) and the phantom runs cleared on the real database.

@@ -141,6 +141,15 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
         </div>
       </header>
 
+      {info?.warning ? (
+        <p
+          data-testid="preview-warning"
+          className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          {info.warning}
+        </p>
+      ) : null}
+
       <div className="min-h-0 flex-1">
         {running && info?.fe_url ? (
           <iframe

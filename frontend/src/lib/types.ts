@@ -73,6 +73,12 @@ export interface PreviewInfo {
   be_url: string | null;
   fe_status: PreviewStatus;
   be_status: PreviewStatus;
+  /**
+   * Set when the dev servers are healthy but the URLs still cannot load — today: the reverse proxy
+   * serving `*.preview.localhost` is not running, so the iframe shows the browser's own
+   * "refused to connect" and blames the generated app for an infrastructure problem.
+   */
+  warning?: string | null;
 }
 
 export interface IntentRequest {

@@ -100,3 +100,7 @@ class PreviewInfo(BaseModel):
     be_url: str | None = None
     fe_status: PreviewStatus = PreviewStatus.stopped
     be_status: PreviewStatus = PreviewStatus.stopped
+    #: Set when the dev servers are healthy but something outside the sandbox stops the URLs from
+    #: working — today: the reverse proxy that serves ``*.preview.localhost`` is not running, so the
+    #: browser gets ERR_CONNECTION_REFUSED while everything inside the sandbox is fine.
+    warning: str | None = None
