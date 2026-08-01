@@ -21,7 +21,7 @@ export function EditorTabs({
     <div
       role="tablist"
       data-testid="editor-tabs"
-      className="flex shrink-0 items-stretch overflow-x-auto border-b border-slate-800"
+      className="flex shrink-0 items-stretch overflow-x-auto border-b border-subtle"
     >
       {order.map((path) => {
         const file = files[path];
@@ -33,8 +33,8 @@ export function EditorTabs({
         return (
           <div
             key={path}
-            className={`flex items-center gap-1.5 border-r border-slate-800 pl-3 pr-1.5 text-sm ${
-              isActive ? 'bg-slate-800/70 text-slate-100' : 'text-slate-400 hover:bg-slate-800/40'
+            className={`flex items-center gap-1.5 border-r border-subtle pl-3 pr-1.5 text-sm ${
+              isActive ? 'bg-elevated/70 text-primary' : 'text-muted hover:bg-elevated/40'
             }`}
           >
             <button
@@ -49,14 +49,14 @@ export function EditorTabs({
               {name}
               {file.generating ? (
                 <span
-                  className="ml-1.5 text-xs text-amber-400"
+                  className="ml-1.5 text-xs text-warning"
                   data-testid={`tab-generating-${path}`}
                 >
                   generating…
                 </span>
               ) : dirty ? (
                 <span
-                  className="ml-1.5 text-brand-300"
+                  className="ml-1.5 text-brand-text"
                   aria-label="Unsaved changes"
                   data-testid={`tab-dirty-${path}`}
                 >
@@ -69,7 +69,7 @@ export function EditorTabs({
               aria-label={`Close ${name}`}
               data-testid={`tab-close-${path}`}
               onClick={() => onClose(path)}
-              className="rounded px-1 text-xs text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+              className="rounded px-1 text-xs text-faint hover:bg-elevated hover:text-primary"
             >
               ✕
             </button>

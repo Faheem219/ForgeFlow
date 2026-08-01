@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Button, EmptyState, Modal, Spinner } from '../../components/ui';
+import { Button, EmptyState, Modal, ResizablePanel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { PanelKey } from '../../lib/stores/uiStore';
 import { toast } from '../../lib/stores/toastStore';
 import { CodeEditor } from './CodeEditor';
 import { EditorTabs } from './EditorTabs';
@@ -116,24 +117,32 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
   );
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-      <aside className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-2">
-        <div className="flex items-center justify-between px-3 pb-2">
-          <span className="text-xs uppercase tracking-wide text-slate-500">Files</span>
-          {treeQuery.isFetching ? <Spinner /> : null}
+    <div className="panel flex h-full min-h-0 overflow-hidden">
+      <ResizablePanel
+        panelKey={PanelKey.ideTree}
+        label="Resize file tree"
+        min={160}
+        max={480}
+        className="overflow-hidden border-r border-subtle"
+      >
+        <div className="flex shrink-0 items-center justify-between px-3 py-2">
+          <span className="eyebrow">Files</span>
+          {treeQuery.isFetching ? <Spinner size="sm" className="text-faint" /> : null}
         </div>
-        {treeQuery.isError ? (
-          <p className="px-3 text-sm text-slate-500">
-            Workspace unavailable — the sandbox may still be starting.
-          </p>
-        ) : (
-          <FileTree
-            nodes={treeQuery.data ?? []}
-            activePath={active}
-            onOpen={(path) => void open(path)}
-          />
-        )}
-      </aside>
+        <div className="min-h-0 flex-1 overflow-auto pb-2">
+          {treeQuery.isError ? (
+            <p className="px-3 text-xs text-muted">
+              Workspace unavailable — the sandbox may still be starting.
+            </p>
+          ) : (
+            <FileTree
+              nodes={treeQuery.data ?? []}
+              activePath={active}
+              onOpen={(path) => void open(path)}
+            />
+          )}
+        </div>
+      </ResizablePanel>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <EditorTabs
@@ -146,11 +155,15 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
 
         {activeFile && active ? (
           <>
-            <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1">
-              <span className="truncate text-xs text-slate-500">{active}</span>
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-3 py-1.5">
+              <span className="truncate font-mono text-2xs text-faint">{active}</span>
               <div className="flex items-center gap-2">
                 {activeFile.generating ? (
-                  <span className="text-xs text-amber-400" data-testid="generating-banner">
+                  <span
+                    className="flex items-center gap-1.5 text-2xs text-warning"
+                    data-testid="generating-banner"
+                  >
+                    <span className="motion-essential h-1.5 w-1.5 animate-pulse-dot rounded-full bg-warning" />
                     generating… (read-only)
                   </span>
                 ) : null}
@@ -190,9 +203,9 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
         title="File changed on the server"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
-            <span className="font-medium text-slate-100">{conflict}</span> was written in the
-            sandbox while you had unsaved changes. Nothing has been overwritten.
+          <p className="text-sm text-secondary">
+            <span className="font-mono text-xs font-medium text-primary">{conflict}</span> was
+            written in the sandbox while you had unsaved changes. Nothing has been overwritten.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => void resolveConflict('mine')}>

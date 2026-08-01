@@ -24,21 +24,21 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
   return (
     <div data-testid={`budget-${label.toLowerCase()}`}>
       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-        <span className="text-slate-400">{label}</span>
-        <span className="tabular-nums text-slate-300">
+        <span className="text-muted">{label}</span>
+        <span className="tabular-nums text-secondary">
           {inr(budget.spent_inr)}
           {uncapped ? (
-            <span className="ml-1 text-slate-500">· no cap</span>
+            <span className="ml-1 text-faint">· no cap</span>
           ) : (
-            <span className="ml-1 text-slate-500">of {inr(budget.cap_inr as number)}</span>
+            <span className="ml-1 text-faint">of {inr(budget.cap_inr as number)}</span>
           )}
         </span>
       </div>
       {uncapped ? null : (
-        <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-1.5 overflow-hidden rounded-full bg-elevated">
           <div
             className={`h-full rounded-full ${
-              budget.halted ? 'bg-red-500' : budget.warning ? 'bg-amber-500' : 'bg-brand-500'
+              budget.halted ? 'bg-danger' : budget.warning ? 'bg-warning' : 'bg-brand'
             }`}
             style={{ width: `${ratio * 100}%` }}
           />
@@ -47,7 +47,7 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
       {budget.halted || budget.warning ? (
         <p className="mt-1 flex items-center gap-1.5 text-[11px]">
           <Badge tone={tone}>{budget.halted ? 'Halted' : 'Approaching cap'}</Badge>
-          <span className="text-slate-400">
+          <span className="text-muted">
             {budget.halted
               ? 'Runs are blocked until the cap is raised.'
               : `${inr(budget.headroom_inr ?? 0)} left before work halts.`}
@@ -112,34 +112,34 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="space-y-3" data-testid="cost-panel">
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">Spend</p>
-          <p className="text-lg font-semibold text-slate-100" data-testid="cost-total">
+        <div className="rounded-lg border border-subtle bg-surface/60 px-2 py-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-faint">Spend</p>
+          <p className="text-lg font-semibold text-primary" data-testid="cost-total">
             {inr(cost.inr)}
           </p>
         </div>
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">Tokens</p>
-          <p className="text-lg font-semibold text-slate-100" data-testid="cost-tokens">
+        <div className="rounded-lg border border-subtle bg-surface/60 px-2 py-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-faint">Tokens</p>
+          <p className="text-lg font-semibold text-primary" data-testid="cost-tokens">
             {cost.tokens.toLocaleString()}
           </p>
         </div>
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">Runs</p>
-          <p className="text-lg font-semibold text-slate-100" data-testid="cost-runs">
+        <div className="rounded-lg border border-subtle bg-surface/60 px-2 py-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-faint">Runs</p>
+          <p className="text-lg font-semibold text-primary" data-testid="cost-runs">
             {cost.runs}
           </p>
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
+      <div className="space-y-2 rounded-lg border border-subtle bg-surface/40 p-2">
         <BudgetBar label="Project" budget={cost.project} />
         <BudgetBar label="Global" budget={cost.global_budget} />
       </div>
 
       {kinds.length > 0 ? (
         <section>
-          <h4 className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">By work</h4>
+          <h4 className="mb-1 text-[11px] uppercase tracking-wide text-faint">By work</h4>
           <ul className="space-y-1" data-testid="cost-by-kind">
             {kinds.map(([kind, stats]) => (
               <li
@@ -147,8 +147,8 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
                 className="flex items-center justify-between gap-2 text-xs"
                 data-testid={`kind-${kind}`}
               >
-                <span className="truncate font-mono text-slate-300">{kind}</span>
-                <span className="whitespace-nowrap tabular-nums text-slate-400">
+                <span className="truncate font-mono text-secondary">{kind}</span>
+                <span className="whitespace-nowrap tabular-nums text-muted">
                   {inr(stats.inr)} · {stats.tokens.toLocaleString()} tok · {stats.runs}×
                 </span>
               </li>
@@ -158,24 +158,22 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
       ) : null}
 
       <section>
-        <h4 className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">Runs</h4>
+        <h4 className="mb-1 text-[11px] uppercase tracking-wide text-faint">Runs</h4>
         {runs.length === 0 ? (
-          <p className="text-xs text-slate-500">No runs yet.</p>
+          <p className="text-xs text-faint">No runs yet.</p>
         ) : (
           <ul className="space-y-1" data-testid="run-explorer">
             {runs.map((run) => (
               <li
                 key={run.id}
-                className="flex items-center justify-between gap-2 rounded border border-slate-800/60 px-2 py-1 text-xs"
+                className="flex items-center justify-between gap-2 rounded border border-subtle/60 px-2 py-1 text-xs"
                 data-testid={`run-${run.id}`}
               >
                 <span className="min-w-0 flex-1 truncate">
-                  <span className="font-mono text-slate-300">{run.kind}</span>
-                  {run.outcome ? (
-                    <span className="ml-1.5 text-slate-500">{run.outcome}</span>
-                  ) : null}
+                  <span className="font-mono text-secondary">{run.kind}</span>
+                  {run.outcome ? <span className="ml-1.5 text-faint">{run.outcome}</span> : null}
                 </span>
-                <span className="whitespace-nowrap tabular-nums text-slate-500">
+                <span className="whitespace-nowrap tabular-nums text-faint">
                   {inr(run.inr)} · {duration(run)}
                 </span>
               </li>

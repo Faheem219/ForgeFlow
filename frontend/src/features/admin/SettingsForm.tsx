@@ -44,8 +44,8 @@ function displayValue(setting: SettingView): string {
 }
 
 const FIELD =
-  'rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-100 ' +
-  'outline-none focus:border-brand-500 disabled:opacity-50';
+  'rounded-lg border border-line bg-inset px-2.5 py-1.5 text-sm text-primary ' +
+  'outline-none focus:border-brand disabled:opacity-50';
 
 function Editor({
   setting,
@@ -60,7 +60,7 @@ function Editor({
 }): JSX.Element {
   if (setting.type === 'bool') {
     return (
-      <label className="flex items-center gap-2 text-sm text-slate-300">
+      <label className="flex items-center gap-2 text-sm text-secondary">
         <input
           type="checkbox"
           data-testid={`toggle-${setting.key}`}
@@ -176,12 +176,12 @@ function SettingRow({
   return (
     <div
       className={`rounded-xl border p-3 transition ${
-        dirty ? 'border-brand-600/60 bg-brand-600/5' : 'border-slate-800 bg-slate-900/30'
+        dirty ? 'border-brand/60 bg-brand/5' : 'border-subtle bg-surface/30'
       }`}
       data-testid={`setting-${setting.key}`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-slate-100">{setting.label ?? setting.key}</span>
+        <span className="text-sm font-medium text-primary">{setting.label ?? setting.key}</span>
         <SourceBadge source={setting.source} />
         {setting.locked ? <Badge tone="danger">read-only</Badge> : null}
         {setting.restart_required ? (
@@ -190,23 +190,23 @@ function SettingRow({
           </span>
         ) : null}
         {dirty ? <Badge tone="brand">unsaved</Badge> : null}
-        {showCategory ? <span className="text-xs text-slate-600">in {showCategory}</span> : null}
+        {showCategory ? <span className="text-xs text-faint">in {showCategory}</span> : null}
       </div>
 
-      <code className="mt-1 block font-mono text-[11px] text-slate-500">
+      <code className="mt-1 block font-mono text-[11px] text-faint">
         {setting.env_var ?? setting.key.toUpperCase()}
       </code>
-      <p className="mt-1 text-xs text-slate-400">{setting.description}</p>
+      <p className="mt-1 text-xs text-muted">{setting.description}</p>
 
       {setting.locked ? (
         <div className="mt-2 space-y-1">
           <span
             data-testid={`locked-value-${setting.key}`}
-            className="inline-block rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-xs text-slate-400"
+            className="inline-block rounded-lg border border-subtle bg-inset px-2.5 py-1.5 font-mono text-xs text-muted"
           >
             {displayValue(setting)}
           </span>
-          <p className="text-xs text-amber-300/80">{setting.locked_reason}</p>
+          <p className="text-xs text-warning/80">{setting.locked_reason}</p>
         </div>
       ) : setting.sensitive ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -261,7 +261,7 @@ function SettingRow({
               Reset
             </Button>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-600">
+          <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-faint">
             <span>
               code default: <span className="font-mono">{String(setting.default ?? '') || '—'}</span>
             </span>
@@ -272,7 +272,7 @@ function SettingRow({
       )}
 
       {error ? (
-        <p className="mt-2 text-xs text-red-400" data-testid={`error-${setting.key}`}>
+        <p className="mt-2 text-xs text-danger" data-testid={`error-${setting.key}`}>
           {error}
         </p>
       ) : null}
@@ -340,7 +340,7 @@ export function SettingsForm({
   });
 
   if (settings.length === 0) {
-    return <p className="text-sm text-slate-500">No settings match.</p>;
+    return <p className="text-sm text-faint">No settings match.</p>;
   }
 
   return (
@@ -359,17 +359,17 @@ export function SettingsForm({
       ))}
 
       {errors.__form ? (
-        <p className="text-xs text-red-400" data-testid="bulk-error">
+        <p className="text-xs text-danger" data-testid="bulk-error">
           {errors.__form}
         </p>
       ) : null}
 
       {dirty.length > 0 ? (
         <div
-          className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-600/50 bg-slate-900/95 px-3 py-2 backdrop-blur"
+          className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/50 bg-surface/95 px-3 py-2 backdrop-blur"
           data-testid="bulk-bar"
         >
-          <span className="text-sm text-slate-300">
+          <span className="text-sm text-secondary">
             {dirty.length} unsaved {dirty.length === 1 ? 'change' : 'changes'}
           </span>
           <div className="flex items-center gap-2">

@@ -28,7 +28,7 @@ export interface LiveIteration {
  */
 export function Sparkline({ values }: { values: number[] }): JSX.Element {
   if (values.length === 0) {
-    return <span className="text-xs text-slate-500">no iterations yet</span>;
+    return <span className="text-xs text-faint">no iterations yet</span>;
   }
   const width = Math.max(values.length * 18, 36);
   const height = 28;
@@ -46,7 +46,7 @@ export function Sparkline({ values }: { values: number[] }): JSX.Element {
           points={points}
           fill="none"
           strokeWidth="2"
-          className={converging ? 'stroke-emerald-400' : 'stroke-amber-400'}
+          className={converging ? 'stroke-success' : 'stroke-warning'}
         />
         {values.map((v, i) => (
           <circle
@@ -54,11 +54,11 @@ export function Sparkline({ values }: { values: number[] }): JSX.Element {
             cx={(i * step).toFixed(1)}
             cy={(height - (v / max) * (height - 4) - 2).toFixed(1)}
             r="2.5"
-            className={converging ? 'fill-emerald-400' : 'fill-amber-400'}
+            className={converging ? 'fill-success' : 'fill-warning'}
           />
         ))}
       </svg>
-      <span className="font-mono text-xs text-slate-400" data-testid="failing-trail">
+      <span className="font-mono text-xs text-muted" data-testid="failing-trail">
         {values.join(' → ')}
       </span>
     </span>
@@ -72,16 +72,16 @@ function DiffBlock({ diff }: { diff: string }): JSX.Element {
   return (
     <pre
       data-testid="attempt-diff"
-      className="max-h-56 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2 font-mono text-[11px] leading-relaxed"
+      className="max-h-56 overflow-auto rounded-lg border border-subtle bg-inset p-2 font-mono text-[11px] leading-relaxed"
     >
       {lines.map((line, i) => {
         const tone = line.startsWith('+')
-          ? 'text-emerald-300'
+          ? 'text-success'
           : line.startsWith('-')
-            ? 'text-red-300'
+            ? 'text-danger'
             : line.startsWith('@@')
-              ? 'text-brand-300'
-              : 'text-slate-400';
+              ? 'text-brand-text'
+              : 'text-muted';
         return (
           <div key={i} className={tone}>
             {line || ' '}
@@ -107,14 +107,14 @@ function AttemptRow({
   });
 
   return (
-    <li className="rounded-lg border border-slate-800 p-2" data-testid="repair-attempt">
+    <li className="rounded-lg border border-subtle p-2" data-testid="repair-attempt">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm text-slate-200">
-          <span className="font-mono text-xs text-slate-500">#{attempt.iteration}</span>
+        <span className="flex items-center gap-2 text-sm text-primary">
+          <span className="font-mono text-xs text-faint">#{attempt.iteration}</span>
           {attempt.outcome ? (
             <Badge tone={OUTCOME_TONES[attempt.outcome]}>{attempt.outcome}</Badge>
           ) : null}
-          <span className="font-mono text-[11px] text-slate-500">
+          <span className="font-mono text-[11px] text-faint">
             {attempt.target_files.join(', ') || 'no files'}
           </span>
         </span>
@@ -169,9 +169,10 @@ export function RepairView({
     return out;
   }, [events, projectId]);
 
-  const trail = running && live.length > 0
-    ? live.map((it) => it.failing_count)
-    : (report?.metrics.failing_by_iteration ?? live.map((it) => it.failing_count));
+  const trail =
+    running && live.length > 0
+      ? live.map((it) => it.failing_count)
+      : (report?.metrics.failing_by_iteration ?? live.map((it) => it.failing_count));
 
   const metrics = report?.metrics;
   const tokens = metrics?.tokens_spent ?? live.at(-1)?.tokens ?? 0;
@@ -180,7 +181,7 @@ export function RepairView({
   return (
     <div className="space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-primary">
           Self-healing repair
           {report ? (
             <span data-testid="repair-outcome">
@@ -190,7 +191,10 @@ export function RepairView({
             </span>
           ) : null}
           {running ? (
-            <span className="flex items-center gap-1 text-xs text-slate-400" data-testid="repair-running">
+            <span
+              className="flex items-center gap-1 text-xs text-muted"
+              data-testid="repair-running"
+            >
               <Spinner /> repairing…
             </span>
           ) : null}
@@ -220,30 +224,30 @@ export function RepairView({
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-800 p-3">
+          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-subtle p-3">
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Failing per iteration</p>
+              <p className="text-xs uppercase tracking-wide text-faint">Failing per iteration</p>
               <Sparkline values={trail} />
             </div>
-            <dl className="flex gap-4 text-xs text-slate-400">
+            <dl className="flex gap-4 text-xs text-muted">
               <div>
-                <dt className="text-slate-500">Iterations</dt>
+                <dt className="text-faint">Iterations</dt>
                 <dd data-testid="repair-iterations">{metrics?.iterations ?? live.length}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Regressions</dt>
+                <dt className="text-faint">Regressions</dt>
                 <dd data-testid="repair-regressions">{regressions}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Tokens</dt>
+                <dt className="text-faint">Tokens</dt>
                 <dd data-testid="repair-tokens">{tokens}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Cost</dt>
+                <dt className="text-faint">Cost</dt>
                 <dd data-testid="repair-cost">₹{(metrics?.cost_inr ?? 0).toFixed(2)}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Elapsed</dt>
+                <dt className="text-faint">Elapsed</dt>
                 <dd>{(metrics?.wall_clock_s ?? 0).toFixed(1)}s</dd>
               </div>
             </dl>

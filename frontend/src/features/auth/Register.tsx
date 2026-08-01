@@ -35,7 +35,7 @@ export default function Register(): JSX.Element {
       footer={
         <>
           Already have an account?{' '}
-          <Link className="text-brand-400 hover:underline" to="/login">
+          <Link className="text-brand-text hover:underline" to="/login">
             Sign in
           </Link>
         </>
@@ -60,14 +60,14 @@ export default function Register(): JSX.Element {
           onChange={(e) => setPassword(e.target.value)}
         />
         {error ? (
-          <p className="text-sm text-red-400" role="alert">
+          <p className="text-sm text-danger" role="alert">
             {error}
           </p>
         ) : null}
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-lg bg-brand-600 px-3 py-2 font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+          className="w-full rounded-lg bg-brand px-3 py-2 font-medium text-white hover:bg-brand disabled:opacity-50"
         >
           {submitting ? 'Creating…' : 'Create account'}
         </button>

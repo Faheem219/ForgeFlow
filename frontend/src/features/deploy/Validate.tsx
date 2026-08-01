@@ -64,8 +64,8 @@ function CycleRow({ cycle }: { cycle: ValidationCycleDto }): JSX.Element {
   }
 
   return (
-    <li className="rounded-lg border border-slate-800 p-2" data-testid={`cycle-${cycle.index}`}>
-      <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">Cycle {cycle.index}</div>
+    <li className="rounded-lg border border-subtle p-2" data-testid={`cycle-${cycle.index}`}>
+      <div className="mb-1 text-xs uppercase tracking-wide text-faint">Cycle {cycle.index}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         {steps.map((s) => (
           <Badge key={s.label} tone={s.tone}>
@@ -73,7 +73,7 @@ function CycleRow({ cycle }: { cycle: ValidationCycleDto }): JSX.Element {
           </Badge>
         ))}
       </div>
-      {cycle.note ? <p className="mt-1 text-xs text-slate-500">{cycle.note}</p> : null}
+      {cycle.note ? <p className="mt-1 text-xs text-faint">{cycle.note}</p> : null}
     </li>
   );
 }
@@ -81,17 +81,17 @@ function CycleRow({ cycle }: { cycle: ValidationCycleDto }): JSX.Element {
 function ResultRow({ result }: { result: TestResultDto }): JSX.Element {
   const failed = result.status === 'failed';
   return (
-    <li className="flex items-start gap-2 border-b border-slate-800/60 py-1.5 last:border-0">
+    <li className="flex items-start gap-2 border-b border-subtle/60 py-1.5 last:border-0">
       <Badge tone={failed ? 'danger' : result.status === 'passed' ? 'success' : 'neutral'}>
         {result.status}
       </Badge>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-slate-200">{result.name}</p>
+        <p className="truncate text-sm text-primary">{result.name}</p>
         {result.criterion_id ? (
-          <span className="font-mono text-[11px] text-slate-500">{result.criterion_id}</span>
+          <span className="font-mono text-[11px] text-faint">{result.criterion_id}</span>
         ) : null}
         {failed && result.failure?.message ? (
-          <p className="mt-0.5 text-xs text-red-300">{result.failure.message}</p>
+          <p className="mt-0.5 text-xs text-danger">{result.failure.message}</p>
         ) : null}
       </div>
     </li>
@@ -178,7 +178,7 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-primary">
           Live validation
           <span data-testid="validate-stage-status">
             <Badge tone={STATUS_TONES[stageStatus]}>{STATUS_LABELS[stageStatus]}</Badge>
@@ -208,7 +208,7 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
 
       {disabledReason ? (
         <p
-          className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-300"
+          className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-xs text-warning"
           data-testid="validate-prereq-warning"
         >
           {disabledReason} Deploy the app, then come back to verify it actually works.
@@ -217,7 +217,7 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
 
       {busy && liveStep ? (
         <p
-          className="rounded-lg border border-brand-800/60 bg-brand-950/30 px-3 py-2 text-xs text-brand-200"
+          className="rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-text"
           data-testid="validate-progress"
         >
           {STEP_LABELS[liveStep] ?? liveStep}…
@@ -227,19 +227,19 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
       {/* The payoff: a verified deployment, and the link. */}
       {validated && report?.url ? (
         <section
-          className="rounded-xl border border-emerald-700/50 bg-emerald-950/20 p-4"
+          className="rounded-xl border border-success-border bg-success-bg p-4"
           data-testid="validate-success"
         >
           <div className="mb-1 flex items-center gap-2">
             <Badge tone="success">Verified</Badge>
-            <span className="text-sm text-emerald-200">Your app is live and its tests pass.</span>
+            <span className="text-sm text-success">Your app is live and its tests pass.</span>
           </div>
           <a
             href={report.url}
             target="_blank"
             rel="noreferrer"
             data-testid="final-live-link"
-            className="block truncate text-lg font-medium text-emerald-300 hover:underline"
+            className="block truncate text-lg font-medium text-success hover:underline"
           >
             {report.url}
           </a>
@@ -249,7 +249,7 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
         <div className="min-h-0 space-y-3 overflow-auto">
           <section>
-            <h4 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+            <h4 className="mb-1 text-xs uppercase tracking-wide text-faint">
               Live results {liveRun ? `(${liveRun.passed}/${liveRun.total} passing)` : ''}
             </h4>
             {!liveRun || liveRun.results.length === 0 ? (
@@ -270,7 +270,7 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
         <div className="min-h-0 space-y-3 overflow-auto">
           {report && report.cycles.length > 0 ? (
             <section>
-              <h4 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Timeline</h4>
+              <h4 className="mb-1 text-xs uppercase tracking-wide text-faint">Timeline</h4>
               <ul className="space-y-2" data-testid="validate-timeline">
                 {report.cycles.map((c) => (
                   <CycleRow key={c.index} cycle={c} />
@@ -281,16 +281,16 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
 
           {report && !validated ? (
             <section
-              className="space-y-2 rounded-xl border border-amber-700/50 bg-amber-950/20 p-3"
+              className="space-y-2 rounded-xl border border-warning-border bg-warning-bg p-3"
               data-testid="validate-escalation"
             >
               <header className="flex items-center gap-2">
                 <Badge tone="warning">Needs you</Badge>
-                <span className="text-sm font-medium text-amber-200" data-testid="validate-reason">
+                <span className="text-sm font-medium text-warning" data-testid="validate-reason">
                   {report.reason ? REASON_LABELS[report.reason] : 'Validation did not pass'}
                 </span>
               </header>
-              <p className="text-sm text-slate-300" data-testid="validate-summary">
+              <p className="text-sm text-secondary" data-testid="validate-summary">
                 {report.summary}
               </p>
             </section>

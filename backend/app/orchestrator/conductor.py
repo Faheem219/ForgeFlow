@@ -199,13 +199,16 @@ class Conductor:
                 run_id=str(run.id),
             )
 
+        failure: str | None = None
         try:
             return await self._execute(
                 user_id, intent, ctx, action, current, run, marked_in_progress
             )
+        except Exception as exc:
+            failure = str(exc) or exc.__class__.__name__
+            raise
         finally:
-            run.finished_at = utcnow()
-            await run.save()
+            await self._close_run(run, intent, failure)
 
     # -- execution ---------------------------------------------------------------------------
 
@@ -296,11 +299,13 @@ class Conductor:
 
         Nothing may escape to the event loop from here — there is no caller left to catch it.
         """
+        failure: str | None = None
         try:
             await self._execute(
                 user_id, intent, ctx, action, StageStatus.in_progress, run, marked_in_progress
             )
         except Exception as exc:  # noqa: BLE001 - a detached task has nobody to raise to
+            failure = str(exc) or exc.__class__.__name__
             logger.warning("detached %s stage failed", intent.stage, exc_info=True)
             # `_execute` already reset the stage; tell the client why, since there is no response
             # left to carry the error.
@@ -313,10 +318,33 @@ class Conductor:
         finally:
             # Closing the Run is what flips "a build is running" off, so it must happen whatever
             # else did — otherwise the project is locked out of building forever.
-            run.finished_at = utcnow()
-            await run.save()
+            await self._close_run(run, intent, failure)
 
     # -- helpers -----------------------------------------------------------------------------
+
+    async def _close_run(self, run: Run, intent: Intent, failure: str | None) -> None:
+        """Close a run and broadcast its terminal state.
+
+        The event matters most on the **detached** path: there the HTTP response went out before
+        the work began, so it carries no completion signal at all and the realtime channel is the
+        only thing that can say "this finished". On the synchronous path it is the safety net for a
+        client whose connection a proxy dropped mid-request — the work still completed, and the UI
+        should stop claiming otherwise. Emitted whatever happened, success or failure.
+        """
+        run.finished_at = utcnow()
+        await run.save()
+        await emit(
+            str(intent.project_id),
+            EventType.run_finished,
+            {
+                "run_id": str(run.id),
+                "kind": run.kind,
+                "stage": str(intent.stage),
+                "ok": failure is None,
+                "error": failure,
+            },
+            stage=intent.stage,
+        )
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> None:
         """Fire a detached task, holding a strong reference so it is not garbage-collected."""

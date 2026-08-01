@@ -6,6 +6,18 @@ import { useAuthStore } from './stores/authStore';
 
 export const apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+/**
+ * Default request deadline.
+ *
+ * Every request needs one. A stage intent runs the codegen agent inline and can legitimately take
+ * minutes, but "legitimately slow" and "never going to answer" are indistinguishable to a caller
+ * without a deadline — and an unsettled promise is what leaves a spinner running forever after the
+ * work has already finished and streamed its results over the WebSocket.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+/** Deadline for calls that drive an agent turn. Generous, but finite. */
+export const LONG_TASK_TIMEOUT_MS = 15 * 60_000;
+
 export interface ErrorEnvelope {
   error: { type: string; message: string; detail?: unknown; fallback_hint?: string };
 }
@@ -25,41 +37,94 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** Raised when a request is aborted — by a deadline, or by its caller unmounting. */
+export class ApiAbortError extends Error {
+  constructor(
+    message: string,
+    /** True when the caller cancelled (unmount/navigation) rather than the deadline expiring. */
+    public readonly cancelled: boolean,
+  ) {
+    super(message);
+    this.name = 'ApiAbortError';
+  }
+}
+
+export interface ApiFetchOptions extends RequestInit {
+  /** Request deadline in ms. `0` disables it (use only for genuinely unbounded streams). */
+  timeoutMs?: number;
+}
+
+export async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   const { token } = useAuthStore.getState();
-  const res = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-  });
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = init ?? {};
 
-  if (res.status === 401) {
-    useAuthStore.getState().clear();
-  }
+  // Two abort sources — the caller's (unmount) and ours (deadline). `AbortSignal.any` would be
+  // tidier but is too new to rely on, so they are bridged manually.
+  const controller = new AbortController();
+  const onCallerAbort = (): void => controller.abort();
+  callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+  if (callerSignal?.aborted) controller.abort();
 
-  if (!res.ok) {
-    let type = 'system_error';
-    let message = `Request failed with status ${res.status}`;
-    let detail: unknown;
-    let fallbackHint: string | undefined;
-    try {
-      const body = (await res.json()) as Partial<ErrorEnvelope>;
-      if (body.error) {
-        type = body.error.type ?? type;
-        message = body.error.message ?? message;
-        detail = body.error.detail;
-        fallbackHint = body.error.fallback_hint;
-      }
-    } catch {
-      // Non-JSON error body — keep the status-derived defaults.
+  let timedOut = false;
+  const timer =
+    timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : null;
+
+  try {
+    const res = await fetch(`${apiBaseUrl}${path}`, {
+      ...rest,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(rest.headers as Record<string, string> | undefined),
+      },
+    });
+
+    if (res.status === 401) {
+      useAuthStore.getState().clear();
     }
-    throw new ApiError(res.status, message, type, detail, fallbackHint);
-  }
 
-  return (await res.json()) as T;
+    if (!res.ok) {
+      let type = 'system_error';
+      let message = `Request failed with status ${res.status}`;
+      let detail: unknown;
+      let fallbackHint: string | undefined;
+      try {
+        const body = (await res.json()) as Partial<ErrorEnvelope>;
+        if (body.error) {
+          type = body.error.type ?? type;
+          message = body.error.message ?? message;
+          detail = body.error.detail;
+          fallbackHint = body.error.fallback_hint;
+        }
+      } catch {
+        // Non-JSON error body — keep the status-derived defaults.
+      }
+      throw new ApiError(res.status, message, type, detail, fallbackHint);
+    }
+
+    // 204 (and any empty body) would explode in `res.json()`. Delete returns one.
+    if (res.status === 204 || res.headers.get('content-length') === '0') {
+      return undefined as T;
+    }
+
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw timedOut
+        ? new ApiAbortError(`Request timed out after ${Math.round(timeoutMs / 1000)}s`, false)
+        : new ApiAbortError('Request cancelled', true);
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+  }
 }
 
 export interface HealthResponse {

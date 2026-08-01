@@ -38,7 +38,7 @@ function Tooltip({ tip }: { tip: Tip | null }): JSX.Element | null {
       role="status"
       data-testid="viz-tooltip"
       style={{ left: tip.x, top: tip.y }}
-      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-slate-700 bg-slate-950/95 px-2 py-1.5 text-xs shadow-lg"
+      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-line bg-inset/95 px-2 py-1.5 text-xs shadow-lg"
     >
       {tip.lines.map((line) => (
         <div key={line.label} className="flex items-center gap-1.5 whitespace-nowrap">
@@ -50,8 +50,8 @@ function Tooltip({ tip }: { tip: Tip | null }): JSX.Element | null {
             />
           ) : null}
           {/* Values lead, labels follow — the reader has the series and wants the number. */}
-          <span className="font-medium text-slate-100">{line.value}</span>
-          <span className="text-slate-400">{line.label}</span>
+          <span className="font-medium text-primary">{line.value}</span>
+          <span className="text-muted">{line.label}</span>
         </div>
       ))}
     </div>
@@ -64,7 +64,7 @@ export function Legend({
   items: { label: string; color: string; shape?: 'dot' | 'bar' }[];
 }): JSX.Element {
   return (
-    <ul className="flex flex-wrap gap-3 text-xs text-slate-400" data-testid="viz-legend">
+    <ul className="flex flex-wrap gap-3 text-xs text-muted" data-testid="viz-legend">
       {items.map((item) => (
         <li key={item.label} className="flex items-center gap-1.5">
           <span
@@ -353,7 +353,7 @@ export function Histogram({
   const [tip, setTip] = useState<Tip | null>(null);
   const max = Math.max(1, ...buckets.map((b) => b.count));
   if (buckets.every((b) => b.count === 0)) {
-    return <p className="py-4 text-center text-xs text-slate-500">{emptyLabel}</p>;
+    return <p className="py-4 text-center text-xs text-faint">{emptyLabel}</p>;
   }
 
   return (
@@ -382,7 +382,7 @@ export function Histogram({
             onMouseLeave={() => setTip(null)}
             onBlur={() => setTip(null)}
           >
-            <span className="text-[10px] tabular-nums text-slate-400">{b.count || ''}</span>
+            <span className="text-[10px] tabular-nums text-muted">{b.count || ''}</span>
             <div
               className="w-full rounded-t"
               style={{
@@ -391,7 +391,7 @@ export function Histogram({
                 background: VIZ.accent,
               }}
             />
-            <span className="text-[10px] tabular-nums text-slate-500">{b.label}</span>
+            <span className="text-[10px] tabular-nums text-faint">{b.label}</span>
           </div>
         ))}
       </div>
@@ -415,17 +415,17 @@ export function StatTile({
   tone?: 'good' | 'muted';
 }): JSX.Element {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+    <div className="rounded-xl border border-subtle bg-surface/60 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-faint">{label}</p>
       <p
         className={`${hero ? 'text-4xl' : 'text-xl'} font-semibold ${
-          tone === 'good' ? 'text-emerald-300' : 'text-slate-100'
+          tone === 'good' ? 'text-success' : 'text-primary'
         }`}
         data-testid={`stat-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
       >
         {value}
       </p>
-      {detail ? <p className="mt-0.5 text-[11px] text-slate-500">{detail}</p> : null}
+      {detail ? <p className="mt-0.5 text-[11px] text-faint">{detail}</p> : null}
     </div>
   );
 }

@@ -106,8 +106,8 @@ export function EvalDashboard(): JSX.Element {
     <div className="space-y-4" data-testid="eval-dashboard">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-medium text-slate-200">Evaluation</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-medium text-primary">Evaluation</h2>
+          <p className="text-xs text-faint">
             {summary.specs} specs · {summary.scored} scored
             {data.source ? ` · ${data.source}` : ''}
           </p>
@@ -119,7 +119,7 @@ export function EvalDashboard(): JSX.Element {
               data-testid="eval-run-picker"
               value={data.source ?? ''}
               onChange={(e) => setSource(e.target.value || undefined)}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+              className="rounded-lg border border-line bg-inset px-2 py-1.5 text-xs text-primary"
             >
               {runsQuery.data?.map((run) => (
                 <option key={run.source} value={run.source}>
@@ -175,9 +175,9 @@ export function EvalDashboard(): JSX.Element {
         />
       </div>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+      <section className="rounded-xl border border-subtle bg-surface p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-xs font-medium text-slate-300">First-pass → post-repair, per spec</h3>
+          <h3 className="text-xs font-medium text-secondary">First-pass → post-repair, per spec</h3>
           <Legend
             items={[
               { label: 'First-pass', color: VIZ.context },
@@ -189,22 +189,20 @@ export function EvalDashboard(): JSX.Element {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <h3 className="mb-2 text-xs font-medium text-slate-300">
+        <section className="rounded-xl border border-subtle bg-surface p-3">
+          <h3 className="mb-2 text-xs font-medium text-secondary">
             Repair iterations per spec
-            <span className="ml-2 font-normal text-slate-500">
+            <span className="ml-2 font-normal text-faint">
               median {num(summary.repair_iterations.median)}
             </span>
           </h3>
           <Histogram buckets={iterationBuckets(records)} />
         </section>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <h3 className="mb-2 text-xs font-medium text-slate-300">
+        <section className="rounded-xl border border-subtle bg-surface p-3">
+          <h3 className="mb-2 text-xs font-medium text-secondary">
             Tokens per spec
-            <span className="ml-2 font-normal text-slate-500">
-              ₹{num(summary.inr_cost.mean)} mean
-            </span>
+            <span className="ml-2 font-normal text-faint">₹{num(summary.inr_cost.mean)} mean</span>
           </h3>
           <BarChart
             data={records.map((r) => ({ id: r.spec_id, label: r.spec_id, value: r.tokens }))}
@@ -215,10 +213,10 @@ export function EvalDashboard(): JSX.Element {
       </div>
 
       {summary.screenshot_to_url_seconds.count > 0 ? (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <h3 className="mb-2 text-xs font-medium text-slate-300">
+        <section className="rounded-xl border border-subtle bg-surface p-3">
+          <h3 className="mb-2 text-xs font-medium text-secondary">
             Idea → live URL
-            <span className="ml-2 font-normal text-slate-500">
+            <span className="ml-2 font-normal text-faint">
               median {num(summary.screenshot_to_url_seconds.median)}s
             </span>
           </h3>
@@ -237,13 +235,13 @@ export function EvalDashboard(): JSX.Element {
       ) : null}
 
       {/* The table view: every value the charts show, reachable without hovering. */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900/60">
-        <h3 className="border-b border-slate-800 px-3 py-2 text-xs font-medium text-slate-300">
+      <section className="rounded-xl border border-subtle bg-surface/60">
+        <h3 className="border-b border-subtle px-3 py-2 text-xs font-medium text-secondary">
           Per spec
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full min-w-max text-left text-xs" data-testid="eval-table">
-            <thead className="text-slate-500">
+            <thead className="text-faint">
               <tr>
                 {[
                   'Spec',
@@ -266,27 +264,27 @@ export function EvalDashboard(): JSX.Element {
               {records.map((r) => (
                 <tr
                   key={r.spec_id}
-                  className="border-t border-slate-800/60"
+                  className="border-t border-subtle/60"
                   data-testid={`eval-row-${r.spec_id}`}
                 >
-                  <td className="px-3 py-1.5 font-mono text-slate-200">{r.spec_id}</td>
-                  <td className="px-3 py-1.5 text-slate-400">{r.difficulty}</td>
+                  <td className="px-3 py-1.5 font-mono text-primary">{r.spec_id}</td>
+                  <td className="px-3 py-1.5 text-muted">{r.difficulty}</td>
                   <td className="px-3 py-1.5">
                     {/* Status never rides on color alone — the word is the label. */}
                     <Badge tone={OUTCOME_TONES[r.outcome]}>{r.outcome}</Badge>
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">
                     {pct(r.first_pass.rate)}
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">
                     {pct(r.post_repair.rate)}
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">
                     {pct(r.repair_delta, true)}
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">{r.repair_iterations}</td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">{r.regressions}</td>
-                  <td className="px-3 py-1.5 tabular-nums text-slate-300">
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">{r.repair_iterations}</td>
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">{r.regressions}</td>
+                  <td className="px-3 py-1.5 tabular-nums text-secondary">
                     {r.tokens.toLocaleString()}
                   </td>
                 </tr>

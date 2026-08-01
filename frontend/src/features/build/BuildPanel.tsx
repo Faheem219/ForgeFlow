@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Badge, Button, Spinner } from '../../components/ui';
+import { Badge, Button, ResizablePanel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
+import { PanelKey } from '../../lib/stores/uiStore';
+import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest } from '../../lib/types';
 // Neither import pulls Monaco in — the heavy editor stays behind the lazy `Ide` boundary.
 import { readFile } from '../ide/api';
@@ -113,7 +115,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   // "Building" is whatever the SERVER says is in flight, falling back to the in-flight request for
   // the moment before the first poll lands. Deriving it from `intent.isPending` alone is what made a
   // refresh look idle while the agent kept working.
-  const busy = Boolean(serverBuild) || intent.isPending;
+  //
+  // The fallback is bounded by the run's terminal event rather than by the request alone: a POST
+  // whose connection a proxy dropped never settles, so `isPending` on its own could hold the
+  // spinner on forever *after* the build had finished and its report had already rendered.
+  // `useTaskStream` clears on `run.finished` (emitted from the conductor's `finally`, detached or
+  // not), so whichever signal lands first wins.
+  const task = useTaskStream(projectId, { pending: intent.isPending, stage: 'build' });
+  const busy = Boolean(serverBuild) || task.busy;
   const hasBuild = Boolean(latestReportId);
 
   // Live telemetry from the realtime channel (re-baselined per run), merged with the durable list
@@ -160,14 +169,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-primary">
           Build
           <span data-testid="build-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
           {busy ? (
             <span
-              className="flex items-center gap-1 text-xs text-slate-400"
+              className="flex items-center gap-1 text-xs text-muted"
               data-testid="build-progress"
             >
               <Spinner />
@@ -218,7 +227,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-line bg-surface p-1 shadow-xl"
                 >
                   <button
                     type="button"
@@ -232,10 +241,10 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                         payload: { fresh: true },
                       });
                     }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
+                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-primary hover:bg-elevated"
                   >
                     Rebuild from scratch
-                    <span className="mt-0.5 block text-[11px] text-slate-500">
+                    <span className="mt-0.5 block text-[11px] text-faint">
                       Ignore existing feature code and regenerate it.
                     </span>
                   </button>
@@ -250,20 +259,20 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           for a long time and then dumps a dozen tabs at once. */}
       {busy || liveFiles.length > 0 ? (
         <section
-          className="shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          className="shrink-0 overflow-hidden rounded-xl border border-subtle bg-surface/40"
           data-testid="build-activity"
         >
           <div className="flex items-center gap-2 px-4 py-2">
             {busy ? <Spinner size="sm" /> : null}
-            <span className="text-xs font-medium text-slate-300" data-testid="build-activity-label">
+            <span className="text-xs font-medium text-secondary" data-testid="build-activity-label">
               {busy ? `${activityLabel || 'Starting the build'}…` : 'Last run'}
             </span>
             {busy && activityTarget ? (
-              <span className="truncate font-mono text-[11px] text-slate-500">
+              <span className="truncate font-mono text-[11px] text-faint">
                 {activityTarget}
               </span>
             ) : null}
-            <span className="text-xs text-slate-500" data-testid="build-file-count">
+            <span className="text-xs text-faint" data-testid="build-file-count">
               {liveFiles.length} file{liveFiles.length === 1 ? '' : 's'} written
             </span>
             {busy ? (
@@ -273,7 +282,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                     key={s}
                     title={STEP_LABELS[s]}
                     className={`h-1.5 w-6 rounded-full ${
-                      s === latestStep ? 'bg-brand-500' : 'bg-slate-800'
+                      s === latestStep ? 'bg-brand' : 'bg-elevated'
                     }`}
                   />
                 ))}
@@ -282,18 +291,18 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           </div>
           {liveFiles.length > 0 ? (
             <ul
-              className="max-h-24 space-y-0.5 overflow-auto border-t border-slate-800 px-4 py-2"
+              className="max-h-24 space-y-0.5 overflow-auto border-t border-subtle px-4 py-2"
               data-testid="build-file-list"
             >
               {liveFiles.map((path) => (
                 <li key={path} className="flex items-center gap-2 font-mono text-[11px]">
-                  <span className="text-emerald-400" aria-hidden>
+                  <span className="text-success" aria-hidden>
                     +
                   </span>
                   <button
                     type="button"
                     onClick={() => void openGeneratedFile(projectId, path)}
-                    className="truncate text-slate-400 hover:text-slate-100 hover:underline"
+                    className="truncate text-muted hover:text-primary hover:underline"
                   >
                     {path}
                   </button>
@@ -307,7 +316,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
       {/* Compact, collapsible build report — a horizontal strip, so it never steals editor width. */}
       {report ? (
         <section
-          className="shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          className="shrink-0 overflow-hidden rounded-xl border border-subtle bg-surface/40"
           data-testid="build-report"
         >
           <button
@@ -315,9 +324,9 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
             aria-expanded={reportOpen}
             data-testid="build-report-toggle"
             onClick={() => setReportOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-800/40"
+            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-elevated/40"
           >
-            <span className="text-xs uppercase tracking-wide text-slate-500">Report</span>
+            <span className="text-xs uppercase tracking-wide text-faint">Report</span>
             <span data-testid="build-boot-status">
               <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'}>{report.boot_status}</Badge>
             </span>
@@ -326,34 +335,34 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                 tests {report.tests_passed ? 'passed' : 'failed'}
               </Badge>
             ) : null}
-            <span className="truncate text-xs text-slate-400">
+            <span className="truncate text-xs text-muted">
               {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'} changed
               {report.commit ? (
-                <span className="ml-2 font-mono text-slate-500">{report.commit.slice(0, 8)}</span>
+                <span className="ml-2 font-mono text-faint">{report.commit.slice(0, 8)}</span>
               ) : null}
             </span>
-            <span className="ml-auto text-slate-500" aria-hidden>
+            <span className="ml-auto text-faint" aria-hidden>
               {reportOpen ? '▾' : '▸'}
             </span>
           </button>
           {reportOpen ? (
-            <div className="space-y-2 border-t border-slate-800 px-4 py-3 text-sm">
-              {report.summary ? <p className="text-slate-300">{report.summary}</p> : null}
+            <div className="space-y-2 border-t border-subtle px-4 py-3 text-sm">
+              {report.summary ? <p className="text-secondary">{report.summary}</p> : null}
               {report.features_built.length > 0 ? (
-                <p className="text-slate-400">
-                  <span className="text-slate-500">Features:</span>{' '}
+                <p className="text-muted">
+                  <span className="text-faint">Features:</span>{' '}
                   {report.features_built.join(', ')}
                 </p>
               ) : null}
               {report.follow_ups.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-300/80">
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning/80">
                   {report.follow_ups.map((f) => (
                     <li key={f}>{f}</li>
                   ))}
                 </ul>
               ) : null}
               {report.notes.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-faint">
                   {report.notes.map((n) => (
                     <li key={n}>{n}</li>
                   ))}
@@ -364,30 +373,22 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
         </section>
       ) : (
         <p
-          className="shrink-0 rounded-xl border border-dashed border-slate-800 px-4 py-2 text-xs text-slate-500"
+          className="shrink-0 rounded-xl border border-dashed border-subtle px-4 py-2 text-xs text-faint"
           data-testid="build-empty"
         >
-          No build yet — press <span className="font-medium text-slate-300">Build</span> to generate
+          No build yet — press <span className="font-medium text-secondary">Build</span> to generate
           the app onto the skeleton, then refine it from the Assistant.
         </p>
       )}
 
-      {/* Live generation (IDE stream) fills the panel; preview splits in beside it on demand. */}
-      <div
-        className={`grid min-h-0 flex-1 gap-3 ${
-          showPreview ? 'grid-rows-2 xl:grid-cols-2 xl:grid-rows-1' : 'grid-rows-1'
-        }`}
-      >
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center">
-              <Spinner />
-            </div>
-          }
-        >
-          <Ide projectId={projectId} />
-        </Suspense>
-        {showPreview ? (
+      {/*
+        Live generation (IDE stream) fills the panel; preview splits in beside it on demand, on a
+        draggable seam rather than a fixed 50/50 grid — reading generated code and watching the app
+        render want very different amounts of room, and which one you want more of changes minute
+        to minute.
+      */}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">
@@ -395,8 +396,27 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               </div>
             }
           >
-            <Preview projectId={projectId} />
+            <Ide projectId={projectId} />
           </Suspense>
+        </div>
+        {showPreview ? (
+          <ResizablePanel
+            panelKey={PanelKey.buildPreview}
+            side="end"
+            label="Resize preview"
+            min={280}
+            max={900}
+          >
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center">
+                  <Spinner />
+                </div>
+              }
+            >
+              <Preview projectId={projectId} />
+            </Suspense>
+          </ResizablePanel>
         ) : null}
       </div>
     </div>

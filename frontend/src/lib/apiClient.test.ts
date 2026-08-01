@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiBaseUrl, apiFetch, getHealth } from './apiClient';
+import { ApiAbortError, ApiError, apiBaseUrl, apiFetch, getHealth } from './apiClient';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -54,5 +54,55 @@ describe('apiClient', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(502);
     expect(error.message).toContain('502');
+  });
+
+  it('returns undefined for a 204 instead of choking on an empty body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 204 }))),
+    );
+
+    await expect(apiFetch('/projects/abc')).resolves.toBeUndefined();
+  });
+
+  it('aborts a request that outlives its deadline', async () => {
+    // A request that never settles is exactly the case that used to strand a spinner forever.
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = (await apiFetch('/slow', { timeoutMs: 10 }).catch(
+      (e: unknown) => e,
+    )) as ApiAbortError;
+
+    expect(error).toBeInstanceOf(ApiAbortError);
+    expect(error.cancelled).toBe(false);
+    expect(error.message).toMatch(/timed out/i);
+  });
+
+  it('reports a caller-cancelled request as cancelled, not timed out', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = apiFetch('/slow', { signal: controller.signal, timeoutMs: 5000 });
+    controller.abort();
+
+    const error = (await promise.catch((e: unknown) => e)) as ApiAbortError;
+    expect(error).toBeInstanceOf(ApiAbortError);
+    expect(error.cancelled).toBe(true);
   });
 });

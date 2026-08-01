@@ -38,21 +38,54 @@ const environment: monaco.Environment = {
 
 loader.config({ monaco });
 
-/** Dark theme matching the workspace palette (slate/indigo). */
+/**
+ * Editor themes.
+ *
+ * Monaco paints to its own canvas and cannot read CSS custom properties, so the token values are
+ * mirrored here as literals. They must stay in step with `src/app/theme/tokens.css` — a mismatch
+ * shows up immediately as an editor whose background differs from the panel holding it.
+ */
 export const FORGEFLOW_DARK = 'forgeflow-dark';
+export const FORGEFLOW_LIGHT = 'forgeflow-light';
 
-loader.init().then((instance) => {
+export function monacoThemeFor(resolved: 'light' | 'dark'): string {
+  return resolved === 'dark' ? FORGEFLOW_DARK : FORGEFLOW_LIGHT;
+}
+
+void loader.init().then((instance) => {
   instance.editor.defineTheme(FORGEFLOW_DARK, {
     base: 'vs-dark',
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#0f172a', // slate-900
-      'editorGutter.background': '#0f172a',
-      'editorLineNumber.foreground': '#475569',
-      'editor.lineHighlightBackground': '#1e293b',
-      'editorCursor.foreground': '#a5b4fc', // indigo-300
-      'editor.selectionBackground': '#334155',
+      'editor.background': '#0b0f18', // --surface
+      'editorGutter.background': '#0b0f18',
+      'editorLineNumber.foreground': '#5f6779', // --text-faint
+      'editorLineNumber.activeForeground': '#8b93a5', // --text-muted
+      'editor.lineHighlightBackground': '#141a26', // --elevated
+      'editorCursor.foreground': '#818cf8', // --brand-hover
+      'editor.selectionBackground': '#262f40', // --border-default
+      'editorWidget.background': '#161d2b', // --overlay
+      'editorWidget.border': '#262f40',
+      'editorIndentGuide.background1': '#1b2230', // --border-subtle
+    },
+  });
+
+  instance.editor.defineTheme(FORGEFLOW_LIGHT, {
+    base: 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#ffffff', // --surface
+      'editorGutter.background': '#ffffff',
+      'editorLineNumber.foreground': '#8a92a1', // --text-faint
+      'editorLineNumber.activeForeground': '#626b7d', // --text-muted
+      'editor.lineHighlightBackground': '#f4f5f8', // --elevated
+      'editorCursor.foreground': '#4f46e5', // --brand
+      'editor.selectionBackground': '#dbe0ff',
+      'editorWidget.background': '#ffffff', // --overlay
+      'editorWidget.border': '#dbdee5',
+      'editorIndentGuide.background1': '#e9ebf0', // --border-subtle
     },
   });
 });

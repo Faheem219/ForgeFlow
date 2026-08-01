@@ -90,9 +90,9 @@ async def test_a_blank_sandbox_uri_changes_nothing(monkeypatch: pytest.MonkeyPat
     project = await _project()
     provisioner = DbProvisioner()
 
-    assert await provisioner.get_sandbox_mongodb_uri(project) == await provisioner.get_app_mongodb_uri(
+    assert await provisioner.get_sandbox_mongodb_uri(
         project
-    )
+    ) == await provisioner.get_app_mongodb_uri(project)
 
 
 async def test_the_database_name_is_still_per_project(monkeypatch: pytest.MonkeyPatch) -> None:

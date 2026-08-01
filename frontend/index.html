@@ -1,10 +1,42 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#312e81" />
+    <meta name="theme-color" content="#05070d" />
+    <meta name="color-scheme" content="light dark" />
     <title>ForgeFlow</title>
+    <script>
+      /*
+       * Pre-paint theme resolution. This MUST run before the first paint and before the React
+       * bundle, otherwise a dark-mode user gets a white flash on every cold load. It mirrors
+       * `applyTheme` in src/lib/stores/themeStore.ts — keep the two in step.
+       */
+      (function () {
+        try {
+          var mode = 'system';
+          var raw = localStorage.getItem('forgeflow-theme');
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.state && parsed.state.mode) mode = parsed.state.mode;
+          }
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.setAttribute('data-theme', dark ? 'dark' : 'light');
+          root.classList.toggle('dark', dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#05070d' : '#fbfbfd');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
