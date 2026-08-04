@@ -17,7 +17,10 @@ const api = vi.hoisted(() => ({
 vi.mock('./api', () => api);
 
 // Monaco needs real layout/workers, which jsdom lacks — stand in a textarea so editing is real.
-vi.mock('./monacoSetup', () => ({ FORGEFLOW_DARK: 'forgeflow-dark' }));
+vi.mock('./monacoSetup', () => ({
+  FORGEFLOW_DARK: 'forgeflow-dark',
+  MONACO_THEMES: { dark: 'forgeflow-dark', light: 'forgeflow-light' },
+}));
 vi.mock('@monaco-editor/react', () => ({
   default: ({
     value,

@@ -128,7 +128,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-fg">
           Deploy
           <span data-testid="deploy-stage-status">
             <Badge tone={STATUS_TONES[stageStatus]}>{STATUS_LABELS[stageStatus]}</Badge>
@@ -141,7 +141,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
         </span>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-slate-700 p-0.5" role="group">
+          <div className="flex rounded-lg border border-edge-strong p-0.5" role="group">
             {MODES.map((m) => (
               <button
                 key={m.value}
@@ -151,7 +151,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
                 aria-pressed={mode === m.value}
                 onClick={() => setMode(m.value)}
                 className={`rounded-md px-2.5 py-1 text-xs transition ${
-                  mode === m.value ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                  mode === m.value ? 'bg-brand text-white' : 'text-fg-muted hover:bg-surface-raised'
                 }`}
               >
                 {m.label}
@@ -181,7 +181,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
 
       {deployDisabledReason ? (
         <p
-          className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-300"
+          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
           data-testid="deploy-prereq-warning"
         >
           {deployDisabledReason} It is the one ordering ForgeFlow enforces — everything else is
@@ -190,7 +190,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
       ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2fr_1fr]">
-        <div className="min-h-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+        <div className="min-h-0 overflow-hidden rounded-xl border border-edge bg-surface">
           <Topology snapshot={snapshot} state={live} onSelect={setSelected} />
         </div>
 
@@ -205,7 +205,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
               redeploying={busy}
             />
           ) : (
-            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-800 p-4 text-center text-xs text-slate-500">
+            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-edge p-4 text-center text-xs text-fg-subtle">
               Select a component to see its URL, wiring and logs.
             </div>
           )}

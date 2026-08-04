@@ -9,6 +9,8 @@ import { Terminal } from './Terminal';
 const term = {
   cols: 80,
   rows: 24,
+  // The live component restyles via `term.options.theme = …` on theme switches.
+  options: {} as Record<string, unknown>,
   loadAddon: vi.fn(),
   open: vi.fn(),
   write: vi.fn(),

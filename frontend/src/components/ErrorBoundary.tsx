@@ -57,12 +57,12 @@ export class ErrorBoundary extends Component<Props, State> {
         className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-8 text-center"
         data-testid="error-boundary"
       >
-        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-brand-500 to-accent-500 opacity-80" />
+        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-brand to-accent opacity-80" />
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-slate-100">{actionable.title}</h2>
-          <p className="max-w-md text-sm text-slate-400">{actionable.description}</p>
+          <h2 className="text-lg font-semibold text-fg">{actionable.title}</h2>
+          <p className="max-w-md text-sm text-fg-muted">{actionable.description}</p>
           {actionable.hint ? (
-            <p className="max-w-md text-xs text-slate-500">{actionable.hint}</p>
+            <p className="max-w-md text-xs text-fg-subtle">{actionable.hint}</p>
           ) : null}
         </div>
         <div className="flex gap-2">

@@ -30,15 +30,15 @@ function groupByFile(results: TestResultDto[]): Array<[string, TestResultDto[]]>
 function FailureDetail({ result }: { result: TestResultDto }): JSX.Element | null {
   if (!result.failure) return null;
   return (
-    <div className="mt-1 space-y-1 rounded-lg border border-red-900/40 bg-red-950/20 p-2 text-xs">
-      <p className="font-medium text-red-300">{result.failure.message}</p>
+    <div className="mt-1 space-y-1 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs">
+      <p className="font-medium text-danger">{result.failure.message}</p>
       {result.failure.stack ? (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-slate-400">
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-fg-muted">
           {result.failure.stack}
         </pre>
       ) : null}
       {result.failure.files_referenced.length > 0 ? (
-        <p className="text-slate-500">
+        <p className="text-fg-subtle">
           Implicated:{' '}
           <span className="font-mono">{result.failure.files_referenced.join(', ')}</span>
         </p>
@@ -92,7 +92,7 @@ export function ResultsPanel({
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-fg">
           Tests
           {latest ? (
             <span data-testid="test-summary">
@@ -109,7 +109,7 @@ export function ResultsPanel({
             value={scope}
             onChange={(e) => setScope(e.target.value as TestScope)}
             disabled={execute.isPending}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+            className="rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
           >
             {SCOPES.map((s) => (
               <option key={s} value={s}>
@@ -124,7 +124,7 @@ export function ResultsPanel({
             onChange={(e) => setFilter(e.target.value)}
             placeholder="filter…"
             disabled={execute.isPending}
-            className="w-28 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+            className="w-28 rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
           />
           <Button
             size="sm"
@@ -138,7 +138,7 @@ export function ResultsPanel({
       </header>
 
       {execute.isPending ? (
-        <div className="flex items-center gap-2 text-xs text-slate-400" data-testid="tests-running">
+        <div className="flex items-center gap-2 text-xs text-fg-muted" data-testid="tests-running">
           <Spinner /> Running the suites in the sandbox…
         </div>
       ) : null}
@@ -148,8 +148,8 @@ export function ResultsPanel({
       ) : (
         <div className="min-h-0 flex-1 space-y-2 overflow-auto" data-testid="test-results">
           {grouped.map(([file, results]) => (
-            <section key={file} className="rounded-xl border border-slate-800 p-2">
-              <h4 className="mb-1 font-mono text-xs text-slate-500">{file}</h4>
+            <section key={file} className="rounded-xl border border-edge p-2">
+              <h4 className="mb-1 font-mono text-xs text-fg-subtle">{file}</h4>
               <ul className="space-y-1">
                 {results.map((result) => {
                   const id = `${file}::${result.name}`;
@@ -160,13 +160,13 @@ export function ResultsPanel({
                         type="button"
                         data-testid={`test-${result.status}`}
                         onClick={() => setExpanded(open ? null : id)}
-                        className="flex w-full items-start justify-between gap-2 rounded-lg px-2 py-1 text-left text-sm hover:bg-slate-800/50"
+                        className="flex w-full items-start justify-between gap-2 rounded-lg px-2 py-1 text-left text-sm hover:bg-surface-raised"
                       >
-                        <span className="text-slate-200">{result.name}</span>
+                        <span className="text-fg">{result.name}</span>
                         <span className="flex shrink-0 items-center gap-1">
                           {result.criterion_id ? (
                             <span
-                              className="font-mono text-[11px] text-slate-500"
+                              className="font-mono text-[11px] text-fg-subtle"
                               title="Acceptance criterion"
                             >
                               {result.criterion_id}
@@ -198,7 +198,7 @@ export function ResultsPanel({
           {showStdout ? (
             <pre
               data-testid="test-stdout"
-              className="max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2 font-mono text-[11px] text-slate-400"
+              className="max-h-48 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2 font-mono text-[11px] text-fg-muted"
             >
               {stdoutQuery.isFetching ? 'Loading…' : (stdoutQuery.data?.stdout ?? '(no output)')}
             </pre>

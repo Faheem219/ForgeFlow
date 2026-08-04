@@ -36,10 +36,10 @@ function Row({
         onClick={() => (isDir ? onToggle(node.path) : onOpen(node.path))}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         className={`flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left text-sm ${
-          isActive ? 'bg-brand-600/20 text-brand-200' : 'text-slate-300 hover:bg-slate-800'
+          isActive ? 'bg-brand/15 text-brand-text' : 'text-fg-muted hover:bg-surface-raised'
         }`}
       >
-        <span className="w-3 shrink-0 text-xs text-slate-500" aria-hidden>
+        <span className="w-3 shrink-0 text-xs text-fg-subtle" aria-hidden>
           {isDir ? (isOpen ? '▾' : '▸') : ''}
         </span>
         <span className="truncate">{node.name}</span>
@@ -78,7 +78,7 @@ export function FileTree({ nodes, activePath, onOpen }: FileTreeProps): JSX.Elem
     });
 
   if (tree.length === 0) {
-    return <p className="px-2 py-1 text-sm text-slate-500">No files yet.</p>;
+    return <p className="px-2 py-1 text-sm text-fg-subtle">No files yet.</p>;
   }
 
   return (

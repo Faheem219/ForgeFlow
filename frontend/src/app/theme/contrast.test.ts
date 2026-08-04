@@ -51,6 +51,8 @@ const PAIRS: Pair[] = [
   // Actions.
   ['fgInverted', 'brand', 4.5, 'label on primary buttons'],
   ['brand', 'surface', 3, 'brand outlines / focus ring vs card'],
+  ['brandText', 'surface', 4.5, 'brand-colored links/labels on cards'],
+  ['brandText', 'canvas', 4.5, 'brand-colored links/labels on the page'],
   // Status text (badges, inline notes) on the surfaces it appears on.
   ['success', 'surface', 4.5, 'success text on cards'],
   ['warning', 'surface', 4.5, 'warning text on cards'],

@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 import { useMemo } from 'react';
 
+import { useThemeStore } from '../../lib/stores/themeStore';
 import type { TopologyNodeId, TopologySnapshotDto } from '../../lib/types';
 import { TopologyNode } from './TopologyNode';
 import { buildFlowGraph, type LiveDeployState } from './topologyModel';
@@ -33,6 +34,9 @@ export function Topology({
   onSelect: (nodeId: TopologyNodeId) => void;
 }): JSX.Element {
   const { nodes, edges } = useMemo(() => buildFlowGraph(snapshot, state), [snapshot, state]);
+  // React Flow's canvas chrome (edges, controls, background dots) keys on its own colorMode
+  // rather than CSS variables — feed it the resolved app theme.
+  const resolved = useThemeStore((s) => s.resolved);
 
   const handleNodeClick: NodeMouseHandler = (_event, node) => {
     onSelect(node.id as TopologyNodeId);
@@ -49,6 +53,7 @@ export function Topology({
         nodesConnectable={false}
         edgesFocusable={false}
         fitView
+        colorMode={resolved}
         proOptions={{ hideAttribution: true }}
       >
         <Background />

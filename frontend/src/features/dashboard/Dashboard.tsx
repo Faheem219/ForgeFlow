@@ -79,8 +79,8 @@ export default function Dashboard(): JSX.Element {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-100">Projects</h1>
-          <p className="text-sm text-slate-400">Take an idea from design to a deployed URL.</p>
+          <h1 className="text-xl font-semibold text-fg">Projects</h1>
+          <p className="text-sm text-fg-muted">Take an idea from design to a deployed URL.</p>
         </div>
         <Button onClick={() => setModalOpen(true)}>New project</Button>
       </div>
@@ -105,13 +105,13 @@ export default function Dashboard(): JSX.Element {
                 type="button"
                 data-testid={`project-${project.id}`}
                 onClick={() => navigate(`/projects/${project.id}`)}
-                className="flex h-full w-full flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-left transition hover:border-slate-700 hover:bg-slate-800/40"
+                className="flex h-full w-full flex-col gap-3 rounded-xl border border-edge bg-surface p-4 text-left transition hover:border-edge-strong hover:bg-surface-raised"
               >
                 <span className="flex items-start justify-between gap-2">
-                  <span className="truncate font-medium text-slate-100">{project.name}</span>
+                  <span className="truncate font-medium text-fg">{project.name}</span>
                   <Badge tone="brand">{STAGE_LABELS[project.current_stage]}</Badge>
                 </span>
-                <span className="mt-auto flex items-center gap-2 text-xs text-slate-500">
+                <span className="mt-auto flex items-center gap-2 text-xs text-fg-subtle">
                   <span>{project.stack}</span>
                   <span aria-hidden>·</span>
                   <span>Updated {relativeTime(project.updated_at)}</span>
@@ -122,7 +122,7 @@ export default function Dashboard(): JSX.Element {
                 aria-label={`Delete ${project.name}`}
                 data-testid={`delete-project-${project.id}`}
                 onClick={() => setDoomed({ id: project.id, name: project.name })}
-                className="absolute bottom-3 right-3 rounded-md p-1.5 text-slate-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"
+                className="absolute bottom-3 right-3 rounded-md p-1.5 text-fg-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
               >
                 <svg
                   aria-hidden

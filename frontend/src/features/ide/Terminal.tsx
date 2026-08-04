@@ -1,16 +1,45 @@
 import { FitAddon } from '@xterm/addon-fit';
-import { Terminal as XTerm } from '@xterm/xterm';
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef, useState } from 'react';
 
+import { dark, light, type ResolvedTheme } from '../../app/theme/palette';
 import { useAuthStore } from '../../lib/stores/authStore';
+import { useThemeStore } from '../../lib/stores/themeStore';
 import { TerminalClient, type TerminalStatus } from './terminalClient';
 
-const theme = {
-  background: '#0f172a', // slate-900, matches the workspace panels
-  foreground: '#e2e8f0',
-  cursor: '#a5b4fc',
-  selectionBackground: '#334155',
+// xterm renders to canvas and cannot read CSS custom properties, so both themes are built from
+// palette.ts. The light ANSI ramp is retuned by hand: the standard bright set (yellow #ffff00,
+// green #00ff00…) is unreadable on white, and tool output leans on exactly those colors.
+const THEMES: Record<ResolvedTheme, ITheme> = {
+  dark: {
+    background: dark.sunken,
+    foreground: dark.fg,
+    cursor: dark.brandText,
+    selectionBackground: dark.edgeStrong,
+  },
+  light: {
+    background: light.surface,
+    foreground: light.fg,
+    cursor: light.brand,
+    selectionBackground: light.edge,
+    black: '#17171c',
+    red: '#b91c1c',
+    green: '#047857',
+    yellow: '#b45309',
+    blue: '#2563eb',
+    magenta: '#7c3aed',
+    cyan: '#0e7490',
+    white: '#6e6e7a',
+    brightBlack: '#4c4c58',
+    brightRed: '#dc2626',
+    brightGreen: '#059669',
+    brightYellow: '#d97706',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#8b5cf6',
+    brightCyan: '#0891b2',
+    brightWhite: '#17171c',
+  },
 };
 
 const statusLabel: Record<TerminalStatus, string> = {
@@ -21,14 +50,22 @@ const statusLabel: Record<TerminalStatus, string> = {
 
 export function Terminal({ projectId }: { projectId: string }): JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const termRef = useRef<XTerm | null>(null);
   const token = useAuthStore((s) => s.token);
+  const resolved = useThemeStore((s) => s.resolved);
   const [status, setStatus] = useState<TerminalStatus>('closed');
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !token) return;
 
-    const term = new XTerm({ convertEol: false, fontSize: 13, theme, cursorBlink: true });
+    const term = new XTerm({
+      convertEol: false,
+      fontSize: 13,
+      theme: THEMES[useThemeStore.getState().resolved],
+      cursorBlink: true,
+    });
+    termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
@@ -62,14 +99,22 @@ export function Terminal({ projectId }: { projectId: string }): JSX.Element {
       offStatus();
       client.close();
       term.dispose();
+      termRef.current = null;
     };
   }, [projectId, token]);
 
+  // Theme switches restyle the LIVE terminal (xterm applies option changes immediately) rather
+  // than recreating it — recreation would wipe the scrollback and any running session's output.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term) term.options.theme = THEMES[resolved];
+  }, [resolved]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
-        <span className="text-xs font-medium text-slate-300">Terminal</span>
-        <span className="text-xs text-slate-500" data-testid="terminal-status">
+      <div className="flex items-center justify-between border-b border-edge px-3 py-1.5">
+        <span className="text-xs font-medium text-fg-muted">Terminal</span>
+        <span className="text-xs text-fg-subtle" data-testid="terminal-status">
           {statusLabel[status]}
         </span>
       </div>

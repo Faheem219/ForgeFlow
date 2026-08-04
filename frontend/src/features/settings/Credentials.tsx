@@ -18,7 +18,7 @@ const KIND_LABELS: Record<CredentialKind, string> = {
 const KINDS = Object.keys(KIND_LABELS) as CredentialKind[];
 
 const inputClass =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500';
+  'w-full rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand';
 
 /**
  * Bring-your-own provider tokens (phase-34). Strictly write-only: the form posts a secret, and the
@@ -67,7 +67,7 @@ export function Credentials(): JSX.Element {
   return (
     <Panel title="Provider credentials">
       <div className="space-y-4" data-testid="credentials-panel">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-muted">
           Your own provider tokens. They are encrypted before storage and used only when ForgeFlow
           calls that provider on your behalf — they are never displayed again after saving.
         </p>
@@ -80,7 +80,7 @@ export function Credentials(): JSX.Element {
           }}
         >
           <label className="text-sm">
-            <span className="mb-1 block text-slate-300">Provider</span>
+            <span className="mb-1 block text-fg-muted">Provider</span>
             <select
               className={`${inputClass} w-40`}
               data-testid="credential-kind"
@@ -96,7 +96,7 @@ export function Credentials(): JSX.Element {
           </label>
 
           <label className="min-w-[16rem] flex-1 text-sm">
-            <span className="mb-1 block text-slate-300">Token</span>
+            <span className="mb-1 block text-fg-muted">Token</span>
             <input
               type="password"
               autoComplete="off"
@@ -114,7 +114,7 @@ export function Credentials(): JSX.Element {
         </form>
 
         <div>
-          <h4 className="mb-2 text-xs uppercase tracking-wide text-slate-500">Stored</h4>
+          <h4 className="mb-2 text-xs uppercase tracking-wide text-fg-subtle">Stored</h4>
           {credentialsQuery.isLoading ? (
             <div className="flex justify-center py-4">
               <Spinner />
@@ -130,17 +130,17 @@ export function Credentials(): JSX.Element {
                 <li
                   key={`${c.kind}-${c.scope}`}
                   data-testid={`credential-row-${c.kind}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg border border-edge px-3 py-2 text-sm"
                 >
-                  <span className="flex items-center gap-2 text-slate-200">
+                  <span className="flex items-center gap-2 text-fg">
                     {KIND_LABELS[c.kind]}
                     <Badge tone={c.scope === 'byo' ? 'brand' : 'neutral'}>{c.scope}</Badge>
                     {c.last4 ? (
-                      <span className="font-mono text-xs text-slate-500">····{c.last4}</span>
+                      <span className="font-mono text-xs text-fg-subtle">····{c.last4}</span>
                     ) : null}
                   </span>
                   <span className="flex items-center gap-3">
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-fg-subtle">
                       {new Date(c.created_at).toLocaleDateString()}
                     </span>
                     <Button

@@ -164,10 +164,10 @@ export default function Workspace(): JSX.Element {
     <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-slate-100">
+          <h1 className="truncate text-xl font-semibold text-fg">
             {projectQuery.data.name}
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-muted">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
@@ -178,7 +178,7 @@ export default function Workspace(): JSX.Element {
             onClick={toggleStages}
             testId="toggle-stages"
           />
-          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
           <ToolToggle
             label="Data"
             on={view === 'data'}
@@ -191,19 +191,19 @@ export default function Workspace(): JSX.Element {
             onClick={() => setTerminalOpen((open) => !open)}
             testId="toggle-terminal"
           />
-          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
           <ToolToggle
             label="Assistant"
             on={assistantOpen}
             onClick={toggleAssistant}
             testId="toggle-assistant"
           />
-          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
           <Button
             size="sm"
             variant="ghost"
             data-testid="workspace-delete"
-            className="text-red-400 hover:bg-red-500/10"
+            className="text-danger hover:bg-danger/10"
             onClick={() => setConfirmDelete(true)}
           >
             Delete
@@ -257,14 +257,14 @@ export default function Workspace(): JSX.Element {
         </div>
 
         {assistantOpen ? (
-          <section className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+          <section className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
             <ChatPanel projectId={projectId} activeStage={activeStage} />
           </section>
         ) : null}
       </div>
 
       {terminalOpen ? (
-        <section className="h-64 shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <section className="h-64 shrink-0 overflow-hidden rounded-xl border border-edge bg-surface">
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">
@@ -287,12 +287,12 @@ export default function Workspace(): JSX.Element {
         confirmPhrase={projectQuery.data.name}
         description={
           <>
-            <strong className="font-medium text-slate-100">{projectQuery.data.name}</strong> and
+            <strong className="font-medium text-fg">{projectQuery.data.name}</strong> and
             everything it owns will be permanently removed. This cannot be undone.
           </>
         }
       >
-        <ul className="space-y-1 rounded-lg bg-slate-950/60 px-3 py-2.5 text-xs text-slate-400">
+        <ul className="space-y-1 rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-xs text-fg-muted">
           <li>· Sandbox container and its workspace volume</li>
           <li>· The project&apos;s application database and all its data</li>
           <li>· Conversation, designs, requirements, tests and deployments</li>

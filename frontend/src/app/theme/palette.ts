@@ -49,6 +49,8 @@ export interface ThemePalette {
   brand: string;
   /** Hover shift for brand fills. */
   brandHover: string;
+  /** Brand-colored TEXT — tuned per theme so links/active labels stay AA on surfaces. */
+  brandText: string;
   /** Violet secondary accent — used sparingly (gradients, highlights). */
   accent: string;
 
@@ -76,6 +78,7 @@ export const dark: ThemePalette = {
 
   brand: '#5a5cf0',
   brandHover: '#4f52ea',
+  brandText: '#a5b4fc',
   accent: '#8b5cf6',
 
   success: '#34d399',
@@ -102,6 +105,7 @@ export const light: ThemePalette = {
 
   brand: '#4f46e5',
   brandHover: '#4338ca',
+  brandText: '#4338ca',
   accent: '#7c3aed',
 
   success: '#047857',
@@ -135,6 +139,7 @@ export const CSS_VAR: Record<keyof ThemePalette, string> = {
   edgeStrong: '--ff-edge-strong',
   brand: '--ff-brand',
   brandHover: '--ff-brand-hover',
+  brandText: '--ff-brand-text',
   accent: '--ff-accent',
   success: '--ff-success',
   warning: '--ff-warning',

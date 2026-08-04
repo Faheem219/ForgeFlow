@@ -45,7 +45,7 @@ export function CollectionsList({
               aria-current={active ? 'true' : undefined}
               onClick={() => onSelect(collection.name)}
               className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition ${
-                active ? 'bg-brand-600/20 text-brand-200' : 'text-slate-300 hover:bg-slate-800'
+                active ? 'bg-brand/15 text-brand-text' : 'text-fg-muted hover:bg-surface-raised'
               }`}
             >
               <span className="truncate font-mono text-xs">{collection.name}</span>

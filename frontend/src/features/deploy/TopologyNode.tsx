@@ -18,11 +18,11 @@ export function TopologyNode({ data }: { data: TopologyNodeView }): JSX.Element 
   return (
     <div
       data-testid={`topology-node-${data.id}`}
-      className="w-52 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-left shadow-lg"
+      className="w-52 rounded-xl border border-edge-strong bg-surface-overlay px-3 py-2 text-left shadow-lg"
     >
-      <Handle type="target" position={Position.Left} className="!bg-slate-600" />
+      <Handle type="target" position={Position.Left} className="!bg-fg-faint" />
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-slate-100">
+        <span className="text-sm font-medium text-fg">
           <span aria-hidden className="mr-1.5">
             {KIND_GLYPH[data.kind]}
           </span>
@@ -32,13 +32,13 @@ export function TopologyNode({ data }: { data: TopologyNodeView }): JSX.Element 
           <Badge tone={NODE_STATUS_TONES[status]}>{NODE_STATUS_LABELS[status]}</Badge>
         </span>
       </div>
-      <p className="mt-1 truncate text-xs text-slate-500">{data.provider}</p>
+      <p className="mt-1 truncate text-xs text-fg-subtle">{data.provider}</p>
       {data.liveUrl ? (
-        <p className="mt-1 truncate text-xs text-slate-400" title={data.liveUrl}>
+        <p className="mt-1 truncate text-xs text-fg-muted" title={data.liveUrl}>
           {data.liveUrl}
         </p>
       ) : null}
-      <Handle type="source" position={Position.Right} className="!bg-slate-600" />
+      <Handle type="source" position={Position.Right} className="!bg-fg-faint" />
     </div>
   );
 }

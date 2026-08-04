@@ -116,14 +116,14 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
   );
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-      <aside className="w-56 shrink-0 overflow-auto border-r border-slate-800 py-2">
+    <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-edge bg-surface">
+      <aside className="w-56 shrink-0 overflow-auto border-r border-edge py-2">
         <div className="flex items-center justify-between px-3 pb-2">
-          <span className="text-xs uppercase tracking-wide text-slate-500">Files</span>
+          <span className="text-xs uppercase tracking-wide text-fg-subtle">Files</span>
           {treeQuery.isFetching ? <Spinner /> : null}
         </div>
         {treeQuery.isError ? (
-          <p className="px-3 text-sm text-slate-500">
+          <p className="px-3 text-sm text-fg-subtle">
             Workspace unavailable — the sandbox may still be starting.
           </p>
         ) : (
@@ -146,11 +146,11 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
 
         {activeFile && active ? (
           <>
-            <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1">
-              <span className="truncate text-xs text-slate-500">{active}</span>
+            <div className="flex items-center justify-between border-b border-edge px-3 py-1">
+              <span className="truncate text-xs text-fg-subtle">{active}</span>
               <div className="flex items-center gap-2">
                 {activeFile.generating ? (
-                  <span className="text-xs text-amber-400" data-testid="generating-banner">
+                  <span className="text-xs text-warning" data-testid="generating-banner">
                     generating… (read-only)
                   </span>
                 ) : null}
@@ -190,8 +190,8 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
         title="File changed on the server"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
-            <span className="font-medium text-slate-100">{conflict}</span> was written in the
+          <p className="text-sm text-fg-muted">
+            <span className="font-medium text-fg">{conflict}</span> was written in the
             sandbox while you had unsaved changes. Nothing has been overwritten.
           </p>
           <div className="flex justify-end gap-2">

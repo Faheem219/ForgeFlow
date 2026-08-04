@@ -12,6 +12,8 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
+import { dark, light, type ResolvedTheme } from '../../app/theme/palette';
+
 const environment: monaco.Environment = {
   getWorker(_moduleId: string, label: string): Worker {
     switch (label) {
@@ -38,8 +40,16 @@ const environment: monaco.Environment = {
 
 loader.config({ monaco });
 
-/** Dark theme matching the workspace palette (slate/indigo). */
+// Monaco renders to canvas and cannot read CSS custom properties, so both themes are defined up
+// front from palette.ts (the same source the CSS variables come from) and switching is just
+// `setTheme` — no re-registration, nothing to drift.
 export const FORGEFLOW_DARK = 'forgeflow-dark';
+export const FORGEFLOW_LIGHT = 'forgeflow-light';
+
+export const MONACO_THEMES: Record<ResolvedTheme, string> = {
+  dark: FORGEFLOW_DARK,
+  light: FORGEFLOW_LIGHT,
+};
 
 loader.init().then((instance) => {
   instance.editor.defineTheme(FORGEFLOW_DARK, {
@@ -47,12 +57,25 @@ loader.init().then((instance) => {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#0f172a', // slate-900
-      'editorGutter.background': '#0f172a',
-      'editorLineNumber.foreground': '#475569',
-      'editor.lineHighlightBackground': '#1e293b',
-      'editorCursor.foreground': '#a5b4fc', // indigo-300
-      'editor.selectionBackground': '#334155',
+      'editor.background': dark.sunken,
+      'editorGutter.background': dark.sunken,
+      'editorLineNumber.foreground': dark.fgFaint,
+      'editor.lineHighlightBackground': dark.raised,
+      'editorCursor.foreground': dark.brandText,
+      'editor.selectionBackground': dark.edgeStrong,
+    },
+  });
+  instance.editor.defineTheme(FORGEFLOW_LIGHT, {
+    base: 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': light.surface,
+      'editorGutter.background': light.surface,
+      'editorLineNumber.foreground': light.fgFaint,
+      'editor.lineHighlightBackground': light.raised,
+      'editorCursor.foreground': light.brand,
+      'editor.selectionBackground': light.edge,
     },
   });
 });

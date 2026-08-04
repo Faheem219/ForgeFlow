@@ -168,14 +168,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-fg">
           Build
           <span data-testid="build-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
           {busy ? (
             <span
-              className="flex items-center gap-1 text-xs text-slate-400"
+              className="flex items-center gap-1 text-xs text-fg-muted"
               data-testid="build-progress"
             >
               <Spinner />
@@ -226,7 +226,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               {menuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
                 >
                   <button
                     type="button"
@@ -240,10 +240,10 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                         payload: { fresh: true },
                       });
                     }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
+                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised"
                   >
                     Rebuild from scratch
-                    <span className="mt-0.5 block text-[11px] text-slate-500">
+                    <span className="mt-0.5 block text-[11px] text-fg-subtle">
                       Ignore existing feature code and regenerate it.
                     </span>
                   </button>
@@ -258,20 +258,20 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           for a long time and then dumps a dozen tabs at once. */}
       {busy || liveFiles.length > 0 ? (
         <section
-          className="shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
           data-testid="build-activity"
         >
           <div className="flex items-center gap-2 px-4 py-2">
             {busy ? <Spinner size="sm" /> : null}
-            <span className="text-xs font-medium text-slate-300" data-testid="build-activity-label">
+            <span className="text-xs font-medium text-fg-muted" data-testid="build-activity-label">
               {busy ? `${activityLabel || 'Starting the build'}…` : 'Last run'}
             </span>
             {busy && activityTarget ? (
-              <span className="truncate font-mono text-[11px] text-slate-500">
+              <span className="truncate font-mono text-[11px] text-fg-subtle">
                 {activityTarget}
               </span>
             ) : null}
-            <span className="text-xs text-slate-500" data-testid="build-file-count">
+            <span className="text-xs text-fg-subtle" data-testid="build-file-count">
               {liveFiles.length} file{liveFiles.length === 1 ? '' : 's'} written
             </span>
             {busy ? (
@@ -281,7 +281,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                     key={s}
                     title={STEP_LABELS[s]}
                     className={`h-1.5 w-6 rounded-full ${
-                      s === latestStep ? 'bg-brand-500' : 'bg-slate-800'
+                      s === latestStep ? 'bg-brand' : 'bg-surface-raised'
                     }`}
                   />
                 ))}
@@ -290,18 +290,18 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           </div>
           {liveFiles.length > 0 ? (
             <ul
-              className="max-h-24 space-y-0.5 overflow-auto border-t border-slate-800 px-4 py-2"
+              className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
               data-testid="build-file-list"
             >
               {liveFiles.map((path) => (
                 <li key={path} className="flex items-center gap-2 font-mono text-[11px]">
-                  <span className="text-emerald-400" aria-hidden>
+                  <span className="text-success" aria-hidden>
                     +
                   </span>
                   <button
                     type="button"
                     onClick={() => void openGeneratedFile(projectId, path)}
-                    className="truncate text-slate-400 hover:text-slate-100 hover:underline"
+                    className="truncate text-fg-muted hover:text-fg hover:underline"
                   >
                     {path}
                   </button>
@@ -315,7 +315,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
       {/* Compact, collapsible build report — a horizontal strip, so it never steals editor width. */}
       {report ? (
         <section
-          className="shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
           data-testid="build-report"
         >
           <button
@@ -323,9 +323,9 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
             aria-expanded={reportOpen}
             data-testid="build-report-toggle"
             onClick={() => setReportOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-800/40"
+            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-surface-raised"
           >
-            <span className="text-xs uppercase tracking-wide text-slate-500">Report</span>
+            <span className="text-xs uppercase tracking-wide text-fg-subtle">Report</span>
             <span data-testid="build-boot-status">
               <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'}>{report.boot_status}</Badge>
             </span>
@@ -334,35 +334,35 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                 tests {report.tests_passed ? 'passed' : 'failed'}
               </Badge>
             ) : null}
-            <span className="truncate text-xs text-slate-400">
+            <span className="truncate text-xs text-fg-muted">
               {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'}{' '}
               changed
               {report.commit ? (
-                <span className="ml-2 font-mono text-slate-500">{report.commit.slice(0, 8)}</span>
+                <span className="ml-2 font-mono text-fg-subtle">{report.commit.slice(0, 8)}</span>
               ) : null}
             </span>
-            <span className="ml-auto text-slate-500" aria-hidden>
+            <span className="ml-auto text-fg-subtle" aria-hidden>
               {reportOpen ? '▾' : '▸'}
             </span>
           </button>
           {reportOpen ? (
-            <div className="space-y-2 border-t border-slate-800 px-4 py-3 text-sm">
-              {report.summary ? <p className="text-slate-300">{report.summary}</p> : null}
+            <div className="space-y-2 border-t border-edge px-4 py-3 text-sm">
+              {report.summary ? <p className="text-fg-muted">{report.summary}</p> : null}
               {report.features_built.length > 0 ? (
-                <p className="text-slate-400">
-                  <span className="text-slate-500">Features:</span>{' '}
+                <p className="text-fg-muted">
+                  <span className="text-fg-subtle">Features:</span>{' '}
                   {report.features_built.join(', ')}
                 </p>
               ) : null}
               {report.follow_ups.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-300/80">
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning">
                   {report.follow_ups.map((f) => (
                     <li key={f}>{f}</li>
                   ))}
                 </ul>
               ) : null}
               {report.notes.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-500">
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-fg-subtle">
                   {report.notes.map((n) => (
                     <li key={n}>{n}</li>
                   ))}
@@ -373,10 +373,10 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
         </section>
       ) : (
         <p
-          className="shrink-0 rounded-xl border border-dashed border-slate-800 px-4 py-2 text-xs text-slate-500"
+          className="shrink-0 rounded-xl border border-dashed border-edge px-4 py-2 text-xs text-fg-subtle"
           data-testid="build-empty"
         >
-          No build yet — press <span className="font-medium text-slate-300">Build</span> to generate
+          No build yet — press <span className="font-medium text-fg-muted">Build</span> to generate
           the app onto the skeleton, then refine it from the Assistant.
         </p>
       )}

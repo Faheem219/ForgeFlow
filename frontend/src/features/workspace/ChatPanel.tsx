@@ -11,10 +11,10 @@ import { listMessages, submitIntent } from './api';
 import { STAGE_LABELS } from './stageMeta';
 
 const ROLE_STYLES: Record<MessageRole, string> = {
-  user: 'bg-brand-600/20 text-brand-100 self-end',
-  assistant: 'bg-slate-800 text-slate-100 self-start',
-  system: 'bg-slate-800/50 text-slate-400 self-start italic',
-  tool: 'bg-slate-800/50 text-emerald-300 self-start font-mono text-xs',
+  user: 'bg-brand/15 text-fg self-end',
+  assistant: 'bg-surface-raised text-fg self-start',
+  system: 'bg-surface-raised text-fg-muted self-start italic',
+  tool: 'bg-surface-raised text-success self-start font-mono text-xs',
 };
 
 interface ChatPanelProps {
@@ -90,7 +90,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     // `min-h-0` all the way down is what lets the transcript scroll instead of growing the column
     // and shoving the composer out of view — the failure this layout previously had.
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-slate-800 px-4 py-2 text-xs uppercase tracking-wide text-slate-500">
+      <div className="shrink-0 border-b border-edge px-4 py-2 text-xs uppercase tracking-wide text-fg-subtle">
         {STAGE_LABELS[activeStage]} conversation
       </div>
 
@@ -99,7 +99,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-4"
       >
         {messages.length === 0 && !streamed ? (
-          <p className="text-sm text-slate-500">No messages yet. Say something to get started.</p>
+          <p className="text-sm text-fg-subtle">No messages yet. Say something to get started.</p>
         ) : (
           messages.map((m) => (
             <div
@@ -114,14 +114,14 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         {/* The agent's in-flight answer lives in the transcript (not a cramped strip below it), so
             a long build plan simply scrolls like any other message. */}
         {streamed ? (
-          <div className="max-w-[85%] self-start rounded-lg bg-slate-800/70 px-3 py-2">
-            <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+          <div className="max-w-[85%] self-start rounded-lg bg-surface-raised px-3 py-2">
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-fg-subtle">
               <Spinner size="sm" />
               streaming
             </p>
             <p
               data-testid="chat-stream"
-              className="whitespace-pre-wrap break-words text-sm text-slate-200"
+              className="whitespace-pre-wrap break-words text-sm text-fg"
             >
               {streamed}
             </p>
@@ -131,16 +131,16 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
       </div>
 
       {activity.length > 0 ? (
-        <div data-testid="chat-activity" className="shrink-0 border-t border-slate-800">
+        <div data-testid="chat-activity" className="shrink-0 border-t border-edge">
           <button
             type="button"
             aria-expanded={activityOpen}
             data-testid="chat-activity-toggle"
             onClick={() => setActivityOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs uppercase tracking-wide text-slate-500 hover:bg-slate-800/40"
+            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs uppercase tracking-wide text-fg-subtle hover:bg-surface-raised"
           >
             Activity
-            <span className="rounded-full bg-slate-800 px-1.5 text-[10px] text-slate-400">
+            <span className="rounded-full bg-surface-raised px-1.5 text-[10px] text-fg-muted">
               {activity.length}
             </span>
             <span className="ml-auto" aria-hidden>
@@ -150,8 +150,8 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
           {activityOpen ? (
             <ul className="max-h-24 space-y-0.5 overflow-auto px-4 pb-2">
               {activity.slice(-8).map((e) => (
-                <li key={`${e.project_id}-${e.seq}`} className="text-xs text-slate-500">
-                  <span className="text-slate-400">{e.event}</span>
+                <li key={`${e.project_id}-${e.seq}`} className="text-xs text-fg-subtle">
+                  <span className="text-fg-muted">{e.event}</span>
                   {e.stage ? ` · ${e.stage}` : ''}
                 </li>
               ))}
@@ -162,7 +162,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
 
       <form
         onSubmit={onSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-800 p-3"
+        className="flex shrink-0 items-end gap-2 border-t border-edge p-3"
       >
         <textarea
           aria-label="Message"
@@ -170,7 +170,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
           onChange={(e) => setDraft(e.target.value)}
           placeholder={`Refine ${STAGE_LABELS[activeStage]}…`}
           rows={2}
-          className="flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500"
+          className="flex-1 resize-none rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand"
         />
         <Button type="submit" loading={send.isPending} disabled={!draft.trim()}>
           Send

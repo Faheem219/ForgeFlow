@@ -136,7 +136,7 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span className="flex items-center gap-2 text-sm font-medium text-fg">
           Data
           {/* Scope, always visible — this is live application data. */}
           {info ? (
@@ -144,7 +144,7 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
               <Badge tone={info.mode === 'byo' ? 'warning' : 'neutral'}>
                 {info.mode === 'byo' ? 'your database' : 'project database'}
               </Badge>
-              <code className="font-mono text-[11px] text-slate-500">{info.db_name}</code>
+              <code className="font-mono text-[11px] text-fg-subtle">{info.db_name}</code>
             </span>
           ) : null}
         </span>
@@ -162,8 +162,8 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
       </header>
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <aside className="min-h-0 overflow-auto rounded-xl border border-slate-800 bg-slate-900/40 p-2">
-          <h4 className="mb-1 px-2 text-[11px] uppercase tracking-wide text-slate-500">
+        <aside className="min-h-0 overflow-auto rounded-xl border border-edge bg-surface p-2">
+          <h4 className="mb-1 px-2 text-[11px] uppercase tracking-wide text-fg-subtle">
             Collections
           </h4>
           <CollectionsList
@@ -174,7 +174,7 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
           />
         </aside>
 
-        <section className="min-h-0 space-y-3 overflow-auto rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+        <section className="min-h-0 space-y-3 overflow-auto rounded-xl border border-edge bg-surface p-3">
           {collection ? (
             <>
               <FilterBar
@@ -209,7 +209,7 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
               />
             </>
           ) : (
-            <p className="text-sm text-slate-500">Select a collection to browse its documents.</p>
+            <p className="text-sm text-fg-subtle">Select a collection to browse its documents.</p>
           )}
         </section>
       </div>

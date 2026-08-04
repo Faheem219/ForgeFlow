@@ -42,7 +42,7 @@ function StageRow({
     <li className="relative">
       <div
         className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
-          active ? 'border-brand-500 bg-brand-600/10' : 'border-slate-800 hover:bg-slate-800/50'
+          active ? 'border-brand bg-brand/10' : 'border-edge hover:bg-surface-raised'
         }`}
       >
         {/* Name and status stack rather than compete for one line — at rail width the pair does not
@@ -53,7 +53,7 @@ function StageRow({
           onClick={() => onSelect(stage)}
           className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
         >
-          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-sm text-slate-100">
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-sm text-fg">
             {lockedBy ? (
               <span
                 title={`Requires ${STAGE_LABELS[lockedBy]} to be complete`}
@@ -72,14 +72,14 @@ function StageRow({
           aria-label={`Actions for ${STAGE_LABELS[stage]}`}
           data-testid={`stage-menu-${stage}`}
           onClick={() => setMenuOpen((v) => !v)}
-          className="rounded p-1 text-slate-400 hover:bg-slate-700"
+          className="rounded p-1 text-fg-muted hover:bg-edge-strong"
         >
           ⋯
         </button>
       </div>
 
       {lockedBy ? (
-        <p className="px-3 pt-1 text-xs text-amber-300/80">
+        <p className="px-3 pt-1 text-xs text-warning">
           Locked until {STAGE_LABELS[lockedBy]} is complete
         </p>
       ) : null}
@@ -87,7 +87,7 @@ function StageRow({
       {menuOpen ? (
         <div
           role="menu"
-          className="absolute right-0 z-10 mt-1 w-32 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl"
+          className="absolute right-0 z-10 mt-1 w-32 rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
         >
           {ACTIONS.map((action) => (
             <button
@@ -100,7 +100,7 @@ function StageRow({
                 setMenuOpen(false);
                 onAction(stage, action);
               }}
-              className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised disabled:opacity-50"
             >
               {ACTION_LABELS[action]}
             </button>

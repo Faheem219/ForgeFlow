@@ -33,7 +33,7 @@ export default function RealtimeDemo(): JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-slate-100">Realtime demo</h1>
+        <h1 className="text-xl font-semibold text-fg">Realtime demo</h1>
         <Badge tone={tone}>{status}</Badge>
       </div>
 
@@ -48,11 +48,11 @@ export default function RealtimeDemo(): JSX.Element {
 
       <Panel title={`Events (${events.length})`}>
         {events.length === 0 ? (
-          <p className="text-sm text-slate-400">No events yet. Start the stream above.</p>
+          <p className="text-sm text-fg-muted">No events yet. Start the stream above.</p>
         ) : (
           <ul className="space-y-1">
             {events.map((e) => (
-              <li key={e.seq} className="font-mono text-xs text-slate-300">
+              <li key={e.seq} className="font-mono text-xs text-fg-muted">
                 #{e.seq} {e.event} — {JSON.stringify(e.payload)}
               </li>
             ))}

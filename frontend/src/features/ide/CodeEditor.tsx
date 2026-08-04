@@ -1,8 +1,9 @@
 import Editor from '@monaco-editor/react';
 
 import { Spinner } from '../../components/ui';
+import { useThemeStore } from '../../lib/stores/themeStore';
 import { languageForPath } from './languages';
-import { FORGEFLOW_DARK } from './monacoSetup';
+import { MONACO_THEMES } from './monacoSetup';
 
 interface CodeEditorProps {
   path: string;
@@ -12,6 +13,9 @@ interface CodeEditorProps {
 }
 
 export function CodeEditor({ path, value, readOnly, onChange }: CodeEditorProps): JSX.Element {
+  // Follow the app theme live — both monaco themes are registered up front (monacoSetup.ts).
+  const resolved = useThemeStore((s) => s.resolved);
+
   return (
     <Editor
       // Keying by path gives each file its own model, so undo history and view state don't leak
@@ -19,7 +23,7 @@ export function CodeEditor({ path, value, readOnly, onChange }: CodeEditorProps)
       key={path}
       path={path}
       language={languageForPath(path)}
-      theme={FORGEFLOW_DARK}
+      theme={MONACO_THEMES[resolved]}
       value={value}
       onChange={(next) => onChange(next ?? '')}
       loading={<Spinner />}

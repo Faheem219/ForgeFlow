@@ -91,7 +91,7 @@ export function DesignPreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="design-screens">
-      <div className="flex flex-wrap gap-1 border-b border-slate-800 bg-slate-900/60 px-2 py-1.5">
+      <div className="flex flex-wrap gap-1 border-b border-edge bg-surface px-2 py-1.5">
         {screens.map((screen) => (
           <button
             key={screen.id}
@@ -101,8 +101,8 @@ export function DesignPreview({
             onClick={() => setActiveId(screen.id)}
             className={`max-w-[16rem] truncate rounded-md px-2 py-1 text-xs ${
               screen.id === active?.id
-                ? 'bg-brand-600/25 text-brand-200'
-                : 'text-slate-400 hover:bg-slate-800'
+                ? 'bg-brand/20 text-brand-text'
+                : 'text-fg-muted hover:bg-surface-raised'
             }`}
           >
             {screen.title || screen.id}

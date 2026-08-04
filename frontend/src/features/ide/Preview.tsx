@@ -59,10 +59,10 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
   const running = info?.fe_status === 'running';
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-edge px-3 py-2">
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-500">Preview</span>
+          <span className="text-fg-subtle">Preview</span>
           <span data-testid="fe-status">
             <Badge tone={TONES[info?.fe_status ?? 'stopped']}>
               FE {info?.fe_status ?? 'stopped'}
@@ -133,7 +133,7 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
               target="_blank"
               rel="noreferrer"
               data-testid="preview-open-tab"
-              className="rounded-lg px-2 py-1 text-xs text-brand-300 hover:bg-slate-800"
+              className="rounded-lg px-2 py-1 text-xs text-brand-text hover:bg-surface-raised"
             >
               Open ↗
             </a>
@@ -144,7 +144,7 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
       {info?.warning ? (
         <p
           data-testid="preview-warning"
-          className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+          className="shrink-0 border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
         >
           {info.warning}
         </p>
@@ -177,8 +177,8 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
       </div>
 
       {logsOpen ? (
-        <section className="h-40 shrink-0 border-t border-slate-800" data-testid="preview-logs">
-          <div className="flex items-center gap-1 border-b border-slate-800 px-2 py-1">
+        <section className="h-40 shrink-0 border-t border-edge" data-testid="preview-logs">
+          <div className="flex items-center gap-1 border-b border-edge px-2 py-1">
             {(['frontend', 'backend'] as LogTab[]).map((tab) => (
               <button
                 key={tab}
@@ -186,7 +186,7 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
                 onClick={() => setLogTab(tab)}
                 data-testid={`log-tab-${tab}`}
                 className={`rounded px-2 py-0.5 text-xs ${
-                  logTab === tab ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                  logTab === tab ? 'bg-surface-raised text-fg' : 'text-fg-muted'
                 }`}
               >
                 {tab}
@@ -195,7 +195,7 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
           </div>
           <pre
             data-testid="log-output"
-            className="h-[calc(100%-1.75rem)] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-xs text-slate-300"
+            className="h-[calc(100%-1.75rem)] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-xs text-fg-muted"
           >
             {logs[logTab] || `No ${logTab} output yet.`}
           </pre>

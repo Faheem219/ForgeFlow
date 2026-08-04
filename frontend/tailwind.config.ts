@@ -38,26 +38,9 @@ export default {
         brand: {
           DEFAULT: token('brand'),
           hover: token('brandHover'),
-          // Legacy numbered scale — still referenced by unswept components; the sweep
-          // (slate-* → tokens) deletes these.
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
+          text: token('brandText'),
         },
-        accent: {
-          DEFAULT: token('accent'),
-          // Legacy numbered scale — same story as brand.
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-        },
+        accent: token('accent'),
         success: token('success'),
         warning: token('warning'),
         danger: token('danger'),

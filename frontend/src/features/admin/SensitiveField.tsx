@@ -33,7 +33,7 @@ export function SensitiveField({
 
   const status = (
     <span className="flex items-center gap-2">
-      <span data-testid="sensitive-status" className="font-mono text-sm text-slate-400">
+      <span data-testid="sensitive-status" className="font-mono text-sm text-fg-muted">
         {isSet ? '••••••' : 'not set'}
       </span>
       <Badge tone={isSet ? 'success' : 'neutral'}>{isSet ? 'stored' : 'unset'}</Badge>
@@ -44,7 +44,7 @@ export function SensitiveField({
     return (
       <div className="space-y-1" data-testid="sensitive-field">
         {status}
-        {note ? <p className="text-xs text-slate-500">{note}</p> : null}
+        {note ? <p className="text-xs text-fg-subtle">{note}</p> : null}
       </div>
     );
   }
@@ -58,11 +58,11 @@ export function SensitiveField({
           data-testid="sensitive-edit"
           disabled={busy}
           onClick={() => setEditing(true)}
-          className="rounded px-2 py-1 text-xs text-brand-300 hover:bg-slate-800 disabled:opacity-50"
+          className="rounded px-2 py-1 text-xs text-brand-text hover:bg-surface-raised disabled:opacity-50"
         >
           {busy ? 'Saving…' : isSet ? 'Replace' : 'Set'}
         </button>
-        {note ? <span className="text-xs text-slate-500">{note}</span> : null}
+        {note ? <span className="text-xs text-fg-subtle">{note}</span> : null}
       </div>
     );
   }
@@ -86,13 +86,13 @@ export function SensitiveField({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder="enter new value"
-        className="w-48 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+        className="w-48 rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
       />
       <button
         type="submit"
         data-testid="sensitive-save"
         disabled={!draft}
-        className="rounded bg-brand-600 px-2 py-1 text-xs text-white disabled:opacity-50"
+        className="rounded bg-brand px-2 py-1 text-xs text-white disabled:opacity-50"
       >
         Save
       </button>
@@ -102,7 +102,7 @@ export function SensitiveField({
           setDraft('');
           setEditing(false);
         }}
-        className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
+        className="rounded px-2 py-1 text-xs text-fg-muted hover:bg-surface-raised"
       >
         Cancel
       </button>
