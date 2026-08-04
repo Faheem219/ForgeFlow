@@ -12,7 +12,6 @@ from app.orchestrator.messages import MessageService
 from app.orchestrator.schemas import ArtifactPublic, MessagePublic
 from app.projects.schemas import (
     ProjectCreateRequest,
-    ProjectDeleteResponse,
     ProjectPublic,
     ProjectRenameRequest,
     StageStatePublic,
@@ -58,18 +57,11 @@ async def rename_project(
     return ProjectPublic.from_project(project)
 
 
-@router.delete("/{project_id}", response_model=ProjectDeleteResponse)
+@router.delete("/{project_id}", status_code=204)
 async def delete_project(
     project_id: str, user_id: PydanticObjectId = Depends(get_current_user_id)
-) -> ProjectDeleteResponse:
-    """Delete a project and everything it owns: sandbox, app database, and all metadata.
-
-    Returns a report rather than a bare ``204`` — external teardown fails soft, and a caller that
-    cannot see *what* was left behind has no way to tell the user.
-    """
-    pid = parse_object_id(project_id)
-    report = await ProjectService().delete(pid, user_id)
-    return ProjectDeleteResponse.of(str(pid), report)
+) -> None:
+    await ProjectService().delete(parse_object_id(project_id), user_id)
 
 
 @router.get("/{project_id}/stages", response_model=list[StageStatePublic])

@@ -59,31 +59,33 @@ export function Escalation({
 
   return (
     <section
-      className="space-y-3 rounded-xl border border-warning-border/50 bg-amber-950/20 p-3"
+      className="space-y-3 rounded-xl border border-amber-700/50 bg-amber-950/20 p-3"
       data-testid="repair-escalation"
     >
       <header className="flex items-center gap-2">
         <Badge tone="warning">Needs you</Badge>
-        <span className="text-sm font-medium text-warning" data-testid="escalation-reason">
+        <span className="text-sm font-medium text-amber-200" data-testid="escalation-reason">
           {REASON_LABELS[escalation.reason] ?? escalation.reason}
         </span>
       </header>
 
-      <p className="text-sm text-secondary" data-testid="escalation-summary">
+      <p className="text-sm text-slate-300" data-testid="escalation-summary">
         {escalation.summary}
       </p>
 
       {escalation.failing_tests.length > 0 ? (
         <div className="space-y-1">
-          <h4 className="text-xs uppercase tracking-wide text-faint">Still failing</h4>
+          <h4 className="text-xs uppercase tracking-wide text-slate-500">Still failing</h4>
           <ul className="space-y-1" data-testid="escalation-failing">
             {escalation.failing_tests.map((t) => (
-              <li key={`${t.file}::${t.name}`} className="text-xs text-secondary">
-                <span className="text-primary">{t.name}</span>
+              <li key={`${t.file}::${t.name}`} className="text-xs text-slate-300">
+                <span className="text-slate-200">{t.name}</span>
                 {t.criterion_id ? (
-                  <span className="ml-1 font-mono text-[11px] text-faint">{t.criterion_id}</span>
+                  <span className="ml-1 font-mono text-[11px] text-slate-500">
+                    {t.criterion_id}
+                  </span>
                 ) : null}
-                {t.message ? <span className="block text-faint">{t.message}</span> : null}
+                {t.message ? <span className="block text-slate-500">{t.message}</span> : null}
               </li>
             ))}
           </ul>
@@ -92,12 +94,12 @@ export function Escalation({
 
       {escalation.diffs_tried.length > 0 ? (
         <div className="space-y-1">
-          <h4 className="text-xs uppercase tracking-wide text-faint">
+          <h4 className="text-xs uppercase tracking-wide text-slate-500">
             Already tried ({escalation.diffs_tried.length})
           </h4>
           <ul className="space-y-0.5" data-testid="escalation-diffs">
             {escalation.diffs_tried.map((d) => (
-              <li key={d.iteration} className="font-mono text-[11px] text-faint">
+              <li key={d.iteration} className="font-mono text-[11px] text-slate-500">
                 #{d.iteration} {d.outcome ?? '—'} · {d.target_files.join(', ') || 'no files'}
               </li>
             ))}
@@ -112,7 +114,7 @@ export function Escalation({
           if (guidance.trim()) resume.mutate();
         }}
       >
-        <label className="block text-xs uppercase tracking-wide text-faint" htmlFor="guidance">
+        <label className="block text-xs uppercase tracking-wide text-slate-500" htmlFor="guidance">
           Your guidance
         </label>
         <textarea
@@ -124,7 +126,7 @@ export function Escalation({
           onChange={(e) => setGuidance(e.target.value)}
           placeholder={escalation.resume.hint}
           disabled={resume.isPending}
-          className="w-full rounded-lg border border-line bg-inset px-3 py-2 text-sm text-primary outline-none focus:border-brand disabled:opacity-50"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500 disabled:opacity-50"
         />
         <Button
           type="submit"

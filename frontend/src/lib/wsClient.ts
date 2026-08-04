@@ -54,8 +54,6 @@ export class RealtimeClient {
       this.setStatus('open');
     };
     ws.onmessage = (evt) => {
-      // A socket that outlived `close()` must not deliver events to a torn-down subscriber.
-      if (!this.shouldRun) return;
       let data: RealtimeEvent;
       try {
         data = JSON.parse(evt.data as string) as RealtimeEvent;
@@ -100,34 +98,11 @@ export class RealtimeClient {
     };
   }
 
-  /**
-   * Tear down for good.
-   *
-   * Order matters: stop the reconnect loop FIRST (otherwise `onclose` re-arms the timer we are
-   * about to clear), then detach the socket's handlers so a close/error still in flight cannot
-   * re-enter, then drop the subscriber sets. Leaving those sets populated is a genuine leak — a
-   * replaced client keeps the previous component's closures alive and keeps feeding them, which is
-   * how stale streamed text survives a project switch.
-   */
   close(): void {
     this.shouldRun = false;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    const ws = this.ws;
-    this.ws = null;
-    if (ws) {
-      ws.onopen = null;
-      ws.onmessage = null;
-      ws.onclose = null;
-      ws.onerror = null;
-      // CLOSING/CLOSED sockets throw nothing here, but calling close() twice is pointless.
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
-    }
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.ws?.close();
     this.setStatus('closed');
-    this.eventListeners.clear();
-    this.statusListeners.clear();
   }
 
   private setStatus(status: ConnectionStatus): void {

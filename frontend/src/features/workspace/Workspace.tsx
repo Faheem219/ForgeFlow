@@ -1,23 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { ErrorBoundary } from '../../components/ErrorBoundary';
-import {
-  Button,
-  ConfirmDialog,
-  EmptyState,
-  Panel,
-  ResizablePanel,
-  Spinner,
-} from '../../components/ui';
+import { Button, EmptyState, Panel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
-import { PanelKey, useUiStore } from '../../lib/stores/uiStore';
+import { useUiStore } from '../../lib/stores/uiStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentAction, Stage, StageStatus } from '../../lib/types';
-import { useDeleteProject } from '../dashboard/useDeleteProject';
 import { ChatPanel } from './ChatPanel';
 import { StageNavigator } from './StageNavigator';
 import { StagePanel } from './StagePanel';
@@ -59,7 +51,6 @@ export default function Workspace(): JSX.Element {
   const { id } = useParams();
   const projectId = id ?? '';
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const activeStage = useWorkspaceStore((s) => s.activeStage);
   const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
@@ -74,8 +65,6 @@ export default function Workspace(): JSX.Element {
 
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [view, setView] = useState<'stage' | 'data'>('stage');
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const { remove, isDeleting } = useDeleteProject();
 
   const projectQuery = useQuery({
     queryKey: ['project', projectId],
@@ -108,25 +97,14 @@ export default function Workspace(): JSX.Element {
   }, [projectId, connect, disconnect]);
 
   // Any stage.transition (from this client or elsewhere) refreshes the navigator + chat.
-  // `project.deleted` means the project was removed from another tab or session — leave, rather
-  // than sit on a workspace whose every subsequent request will 404.
   useEffect(() => {
     const fresh = events.slice(processed.current);
     processed.current = events.length;
-    const mine = fresh.filter((e) => e.project_id === projectId);
-    if (mine.some((e) => e.event === 'stage.transition')) {
+    if (fresh.some((e) => e.event === 'stage.transition' && e.project_id === projectId)) {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
     }
-    if (mine.some((e) => e.event === 'project.deleted')) {
-      toast({
-        title: 'Project deleted',
-        description: 'This project no longer exists.',
-        variant: 'warning',
-      });
-      navigate('/');
-    }
-  }, [events, projectId, queryClient, navigate]);
+  }, [events, projectId, queryClient]);
 
   const navAction = useMutation({
     mutationFn: (vars: { stage: Stage; action: IntentAction }) =>
@@ -163,7 +141,6 @@ export default function Workspace(): JSX.Element {
       <EmptyState
         title="Project unavailable"
         description="This project could not be loaded. It may have been deleted."
-        action={<Button onClick={() => navigate('/')}>Back to projects</Button>}
       />
     );
   }
@@ -172,14 +149,14 @@ export default function Workspace(): JSX.Element {
     <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-primary">{projectQuery.data.name}</h1>
-          <p className="text-sm text-muted">
+          <h1 className="truncate text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
+          <p className="text-sm text-slate-400">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ToolToggle label="Stages" on={stagesOpen} onClick={toggleStages} testId="toggle-stages" />
-          <span className="mx-1 hidden h-5 w-px bg-elevated sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
           <ToolToggle
             label="Data"
             on={view === 'data'}
@@ -192,40 +169,19 @@ export default function Workspace(): JSX.Element {
             onClick={() => setTerminalOpen((open) => !open)}
             testId="toggle-terminal"
           />
-          <span className="mx-1 hidden h-5 w-px bg-elevated sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
           <ToolToggle
             label="Assistant"
             on={assistantOpen}
             onClick={toggleAssistant}
             testId="toggle-assistant"
           />
-          <span className="mx-1 hidden h-5 w-px bg-subtle sm:block" aria-hidden />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setConfirmDelete(true)}
-            data-testid="workspace-delete"
-            className="hover:text-danger"
-          >
-            Delete
-          </Button>
         </div>
       </header>
 
-      {/*
-        Rails are collapsible AND resizable: the toggle decides whether a rail exists, the splitter
-        decides how wide it is. Widths persist per splitter (uiStore), because a builder is a tool
-        people arrange once and expect to stay arranged.
-      */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-4">
         {stagesOpen ? (
-          <ResizablePanel
-            panelKey={PanelKey.workspaceNav}
-            label="Resize stage navigator"
-            min={200}
-            max={420}
-            className="gap-4 overflow-y-auto"
-          >
+          <div className="flex w-60 shrink-0 flex-col gap-4 overflow-auto">
             <Panel title="Stages">
               <StageNavigator
                 statusByStage={statusByStage}
@@ -246,10 +202,10 @@ export default function Workspace(): JSX.Element {
                 <CostPanel projectId={projectId} />
               </Suspense>
             </Panel>
-          </ResizablePanel>
+          </div>
         ) : null}
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
           {view === 'data' ? (
             <Suspense
               fallback={
@@ -269,66 +225,25 @@ export default function Workspace(): JSX.Element {
         </div>
 
         {assistantOpen ? (
-          <ResizablePanel
-            panelKey={PanelKey.workspaceChat}
-            side="end"
-            label="Resize conversation"
-            min={280}
-            max={560}
-          >
-            <section className="panel flex min-h-0 flex-1 flex-col overflow-hidden">
-              <ChatPanel projectId={projectId} activeStage={activeStage} />
-            </section>
-          </ResizablePanel>
+          <section className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+            <ChatPanel projectId={projectId} activeStage={activeStage} />
+          </section>
         ) : null}
       </div>
 
       {terminalOpen ? (
-        <div className="flex min-h-0 flex-col">
-          <ResizablePanel
-            panelKey={PanelKey.workspaceTerminal}
-            orientation="horizontal"
-            side="end"
-            label="Resize terminal"
-            min={140}
-            max={640}
+        <section className="h-64 shrink-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Spinner />
+              </div>
+            }
           >
-            <section className="panel min-h-0 flex-1 overflow-hidden">
-              <Suspense
-                fallback={
-                  <div className="flex h-full items-center justify-center">
-                    <Spinner />
-                  </div>
-                }
-              >
-                <Terminal projectId={projectId} />
-              </Suspense>
-            </section>
-          </ResizablePanel>
-        </div>
+            <Terminal projectId={projectId} />
+          </Suspense>
+        </section>
       ) : null}
-
-      <ConfirmDialog
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        onConfirm={() => remove(projectId, { onDeleted: () => navigate('/') })}
-        loading={isDeleting}
-        title="Delete project"
-        confirmLabel="Delete project"
-        confirmPhrase={projectQuery.data.name}
-        description={
-          <>
-            <strong className="font-medium text-primary">{projectQuery.data.name}</strong> and
-            everything it owns will be permanently removed. This cannot be undone.
-          </>
-        }
-      >
-        <ul className="panel-inset space-y-1 px-3 py-2.5 text-xs text-muted">
-          <li>· Sandbox container and its workspace volume</li>
-          <li>· The project&apos;s application database and all its data</li>
-          <li>· Conversation, designs, requirements, tests and deployments</li>
-        </ul>
-      </ConfirmDialog>
     </div>
   );
 }

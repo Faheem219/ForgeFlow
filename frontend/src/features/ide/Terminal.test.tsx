@@ -9,9 +9,6 @@ import { Terminal } from './Terminal';
 const term = {
   cols: 80,
   rows: 24,
-  // Real xterm exposes a mutable `options` bag; the component writes `options.theme` to repaint
-  // on a theme change without tearing down the session (and its scrollback).
-  options: {} as Record<string, unknown>,
   loadAddon: vi.fn(),
   open: vi.fn(),
   write: vi.fn(),

@@ -1,70 +1,93 @@
-import { useEffect } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
-import { Kbd, Tooltip } from '../../components/ui';
-import {
-  IconAdmin,
-  IconDashboard,
-  IconEval,
-  IconLogout,
-  IconSearch,
-  IconSettings,
-  IconSidebar,
-} from '../../components/ui/Icons';
-import CommandPalette from '../../features/command/CommandPalette';
+import { Button } from '../../components/ui';
 import { useAuthStore } from '../../lib/stores/authStore';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
-import { watchSystemTheme } from '../../lib/stores/themeStore';
 import { useUiStore } from '../../lib/stores/uiStore';
-import { ThemeToggle } from './ThemeToggle';
 
-/**
- * Application chrome.
- *
- * The sidebar is a fixed rail, not a floating card: chrome that reads as *part of the window*
- * rather than as another content box is what separates a tool from a marketing page. The active
- * item is marked by a 2px spine on the rail edge — a hairline that follows the pointer's mental
- * model of "you are here" without lighting up a whole pill.
- */
+const rtLabel: Record<string, string> = {
+  open: 'live',
+  connecting: 'connecting',
+  closed: 'offline',
+};
+const rtDot: Record<string, string> = {
+  open: 'bg-emerald-400',
+  connecting: 'bg-amber-400 animate-pulse',
+  closed: 'bg-slate-600',
+};
+
+/** Inline stroke icons — the sidebar collapses to icons only, so each nav item needs a real one. */
+function Icon({ path }: { path: ReactNode }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-[18px] w-[18px] shrink-0"
+      aria-hidden
+    >
+      {path}
+    </svg>
+  );
+}
+
+const ICONS: Record<string, ReactNode> = {
+  dashboard: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  eval: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="M7 15l4-5 3 3 5-7" />
+    </>
+  ),
+  settings: (
+    <>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+      <circle cx="9" cy="6" r="2" />
+      <circle cx="15" cy="12" r="2" />
+      <circle cx="8" cy="18" r="2" />
+    </>
+  ),
+  admin: (
+    <>
+      <path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6z" />
+      <path d="M9.5 12l1.8 1.8L15 10" />
+    </>
+  ),
+};
 
 interface NavItem {
   to: string;
   label: string;
   end: boolean;
-  icon: (props: { size?: number }) => JSX.Element;
+  icon: string;
   adminOnly?: boolean;
 }
 
 const nav: NavItem[] = [
-  { to: '/', label: 'Projects', end: true, icon: IconDashboard },
-  { to: '/eval', label: 'Evaluation', end: false, icon: IconEval },
-  { to: '/settings', label: 'Settings', end: false, icon: IconSettings },
-  { to: '/admin', label: 'Admin', end: false, icon: IconAdmin, adminOnly: true },
+  { to: '/', label: 'Dashboard', end: true, icon: 'dashboard' },
+  { to: '/eval', label: 'Evaluation', end: false, icon: 'eval' },
+  { to: '/settings', label: 'Settings', end: false, icon: 'settings' },
+  { to: '/admin', label: 'Admin', end: false, icon: 'admin', adminOnly: true },
 ];
-
-const RT_LABEL: Record<string, string> = {
-  open: 'Live',
-  connecting: 'Connecting',
-  closed: 'Offline',
-};
-const RT_DOT: Record<string, string> = {
-  open: 'bg-success',
-  connecting: 'bg-warning motion-essential animate-pulse-dot',
-  closed: 'bg-faint',
-};
 
 export function AppShell(): JSX.Element {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  const setCommandOpen = useUiStore((s) => s.setCommandOpen);
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
   const rtStatus = useRealtimeStore((s) => s.status);
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-
-  // Follow the OS theme for as long as the shell is mounted (only acts in `system` mode).
-  useEffect(() => watchSystemTheme(), []);
 
   function logout(): void {
     clear();
@@ -72,150 +95,103 @@ export function AppShell(): JSX.Element {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    <div className="flex h-screen overflow-hidden">
       <aside
-        className={`flex shrink-0 flex-col border-r border-subtle bg-surface transition-[width] duration-base ease-out ${
-          collapsed ? 'w-[3.25rem]' : 'w-[13.5rem]'
+        className={`flex shrink-0 flex-col border-r border-slate-800 bg-slate-900/40 transition-all ${
+          collapsed ? 'w-16' : 'w-56'
         }`}
       >
-        <div className="flex h-12 items-center gap-2.5 px-3.5">
+        <div
+          className={`flex h-14 shrink-0 items-center gap-2 ${collapsed ? 'justify-center px-0' : 'px-4'}`}
+        >
           <span
-            className="grid h-[1.375rem] w-[1.375rem] shrink-0 place-items-center rounded-[0.3rem] bg-brand text-[0.625rem] font-bold text-brand-fg"
+            className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500"
             aria-hidden
-          >
-            FF
-          </span>
+          />
           {!collapsed ? (
-            <span className="truncate text-sm font-semibold tracking-tight text-primary">
-              ForgeFlow
-            </span>
+            <span className="font-semibold tracking-tight text-slate-100">ForgeFlow</span>
           ) : null}
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-2 py-1.5">
+        <nav className="flex-1 space-y-1 px-2 py-2">
           {nav
             .filter((item) => !item.adminOnly || user?.role === 'admin')
-            .map((item) => {
-              const Glyph = item.icon;
-              const link = (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  title={collapsed ? item.label : undefined}
-                  className={({ isActive }) =>
-                    `relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-fast ease-out ${
-                      isActive
-                        ? 'bg-elevated font-medium text-primary'
-                        : 'text-muted hover:bg-elevated hover:text-secondary'
-                    } ${collapsed ? 'justify-center px-0' : ''}`
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      {/* The "you are here" spine, anchored to the rail edge. */}
-                      <span
-                        aria-hidden
-                        className={`absolute -left-2 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-brand transition-opacity duration-fast ease-out ${
-                          isActive ? 'opacity-100' : 'opacity-0'
-                        }`}
-                      />
-                      <Glyph size={15} />
-                      {!collapsed ? <span className="truncate">{item.label}</span> : null}
-                    </>
-                  )}
-                </NavLink>
-              );
-              return link;
-            })}
+            .map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                title={item.label}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+                    collapsed ? 'justify-center' : ''
+                  } ${
+                    isActive
+                      ? 'bg-brand-600/20 font-medium text-brand-200'
+                      : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
+                  }`
+                }
+              >
+                <Icon path={ICONS[item.icon]} />
+                {!collapsed ? <span className="truncate">{item.label}</span> : null}
+              </NavLink>
+            ))}
         </nav>
 
-        <div className="space-y-1 border-t border-subtle p-2">
-          <button
-            type="button"
-            onClick={() => setCommandOpen(true)}
-            data-testid="open-command-palette"
-            className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted transition-colors duration-fast ease-out hover:bg-elevated hover:text-secondary ${
-              collapsed ? 'justify-center px-0' : ''
-            }`}
-            title="Search — Ctrl/⌘ K"
-          >
-            <IconSearch size={15} />
-            {!collapsed ? (
-              <>
-                <span className="flex-1 text-left">Search</span>
-                <Kbd>⌘K</Kbd>
-              </>
-            ) : null}
-          </button>
-          {/* Build version — lets a user confirm an update actually took effect (phase-49). */}
-          <p
-            className="px-2.5 text-2xs text-faint"
-            title={`ForgeFlow v${__APP_VERSION__}`}
-            data-testid="app-version"
-          >
-            {collapsed ? 'v' : `v${__APP_VERSION__}`}
-          </p>
+        {/* Build version — lets a user confirm an update actually took effect (phase-49). */}
+        <div
+          className="shrink-0 px-4 py-2 text-xs text-slate-600"
+          title={`ForgeFlow v${__APP_VERSION__}`}
+          data-testid="app-version"
+        >
+          {collapsed ? `v` : `v${__APP_VERSION__}`}
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-subtle px-3">
-          <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-            <button
-              type="button"
-              aria-label="Toggle sidebar"
-              onClick={toggleSidebar}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors duration-fast ease-out hover:bg-elevated hover:text-primary"
-            >
-              <IconSidebar size={15} />
-            </button>
-          </Tooltip>
-
-          <div className="flex items-center gap-2.5">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-800 px-4">
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            onClick={toggleSidebar}
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
+          >
+            <Icon
+              path={
+                <>
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </>
+              }
+            />
+          </button>
+          <div className="flex items-center gap-3 text-sm">
             <span
-              className="flex items-center gap-1.5 text-2xs text-muted"
+              className="flex items-center gap-1.5 rounded-full border border-slate-800 px-2.5 py-1 text-xs text-slate-400"
               title="Realtime connection"
               data-testid="rt-status"
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${RT_DOT[rtStatus]}`} aria-hidden />
-              {RT_LABEL[rtStatus]}
+              <span className={`h-1.5 w-1.5 rounded-full ${rtDot[rtStatus]}`} aria-hidden />
+              {rtLabel[rtStatus]}
             </span>
-
-            <span aria-hidden className="h-4 w-px bg-subtle" />
-
-            <ThemeToggle />
-
-            <span aria-hidden className="h-4 w-px bg-subtle" />
-
-            <span data-testid="current-user" className="max-w-[14rem] truncate text-xs text-muted">
+            <span title="Theme: dark" aria-hidden>
+              🌙
+            </span>
+            <span
+              data-testid="current-user"
+              className="hidden max-w-[16rem] truncate text-slate-300 sm:block"
+            >
               {user?.email}
             </span>
-            <Tooltip label="Log out">
-              <button
-                type="button"
-                onClick={logout}
-                aria-label="Log out"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors duration-fast ease-out hover:bg-elevated hover:text-primary"
-              >
-                <IconLogout size={15} />
-              </button>
-            </Tooltip>
+            <Button size="sm" variant="secondary" onClick={logout}>
+              Log out
+            </Button>
           </div>
         </header>
 
-        {/*
-          Route transition. Keying on pathname remounts the wrapper, which re-triggers the entrance
-          animation — the same effect as a transition library for this case, with no dependency and
-          no risk of a stale exit animation trapping a route that has already unmounted. Reduced
-          motion collapses the duration to ~0 via the token override.
-        */}
-        <main key={pathname} className="min-h-0 flex-1 animate-rise-in overflow-auto p-5">
+        <main className="min-h-0 flex-1 overflow-auto p-6">
           <Outlet />
         </main>
       </div>
-
-      <CommandPalette />
     </div>
   );
 }

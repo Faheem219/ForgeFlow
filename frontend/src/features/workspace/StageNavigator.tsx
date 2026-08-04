@@ -1,17 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { Badge } from '../../components/ui';
 import type { IntentAction, Stage, StageStatus } from '../../lib/types';
 import { STAGE_LABELS, STAGE_ORDER, STATUS_LABELS, STATUS_TONES, prereqUnmet } from './stageMeta';
-
-/**
- * The stage rail — the product's spine (D12: no stage is mandatory, any stage is reachable).
- *
- * Rendered as a connected vertical track rather than six independent cards, because the thing a
- * user needs to read here is a *sequence with an escape hatch*, not a list. A card list implies six
- * unrelated things; a track with a live node implies "this is one pipeline, and you are here — but
- * you may jump."
- */
 
 interface StageNavigatorProps {
   statusByStage: Partial<Record<Stage, StageStatus>>;
@@ -28,59 +19,11 @@ const ACTION_LABELS: Record<IntentAction, string> = {
   skip: 'Skip',
 };
 
-/** Node glyph per status — shape carries meaning, so it survives a colour-blind reading. */
-function StageNode({ status, active }: { status: StageStatus; active: boolean }): JSX.Element {
-  const base = 'relative z-10 grid h-4 w-4 shrink-0 place-items-center rounded-full border';
-  if (status === 'complete') {
-    return (
-      <span className={`${base} border-success bg-success text-white`}>
-        <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden>
-          <path
-            d="M2 5.2l2 2L8 3"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-    );
-  }
-  if (status === 'in_progress') {
-    return (
-      <span className={`${base} border-brand bg-surface`}>
-        <span className="motion-essential h-1.5 w-1.5 animate-pulse-dot rounded-full bg-brand" />
-      </span>
-    );
-  }
-  if (status === 'awaiting_user' || status === 'stale') {
-    return (
-      <span className={`${base} border-warning bg-surface`}>
-        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-      </span>
-    );
-  }
-  if (status === 'skipped') {
-    return (
-      <span className={`${base} border-line bg-surface`}>
-        <span className="h-px w-2 bg-faint" />
-      </span>
-    );
-  }
-  return (
-    <span className={`${base} ${active ? 'border-brand' : 'border-line'} bg-surface`}>
-      <span className={`h-1 w-1 rounded-full ${active ? 'bg-brand' : 'bg-faint'}`} />
-    </span>
-  );
-}
-
 function StageRow({
   stage,
   status,
   active,
   lockedBy,
-  isLast,
   onSelect,
   onAction,
   busy,
@@ -89,101 +32,54 @@ function StageRow({
   status: StageStatus;
   active: boolean;
   lockedBy: Stage | null;
-  isLast: boolean;
   onSelect: (stage: Stage) => void;
   onAction: (stage: Stage, action: IntentAction) => void;
   busy?: boolean;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLLIElement | null>(null);
-
-  // Click-away / Escape close. A menu you can only dismiss by re-clicking its trigger is a trap.
-  useEffect(() => {
-    if (!menuOpen) return;
-    function onDown(event: MouseEvent): void {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    }
-    function onKey(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setMenuOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen]);
 
   return (
-    <li className="relative" ref={menuRef}>
+    <li className="relative">
       <div
-        className={`group flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-fast ease-out ${
-          active ? 'bg-brand-bg' : 'hover:bg-elevated'
+        className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
+          active ? 'border-brand-500 bg-brand-600/10' : 'border-slate-800 hover:bg-slate-800/50'
         }`}
       >
-        <span className="relative flex flex-col items-center self-stretch">
-          <StageNode status={status} active={active} />
-          {/* The connector to the next node — what makes this a track and not a list. */}
-          {!isLast ? (
-            <span
-              aria-hidden
-              className={`absolute left-1/2 top-4 h-[calc(100%+0.375rem)] w-px -translate-x-1/2 ${
-                status === 'complete' ? 'bg-success/40' : 'bg-subtle'
-              }`}
-            />
-          ) : null}
-        </span>
-
+        {/* Name and status stack rather than compete for one line — at rail width the pair does not
+            fit side by side, and truncating either one is worse than a second row. */}
         <button
           type="button"
           data-testid={`stage-${stage}`}
           onClick={() => onSelect(stage)}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
         >
-          <span
-            className={`flex min-w-0 items-center gap-1.5 truncate text-sm ${
-              active ? 'font-medium text-primary' : 'text-secondary'
-            }`}
-          >
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-sm text-slate-100">
             {lockedBy ? (
-              <svg
-                viewBox="0 0 12 12"
-                className="h-3 w-3 shrink-0 text-faint"
+              <span
+                title={`Requires ${STAGE_LABELS[lockedBy]} to be complete`}
                 aria-label="locked"
-                role="img"
+                className="shrink-0 text-[11px]"
               >
-                <rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor" />
-                <path
-                  d="M4.25 5.5V4a1.75 1.75 0 1 1 3.5 0v1.5"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  fill="none"
-                />
-              </svg>
+                🔒
+              </span>
             ) : null}
-            {STAGE_LABELS[stage]}
+            <span className="truncate">{STAGE_LABELS[stage]}</span>
           </span>
           <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
         </button>
-
         <button
           type="button"
           aria-label={`Actions for ${STAGE_LABELS[stage]}`}
-          aria-expanded={menuOpen}
           data-testid={`stage-menu-${stage}`}
           onClick={() => setMenuOpen((v) => !v)}
-          className="rounded p-0.5 text-faint opacity-0 transition-opacity duration-fast ease-out hover:bg-elevated hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+          className="rounded p-1 text-slate-400 hover:bg-slate-700"
         >
-          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
-            <circle cx="3" cy="8" r="1.25" fill="currentColor" />
-            <circle cx="8" cy="8" r="1.25" fill="currentColor" />
-            <circle cx="13" cy="8" r="1.25" fill="currentColor" />
-          </svg>
+          ⋯
         </button>
       </div>
 
       {lockedBy ? (
-        <p className="pb-1 pl-9 text-2xs text-warning">
+        <p className="px-3 pt-1 text-xs text-amber-300/80">
           Locked until {STAGE_LABELS[lockedBy]} is complete
         </p>
       ) : null}
@@ -191,7 +87,7 @@ function StageRow({
       {menuOpen ? (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-0.5 w-32 animate-scale-in rounded-md border border-line bg-overlay p-1 shadow-overlay"
+          className="absolute right-0 z-10 mt-1 w-32 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl"
         >
           {ACTIONS.map((action) => (
             <button
@@ -204,7 +100,7 @@ function StageRow({
                 setMenuOpen(false);
                 onAction(stage, action);
               }}
-              className="block w-full rounded px-2 py-1 text-left text-xs text-secondary transition-colors duration-instant ease-out hover:bg-elevated hover:text-primary disabled:opacity-50"
+              className="block w-full rounded px-2 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
             >
               {ACTION_LABELS[action]}
             </button>
@@ -224,15 +120,14 @@ export function StageNavigator({
 }: StageNavigatorProps): JSX.Element {
   return (
     <nav aria-label="Stages">
-      <ul className="space-y-0.5">
-        {STAGE_ORDER.map((stage, i) => (
+      <ul className="space-y-1.5">
+        {STAGE_ORDER.map((stage) => (
           <StageRow
             key={stage}
             stage={stage}
             status={statusByStage[stage] ?? 'empty'}
             active={stage === activeStage}
             lockedBy={prereqUnmet(stage, statusByStage)}
-            isLast={i === STAGE_ORDER.length - 1}
             onSelect={onSelect}
             onAction={onAction}
             busy={busy}

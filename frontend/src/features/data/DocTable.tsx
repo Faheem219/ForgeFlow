@@ -40,9 +40,9 @@ export function DocTable({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-subtle">
+      <div className="overflow-x-auto rounded-lg border border-slate-800">
         <table className="w-full min-w-max text-left text-xs" data-testid="doc-table">
-          <thead className="bg-surface/60 text-muted">
+          <thead className="bg-slate-900/60 text-slate-400">
             <tr>
               {columns.map((column) => {
                 const active = sort?.field === column;
@@ -52,11 +52,11 @@ export function DocTable({
                       type="button"
                       data-testid={`sort-${column}`}
                       onClick={() => onSortChange(nextSort(sort, column))}
-                      className="flex items-center gap-1 hover:text-primary"
+                      className="flex items-center gap-1 hover:text-slate-200"
                       aria-label={`Sort by ${column}`}
                     >
                       <span className="font-mono">{column}</span>
-                      <span aria-hidden className={active ? 'text-brand-text' : 'text-faint'}>
+                      <span aria-hidden className={active ? 'text-brand-300' : 'text-slate-700'}>
                         {active ? (sort?.direction === 1 ? '▲' : '▼') : '↕'}
                       </span>
                     </button>
@@ -70,11 +70,11 @@ export function DocTable({
             {page.documents.map((doc) => (
               <tr
                 key={String(doc._id)}
-                className="border-t border-subtle/60 hover:bg-surface/40"
+                className="border-t border-slate-800/60 hover:bg-slate-900/40"
                 data-testid={`doc-row-${String(doc._id)}`}
               >
                 {columns.map((column) => (
-                  <td key={column} className="max-w-[16rem] truncate px-2 py-1.5 text-secondary">
+                  <td key={column} className="max-w-[16rem] truncate px-2 py-1.5 text-slate-300">
                     {formatCell(doc[column])}
                   </td>
                 ))}
@@ -102,7 +102,7 @@ export function DocTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-faint">
+      <div className="flex items-center justify-between text-xs text-slate-500">
         <span data-testid="doc-count">
           {page.total} {page.total === 1 ? 'document' : 'documents'} · page {page.page} of{' '}
           {page.pages}

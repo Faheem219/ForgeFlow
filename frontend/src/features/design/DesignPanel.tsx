@@ -194,7 +194,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-primary">
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
           Design
           <span data-testid="design-status">
             <Badge tone={STATUS_TONES[designStatus]}>{STATUS_LABELS[designStatus]}</Badge>
@@ -233,10 +233,10 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
         <div className="flex min-h-0 flex-col gap-2">
           {projectScreens.length > 1 ? (
             <div
-              className="flex flex-wrap items-center gap-2 rounded-xl border border-subtle px-3 py-2"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 px-3 py-2"
               data-testid="screen-picker"
             >
-              <label htmlFor="design-screen" className="text-xs text-muted">
+              <label htmlFor="design-screen" className="text-xs text-slate-400">
                 Screen
               </label>
               <select
@@ -244,7 +244,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                 data-testid="screen-select"
                 value={shownRef}
                 onChange={(e) => setScreenRef(e.target.value || null)}
-                className="max-w-xs flex-1 rounded-lg border border-line bg-inset px-2 py-1 text-sm text-primary outline-none focus:border-brand"
+                className="max-w-xs flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none focus:border-brand-500"
               >
                 {projectScreens.map((s) => (
                   <option key={s.ref} value={s.ref}>
@@ -253,13 +253,13 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-faint">
+              <span className="text-xs text-slate-500">
                 {projectScreens.length} screens in this project · a refine changes the one shown
               </span>
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-subtle">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800">
             {contentQuery.isFetching || screenQuery.isFetching ? (
               <div className="flex h-full items-center justify-center">
                 <Spinner />
@@ -291,7 +291,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                 hasDesign ? 'Refine, e.g. "make the header violet"' : 'Generate a design first'
               }
               disabled={!hasDesign || busy}
-              className="flex-1 rounded-lg border border-line bg-inset px-3 py-2 text-sm text-primary outline-none focus:border-brand disabled:opacity-50"
+              className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500 disabled:opacity-50"
             />
             <Button type="submit" size="sm" disabled={!hasDesign || busy || !instruction.trim()}>
               Refine
@@ -301,8 +301,8 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
         {/* Intake + version history */}
         <div className="flex min-h-0 flex-col gap-3 overflow-auto">
-          <section className="space-y-2 rounded-xl border border-subtle p-3">
-            <h4 className="text-xs uppercase tracking-wide text-faint">New design</h4>
+          <section className="space-y-2 rounded-xl border border-slate-800 p-3">
+            <h4 className="text-xs uppercase tracking-wide text-slate-500">New design</h4>
             <form
               className="space-y-2"
               onSubmit={(e) => {
@@ -382,7 +382,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   onChange={(e) => setOwnHtml(e.target.value)}
                   placeholder="<html>…"
                   rows={3}
-                  className="w-full rounded-lg border border-line bg-inset px-2 py-1 font-mono text-xs text-primary"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100"
                 />
                 <textarea
                   aria-label="Import CSS"
@@ -391,7 +391,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   onChange={(e) => setOwnCss(e.target.value)}
                   placeholder="/* css */"
                   rows={2}
-                  className="w-full rounded-lg border border-line bg-inset px-2 py-1 font-mono text-xs text-primary"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100"
                 />
                 <Button
                   type="submit"
@@ -405,8 +405,8 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
             ) : null}
           </section>
 
-          <section className="space-y-1 rounded-xl border border-subtle p-3">
-            <h4 className="text-xs uppercase tracking-wide text-faint">Versions</h4>
+          <section className="space-y-1 rounded-xl border border-slate-800 p-3">
+            <h4 className="text-xs uppercase tracking-wide text-slate-500">Versions</h4>
             {versions.length === 0 ? (
               <EmptyState title="No versions yet" description="Generate or import a design." />
             ) : (
@@ -419,17 +419,17 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                       onClick={() => setSelectedId(v.id)}
                       className={`flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-sm ${
                         v.id === selectedId
-                          ? 'border-brand bg-brand-bg'
-                          : 'border-subtle hover:bg-elevated/50'
+                          ? 'border-brand-500 bg-brand-600/10'
+                          : 'border-slate-800 hover:bg-slate-800/50'
                       }`}
                     >
-                      <span className="text-primary">
+                      <span className="text-slate-200">
                         v{v.version}
                         {v.id === latest?.id ? (
-                          <span className="ml-1 text-xs text-faint">latest</span>
+                          <span className="ml-1 text-xs text-slate-500">latest</span>
                         ) : null}
                       </span>
-                      <span className="text-xs text-faint">
+                      <span className="text-xs text-slate-500">
                         {String((v.meta.source as string) ?? '')}
                       </span>
                     </button>

@@ -29,7 +29,7 @@ export function FilterBar({
       }}
     >
       <div className="min-w-[8rem] flex-1">
-        <label className="mb-1 block text-[11px] uppercase tracking-wide text-faint">
+        <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
           Field
           <input
             list="data-fields"
@@ -38,7 +38,7 @@ export function FilterBar({
             value={draft.field}
             onChange={(e) => onChange({ ...draft, field: e.target.value })}
             placeholder="e.g. title"
-            className="mt-1 w-full rounded-lg border border-line bg-inset px-2 py-1.5 text-sm text-primary outline-none focus:border-brand"
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-brand-500"
           />
         </label>
         <datalist id="data-fields">
@@ -48,14 +48,14 @@ export function FilterBar({
         </datalist>
       </div>
 
-      <label className="text-[11px] uppercase tracking-wide text-faint">
+      <label className="text-[11px] uppercase tracking-wide text-slate-500">
         Operator
         <select
           aria-label="Filter operator"
           data-testid="filter-op"
           value={draft.op}
           onChange={(e) => onChange({ ...draft, op: e.target.value as FilterDraft['op'] })}
-          className="mt-1 block rounded-lg border border-line bg-inset px-2 py-1.5 text-sm text-primary outline-none focus:border-brand"
+          className="mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-brand-500"
         >
           {FILTER_OPS.map((op) => (
             <option key={op.value} value={op.value}>
@@ -67,7 +67,7 @@ export function FilterBar({
 
       {needsValue ? (
         <div className="min-w-[8rem] flex-1">
-          <label className="mb-1 block text-[11px] uppercase tracking-wide text-faint">
+          <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">
             Value
             <Input
               aria-label="Filter value"

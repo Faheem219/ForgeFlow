@@ -23,9 +23,9 @@ export function HealthBadge(): JSX.Element {
 
   const { color, label } = badgeProps(health);
   return (
-    <div className="flex w-fit items-center gap-2 rounded-full border border-subtle bg-surface/60 px-4 py-2">
+    <div className="flex w-fit items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2">
       <span className={`h-2.5 w-2.5 rounded-full ${color}`} aria-hidden />
-      <span className="text-sm text-secondary" data-testid="health-status">
+      <span className="text-sm text-slate-300" data-testid="health-status">
         {label}
       </span>
     </div>
@@ -36,12 +36,12 @@ function badgeProps(state: HealthState): { color: string; label: string } {
   switch (state.kind) {
     case 'ok':
       return {
-        color: 'bg-success',
+        color: 'bg-emerald-400',
         label: `Backend healthy · ${state.data.env} · v${state.data.version}`,
       };
     case 'error':
-      return { color: 'bg-danger', label: 'Backend unreachable' };
+      return { color: 'bg-red-500', label: 'Backend unreachable' };
     default:
-      return { color: 'bg-warning motion-essential animate-pulse-dot', label: 'Checking backend…' };
+      return { color: 'bg-amber-400 animate-pulse', label: 'Checking backend…' };
   }
 }

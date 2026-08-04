@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.db.models import Project, StageState
 from app.db.models.enums import ProjectStatus, Stage, StageStatus
-from app.projects.service import DeleteReport, TransitionOutcome
+from app.projects.service import TransitionOutcome
 from app.projects.state_machine import Action
 
 
@@ -59,27 +59,6 @@ class StageStatePublic(BaseModel):
             status=state.status,
             artifacts=[str(a) for a in state.artifacts],
             updated_at=state.updated_at,
-        )
-
-
-class ProjectDeleteResponse(BaseModel):
-    """Outcome of a delete. Reported (rather than swallowed) so the UI can tell the user when a
-    sandbox or database outlived the project and needs reclaiming out-of-band."""
-
-    id: str
-    sandbox_removed: bool
-    app_db_dropped: bool
-    documents_removed: int
-    warnings: list[str]
-
-    @classmethod
-    def of(cls, project_id: str, report: DeleteReport) -> ProjectDeleteResponse:
-        return cls(
-            id=project_id,
-            sandbox_removed=report.sandbox_removed,
-            app_db_dropped=report.app_db_dropped,
-            documents_removed=report.documents_removed,
-            warnings=report.warnings,
         )
 
 

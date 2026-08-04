@@ -1,196 +1,45 @@
-@import './tokens.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (dark, indigo/violet). Tailwind `brand`/`accent` scales live in tailwind.config. */
+:root {
+  color-scheme: dark;
+  --surface: #020617; /* slate-950 */
+  --surface-raised: #0f172a; /* slate-900 */
+  --border: #1e293b; /* slate-800 */
+  --text: #f1f5f9; /* slate-100 */
+  --text-muted: #94a3b8; /* slate-400 */
+  --brand: #6366f1;
+  --accent: #8b5cf6;
+  --radius: 0.75rem;
+}
+
 @layer base {
-  html {
-    font-family: var(--font-sans);
-    /* Chrome sizing is fixed; only content scales. Keeps the tool dense at any zoom. */
-    -webkit-tap-highlight-color: transparent;
-  }
-
   body {
-    @apply bg-canvas text-primary antialiased;
-    font-feature-settings:
-      'cv02' 1,
-      'cv03' 1,
-      'cv04' 1;
+    @apply bg-slate-950 text-slate-100 antialiased;
   }
 
-  /*
-   * A single, unmistakable focus ring. Two rings (offset + colour) rather than a glow, so it stays
-   * legible on both a white panel and a near-black canvas.
-   */
+  /* Visible, consistent keyboard focus for a11y. */
   :focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2;
-    --tw-ring-offset-color: rgb(var(--canvas));
-  }
-
-  /* Inside a panel the offset must match the panel, not the page, or the ring looks punched-out. */
-  .on-surface :focus-visible {
-    --tw-ring-offset-color: rgb(var(--surface));
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-slate-950;
   }
 
   ::selection {
-    background-color: rgb(var(--brand) / 0.28);
-  }
-
-  /* Every number that can change should not reflow its neighbours while it does. */
-  :where(td, th, dd, .tabular) {
-    font-variant-numeric: tabular-nums;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    @apply text-primary;
-    text-wrap: balance;
-  }
-
-  hr {
-    @apply border-subtle;
-  }
-}
-
-@layer components {
-  /*
-   * Panel chrome, expressed once. Elevation is a background step plus a hairline — never a glow.
-   * `.on-surface` is the focus-ring hook above; every panel gets it.
-   */
-  .panel {
-    @apply on-surface rounded-xl border border-subtle bg-surface;
-  }
-
-  .panel-inset {
-    @apply rounded-lg border border-subtle bg-inset;
-  }
-
-  /* Section eyebrow: the small uppercase label that titles a sub-area. */
-  .eyebrow {
-    @apply text-2xs font-medium uppercase tracking-[0.08em] text-faint;
-  }
-
-  /* A row that is clickable in its entirety (project rows, file rows, result rows). */
-  .row-interactive {
-    @apply transition-colors duration-fast ease-out hover:bg-elevated;
-  }
-
-  /*
-   * The splitter handle. Deliberately a 1px visual line inside a wide hit area — the target is
-   * comfortable (9px) while the seam stays hairline, which is what makes a resize feel precise
-   * rather than chunky.
-   */
-  .splitter {
-    @apply relative shrink-0 bg-transparent transition-colors duration-fast ease-out;
-  }
-  .splitter::after {
-    content: '';
-    @apply absolute bg-subtle transition-colors duration-fast ease-out;
-  }
-  .splitter[data-orientation='vertical'] {
-    @apply w-[9px] cursor-col-resize;
-  }
-  .splitter[data-orientation='vertical']::after {
-    @apply inset-y-0 left-1/2 w-px -translate-x-1/2;
-  }
-  .splitter[data-orientation='horizontal'] {
-    @apply h-[9px] cursor-row-resize;
-  }
-  .splitter[data-orientation='horizontal']::after {
-    @apply inset-x-0 top-1/2 h-px -translate-y-1/2;
-  }
-  .splitter:hover::after,
-  .splitter[data-dragging='true']::after {
-    @apply bg-brand;
-  }
-  .splitter[data-orientation='vertical']:hover::after,
-  .splitter[data-orientation='vertical'][data-dragging='true']::after {
-    @apply w-0.5;
-  }
-  .splitter[data-orientation='horizontal']:hover::after,
-  .splitter[data-orientation='horizontal'][data-dragging='true']::after {
-    @apply h-0.5;
-  }
-
-  /* Skeleton shimmer — a moving highlight over a token-coloured block, not a pulsing grey box. */
-  .skeleton {
-    @apply relative overflow-hidden rounded bg-elevated;
-  }
-  .skeleton::after {
-    content: '';
-    @apply absolute inset-0 -translate-x-full animate-shimmer;
-    background-image: linear-gradient(
-      90deg,
-      transparent,
-      rgb(var(--text-faint) / 0.12),
-      transparent
-    );
-  }
-}
-
-@layer utilities {
-  /* Long paths, URLs and log lines: keep them on one line and let the container scroll. */
-  .scroll-x {
-    @apply overflow-x-auto;
-    scrollbar-width: thin;
-  }
-
-  /* Suppress the native drag ghost while a splitter is active. */
-  .dragging-none * {
-    @apply select-none;
-    cursor: inherit !important;
+    background-color: rgb(99 102 241 / 0.35);
   }
 }
 
 /* Slim, theme-matched scrollbars. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--border-strong)) transparent;
+  scrollbar-color: #334155 transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(var(--border-strong));
-  border: 3px solid transparent;
-  background-clip: content-box;
+  background-color: #334155;
   border-radius: 9999px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(var(--text-faint));
-}
-
-/*
- * Cross-route transition. Uses the native View Transition API where available (Chromium today) and
- * degrades to an instant swap everywhere else — no library, no layout shift, no polyfill.
- */
-::view-transition-old(root) {
-  animation: fade-out var(--dur-fast) var(--ease-out) both;
-}
-::view-transition-new(root) {
-  animation: route-in var(--dur-base) var(--ease-out) both;
-}
-
-@keyframes fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes route-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }

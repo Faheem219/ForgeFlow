@@ -80,13 +80,13 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
       }
     >
       <div className="space-y-4">
-        <p className="text-sm text-muted">
+        <p className="text-sm text-slate-400">
           The {STAGE_LABELS[stage].toLowerCase()} workspace lands in a later phase. For now you can
           drive the stub conductor with the actions above or the chat panel.
         </p>
 
         <div>
-          <h4 className="mb-2 text-xs uppercase tracking-wide text-faint">Artifacts</h4>
+          <h4 className="mb-2 text-xs uppercase tracking-wide text-slate-500">Artifacts</h4>
           {artifacts.length === 0 ? (
             <EmptyState title="No artifacts yet" description="Produced outputs will appear here." />
           ) : (
@@ -94,12 +94,12 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
               {artifacts.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-center justify-between rounded-lg border border-subtle px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-sm"
                 >
-                  <span className="text-primary">
-                    {a.type} <span className="text-faint">v{a.version}</span>
+                  <span className="text-slate-200">
+                    {a.type} <span className="text-slate-500">v{a.version}</span>
                   </span>
-                  <span className="text-xs text-faint">
+                  <span className="text-xs text-slate-500">
                     {new Date(a.created_at).toLocaleString()}
                   </span>
                 </li>

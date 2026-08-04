@@ -226,35 +226,18 @@ class AnthropicClient:
         )
 
     async def _stream_turn(self, request: MessageRequest, channel: str) -> TurnComplete:
-        """Stream one model turn, bracketed by explicit lifecycle events.
-
-        The bracket exists because ``agent.token`` on its own is not a protocol: a client receiving
-        deltas has no way to distinguish "the model paused" from "the turn is over", so any UI state
-        keyed to token arrival stays on forever. ``agent.stream.end`` is emitted from a ``finally``
-        so a transport error, a cancelled task, or a stream that dies mid-turn all still close the
-        bracket — an error path that leaves the client believing it is still streaming is exactly
-        the failure this is meant to remove.
-        """
         # Resolve the provider transport at call time (unless one was injected), so the current
         # LLM_PROVIDER / provider credentials are honored even though this client may have been
         # built before the admin config layer loaded. Transports are cheap and stateless (each
         # builds its SDK client inside .stream()), so per-turn resolution costs nothing.
         transport = self._transport if self._transport is not None else default_transport()
         turn: TurnComplete | None = None
-        await self._emit(channel, EventType.agent_stream_start, {"model": request.model})
-        try:
-            async for event in transport.stream(request):
-                if isinstance(event, TextDelta):
-                    if event.text:
-                        await self._emit(channel, EventType.agent_token, {"text": event.text})
-                else:
-                    turn = event
-        finally:
-            await self._emit(
-                channel,
-                EventType.agent_stream_end,
-                {"model": request.model, "completed": turn is not None},
-            )
+        async for event in transport.stream(request):
+            if isinstance(event, TextDelta):
+                if event.text:
+                    await self._emit(channel, EventType.agent_token, {"text": event.text})
+            else:
+                turn = event
         if turn is None:
             raise ProviderError("The model stream ended without a completion")
         return turn

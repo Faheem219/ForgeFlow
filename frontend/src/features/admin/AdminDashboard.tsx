@@ -84,7 +84,7 @@ export function AdminDashboard(): JSX.Element {
       <nav className="w-56 shrink-0 space-y-4 overflow-y-auto pr-1" aria-label="Admin sections">
         {ADMIN_GROUPS.map((group) => (
           <div key={group}>
-            <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-faint">
+            <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
               {group}
             </p>
             {ADMIN_SECTIONS.filter((s) => s.group === group).map((s) => (
@@ -96,15 +96,15 @@ export function AdminDashboard(): JSX.Element {
                 onClick={() => navigate(`/admin/${s.id}`)}
                 className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left text-sm ${
                   s.id === active
-                    ? 'bg-brand-bg text-brand-text'
-                    : 'text-secondary hover:bg-elevated'
+                    ? 'bg-brand-600/20 text-brand-200'
+                    : 'text-slate-300 hover:bg-slate-800'
                 }`}
               >
                 <span className="truncate">{s.label}</span>
                 {overridesBySection[s.id] ? (
                   <span
                     title={`${overridesBySection[s.id]} setting(s) overridden here`}
-                    className="rounded-full bg-brand/30 px-1.5 text-[10px] text-brand-text"
+                    className="rounded-full bg-brand-600/30 px-1.5 text-[10px] text-brand-200"
                   >
                     {overridesBySection[s.id]}
                   </span>
@@ -118,7 +118,7 @@ export function AdminDashboard(): JSX.Element {
       <section className="min-w-0 flex-1 overflow-auto pr-1">
         <header className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-primary">
+            <h1 className="text-xl font-semibold text-slate-100">
               {searching ? 'Search results' : meta?.label}
             </h1>
             {totalOverrides > 0 ? (
@@ -127,13 +127,13 @@ export function AdminDashboard(): JSX.Element {
               </Badge>
             ) : null}
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-faint">
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
             {searching
               ? `${visible.length} setting${visible.length === 1 ? '' : 's'} match “${query.trim()}”.`
               : meta?.blurb}
           </p>
-          <p className="mt-1 text-xs text-faint">
-            Precedence is <span className="font-mono text-faint">admin &gt; env &gt; default</span>.
+          <p className="mt-1 text-xs text-slate-600">
+            Precedence is <span className="font-mono text-slate-500">admin &gt; env &gt; default</span>.
             Changes apply immediately unless a key is marked <em>restart required</em>.
           </p>
         </header>
@@ -146,9 +146,9 @@ export function AdminDashboard(): JSX.Element {
               data-testid="config-search"
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search all settings (name, env var, description)…"
-              className="w-80 rounded-lg border border-line bg-inset px-3 py-1.5 text-sm text-primary outline-none focus:border-brand"
+              className="w-80 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-brand-500"
             />
-            <label className="flex items-center gap-2 text-xs text-muted">
+            <label className="flex items-center gap-2 text-xs text-slate-400">
               <input
                 type="checkbox"
                 data-testid="filter-overridden"

@@ -135,7 +135,7 @@ const KINDS: CriterionKind[] = ['either', 'unit', 'e2e'];
 const KIND_HELP = 'unit = logic a unit test covers · e2e = a user-visible flow · either = unsure';
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-inset px-3 py-2 text-sm text-primary outline-none focus:border-brand';
+  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500';
 
 // ------------------------------------------------------------------ component
 
@@ -211,7 +211,7 @@ export function RequirementsForm({
   return (
     <div className="space-y-4" data-testid="requirements-form">
       {errors.form ? (
-        <p className="text-sm text-danger" role="alert" data-testid="form-error">
+        <p className="text-sm text-rose-400" role="alert" data-testid="form-error">
           {errors.form}
         </p>
       ) : null}
@@ -222,12 +222,12 @@ export function RequirementsForm({
           <section
             key={f.key}
             data-testid={`feature-${fi}`}
-            className="space-y-3 rounded-xl border border-subtle bg-surface/40 p-4"
+            className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-secondary">Feature name</span>
+                  <span className="mb-1 block text-slate-300">Feature name</span>
                   <input
                     className={inputClass}
                     data-testid={`feature-name-${fi}`}
@@ -237,7 +237,10 @@ export function RequirementsForm({
                   />
                 </label>
                 {fe?.name ? (
-                  <p className="mt-1 text-xs text-danger" data-testid={`feature-name-error-${fi}`}>
+                  <p
+                    className="mt-1 text-xs text-rose-400"
+                    data-testid={`feature-name-error-${fi}`}
+                  >
                     {fe.name}
                   </p>
                 ) : null}
@@ -255,7 +258,7 @@ export function RequirementsForm({
             </div>
 
             <label className="block text-sm">
-              <span className="mb-1 block text-secondary">Description</span>
+              <span className="mb-1 block text-slate-300">Description</span>
               <textarea
                 className={inputClass}
                 data-testid={`feature-desc-${fi}`}
@@ -283,7 +286,7 @@ export function RequirementsForm({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-faint">
+                <span className="text-xs uppercase tracking-wide text-slate-500">
                   Acceptance criteria
                 </span>
                 {onSuggest ? (
@@ -304,9 +307,9 @@ export function RequirementsForm({
                   </Button>
                 ) : null}
               </div>
-              <p className="text-xs text-faint">{KIND_HELP}</p>
+              <p className="text-xs text-slate-500">{KIND_HELP}</p>
               {fe?.criteria ? (
-                <p className="text-xs text-danger" data-testid={`criteria-error-${fi}`}>
+                <p className="text-xs text-rose-400" data-testid={`criteria-error-${fi}`}>
                   {fe.criteria}
                 </p>
               ) : null}
@@ -363,7 +366,7 @@ export function RequirementsForm({
                   </div>
                   {fe?.criterionText[c.key] ? (
                     <p
-                      className="text-xs text-danger"
+                      className="text-xs text-rose-400"
                       data-testid={`criterion-text-error-${fi}-${ci}`}
                     >
                       {fe.criterionText[c.key]}
@@ -407,7 +410,7 @@ export function RequirementsForm({
       </div>
 
       {errored && !errors.form ? (
-        <p className="text-right text-xs text-danger">Fix the highlighted fields above.</p>
+        <p className="text-right text-xs text-rose-400">Fix the highlighted fields above.</p>
       ) : null}
     </div>
   );
@@ -430,8 +433,8 @@ function EditableList({
 }): JSX.Element {
   return (
     <div className="space-y-1">
-      <span className="text-xs uppercase tracking-wide text-faint">{label}</span>
-      <p className="text-xs text-faint">{help}</p>
+      <span className="text-xs uppercase tracking-wide text-slate-500">{label}</span>
+      <p className="text-xs text-slate-500">{help}</p>
       {items.map((it, i) => (
         <div key={it.key} className="flex items-center gap-2">
           <input

@@ -82,17 +82,17 @@ export function DocEditor({
         spellCheck={false}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="w-full rounded-lg border border-line bg-inset p-2 font-mono text-xs text-primary outline-none focus:border-brand"
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-100 outline-none focus:border-brand-500"
       />
       {jsonError ? (
-        <p className="mt-2 text-xs text-danger" data-testid="editor-json-error">
+        <p className="mt-2 text-xs text-red-300" data-testid="editor-json-error">
           {jsonError}
         </p>
       ) : null}
       {/* Guardrail rejections from the API (phase-41) land here rather than in a toast that
           disappears while the user is still looking at their document. */}
       {error ? (
-        <p className="mt-2 text-xs text-danger" data-testid="editor-api-error">
+        <p className="mt-2 text-xs text-red-300" data-testid="editor-api-error">
           {error}
         </p>
       ) : null}
@@ -140,9 +140,9 @@ export function DeleteConfirm({
       }
     >
       <p data-testid="delete-warning">
-        This permanently removes <code className="font-mono text-primary">{docId}</code> from{' '}
-        <code className="font-mono text-primary">{collection}</code>. It affects your live app data
-        and cannot be undone.
+        This permanently removes <code className="font-mono text-slate-200">{docId}</code> from{' '}
+        <code className="font-mono text-slate-200">{collection}</code>. It affects your live app
+        data and cannot be undone.
       </p>
     </Modal>
   );

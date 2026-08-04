@@ -19,12 +19,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('./api', () => api);
 
-vi.mock('./monacoSetup', () => ({
-  FORGEFLOW_DARK: 'forgeflow-dark',
-  FORGEFLOW_LIGHT: 'forgeflow-light',
-  monacoThemeFor: (resolved: string) =>
-    resolved === 'dark' ? 'forgeflow-dark' : 'forgeflow-light',
-}));
+vi.mock('./monacoSetup', () => ({ FORGEFLOW_DARK: 'forgeflow-dark' }));
 vi.mock('@monaco-editor/react', () => ({
   default: ({
     value,

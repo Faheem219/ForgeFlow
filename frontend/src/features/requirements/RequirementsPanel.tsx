@@ -92,7 +92,7 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-primary">
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
           Requirements
           <span data-testid="requirements-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>

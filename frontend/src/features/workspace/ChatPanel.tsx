@@ -6,15 +6,14 @@ import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
 import type { MessageDto, MessageRole, Stage } from '../../lib/types';
-import { deriveTaskStream } from '../../lib/useTaskStream';
 import { listMessages, submitIntent } from './api';
 import { STAGE_LABELS } from './stageMeta';
 
 const ROLE_STYLES: Record<MessageRole, string> = {
-  user: 'bg-brand-bg text-brand-text self-end',
-  assistant: 'bg-elevated text-primary self-start',
-  system: 'bg-elevated/50 text-muted self-start italic',
-  tool: 'bg-elevated/50 text-success self-start font-mono text-xs',
+  user: 'bg-brand-600/20 text-brand-100 self-end',
+  assistant: 'bg-slate-800 text-slate-100 self-start',
+  system: 'bg-slate-800/50 text-slate-400 self-start italic',
+  tool: 'bg-slate-800/50 text-emerald-300 self-start font-mono text-xs',
 };
 
 interface ChatPanelProps {
@@ -40,14 +39,13 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     () => events.filter((e) => e.project_id === channel && e.event !== 'ping'),
     [events, channel],
   );
-
-  // Streamed text is folded PER TURN rather than by concatenating every `agent.token` still in the
-  // ring buffer. Without the turn bracket (`agent.stream.start` resets, `run.finished` closes), a
-  // finished turn's text lingered here across stages and across projects — there was no event that
-  // would ever clear it. See lib/useTaskStream.ts.
   const streamed = useMemo(
-    () => deriveTaskStream(events, projectId, 0).streamed,
-    [events, projectId],
+    () =>
+      activity
+        .filter((e) => e.event === 'agent.token')
+        .map((e) => String(e.payload.token ?? e.payload.text ?? ''))
+        .join(''),
+    [activity],
   );
 
   const send = useMutation({
@@ -91,7 +89,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     // `min-h-0` all the way down is what lets the transcript scroll instead of growing the column
     // and shoving the composer out of view — the failure this layout previously had.
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-subtle px-4 py-2 text-xs uppercase tracking-wide text-faint">
+      <div className="shrink-0 border-b border-slate-800 px-4 py-2 text-xs uppercase tracking-wide text-slate-500">
         {STAGE_LABELS[activeStage]} conversation
       </div>
 
@@ -100,7 +98,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-4"
       >
         {messages.length === 0 && !streamed ? (
-          <p className="text-sm text-faint">No messages yet. Say something to get started.</p>
+          <p className="text-sm text-slate-500">No messages yet. Say something to get started.</p>
         ) : (
           messages.map((m) => (
             <div
@@ -115,14 +113,14 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         {/* The agent's in-flight answer lives in the transcript (not a cramped strip below it), so
             a long build plan simply scrolls like any other message. */}
         {streamed ? (
-          <div className="max-w-[85%] self-start rounded-lg bg-elevated/70 px-3 py-2">
-            <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-faint">
+          <div className="max-w-[85%] self-start rounded-lg bg-slate-800/70 px-3 py-2">
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-500">
               <Spinner size="sm" />
               streaming
             </p>
             <p
               data-testid="chat-stream"
-              className="whitespace-pre-wrap break-words text-sm text-primary"
+              className="whitespace-pre-wrap break-words text-sm text-slate-200"
             >
               {streamed}
             </p>
@@ -132,16 +130,16 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
       </div>
 
       {activity.length > 0 ? (
-        <div data-testid="chat-activity" className="shrink-0 border-t border-subtle">
+        <div data-testid="chat-activity" className="shrink-0 border-t border-slate-800">
           <button
             type="button"
             aria-expanded={activityOpen}
             data-testid="chat-activity-toggle"
             onClick={() => setActivityOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs uppercase tracking-wide text-faint hover:bg-elevated/40"
+            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs uppercase tracking-wide text-slate-500 hover:bg-slate-800/40"
           >
             Activity
-            <span className="rounded-full bg-elevated px-1.5 text-[10px] text-muted">
+            <span className="rounded-full bg-slate-800 px-1.5 text-[10px] text-slate-400">
               {activity.length}
             </span>
             <span className="ml-auto" aria-hidden>
@@ -151,8 +149,8 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
           {activityOpen ? (
             <ul className="max-h-24 space-y-0.5 overflow-auto px-4 pb-2">
               {activity.slice(-8).map((e) => (
-                <li key={`${e.project_id}-${e.seq}`} className="text-xs text-faint">
-                  <span className="text-muted">{e.event}</span>
+                <li key={`${e.project_id}-${e.seq}`} className="text-xs text-slate-500">
+                  <span className="text-slate-400">{e.event}</span>
                   {e.stage ? ` · ${e.stage}` : ''}
                 </li>
               ))}
@@ -163,7 +161,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
 
       <form
         onSubmit={onSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-subtle p-3"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-800 p-3"
       >
         <textarea
           aria-label="Message"
@@ -171,7 +169,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
           onChange={(e) => setDraft(e.target.value)}
           placeholder={`Refine ${STAGE_LABELS[activeStage]}…`}
           rows={2}
-          className="flex-1 resize-none rounded-lg border border-line bg-inset px-3 py-2 text-sm text-primary outline-none focus:border-brand"
+          className="flex-1 resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-brand-500"
         />
         <Button type="submit" loading={send.isPending} disabled={!draft.trim()}>
           Send

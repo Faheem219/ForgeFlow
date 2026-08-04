@@ -51,12 +51,12 @@ export function NodeDrawer({
     <aside
       data-testid="deploy-node-drawer"
       aria-label={`${node.label} details`}
-      className="flex h-full min-h-0 w-full flex-col gap-3 overflow-auto rounded-xl border border-subtle bg-surface/40 p-4"
+      className="flex h-full min-h-0 w-full flex-col gap-3 overflow-auto rounded-xl border border-slate-800 bg-slate-900/40 p-4"
     >
       <header className="flex items-start justify-between gap-2">
         <div>
-          <h4 className="text-sm font-medium text-primary">{node.label}</h4>
-          <p className="text-xs text-faint">{node.provider}</p>
+          <h4 className="text-sm font-medium text-slate-100">{node.label}</h4>
+          <p className="text-xs text-slate-500">{node.provider}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge tone={NODE_STATUS_TONES[node.liveStatus]}>
@@ -70,7 +70,7 @@ export function NodeDrawer({
 
       {node.error ? (
         <p
-          className="rounded-lg border border-danger-border bg-danger-bg px-3 py-2 text-xs text-danger"
+          className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300"
           data-testid="drawer-error"
         >
           {node.error}
@@ -78,7 +78,7 @@ export function NodeDrawer({
       ) : null}
 
       <section>
-        <h5 className="mb-1 text-xs uppercase tracking-wide text-faint">URL</h5>
+        <h5 className="mb-1 text-xs uppercase tracking-wide text-slate-500">URL</h5>
         {node.liveUrl ? (
           <div className="flex items-center gap-2">
             <a
@@ -86,7 +86,7 @@ export function NodeDrawer({
               target="_blank"
               rel="noreferrer"
               data-testid="drawer-url"
-              className="truncate text-sm text-brand-text hover:underline"
+              className="truncate text-sm text-brand-300 hover:underline"
             >
               {node.liveUrl}
             </a>
@@ -100,50 +100,50 @@ export function NodeDrawer({
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-faint">
+          <p className="text-sm text-slate-500">
             {node.kind === 'database' ? 'Reached privately by the backend.' : 'Not deployed yet.'}
           </p>
         )}
       </section>
 
       <section>
-        <h5 className="mb-1 text-xs uppercase tracking-wide text-faint">Environment</h5>
+        <h5 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Environment</h5>
         {node.envKeys.length === 0 ? (
-          <p className="text-sm text-faint">Nothing wired in.</p>
+          <p className="text-sm text-slate-500">Nothing wired in.</p>
         ) : (
           <ul className="space-y-1" data-testid="drawer-env">
             {node.envKeys.map((key) => (
               <li
                 key={key}
-                className="flex items-center justify-between rounded-lg border border-subtle px-2 py-1 text-xs"
+                className="flex items-center justify-between rounded-lg border border-slate-800 px-2 py-1 text-xs"
               >
-                <code className="text-secondary">{key}</code>
-                <span className="text-faint">set</span>
+                <code className="text-slate-300">{key}</code>
+                <span className="text-slate-600">set</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-1 text-[11px] text-faint">
+        <p className="mt-1 text-[11px] text-slate-600">
           Values stay in the control plane and are never sent to the browser.
         </p>
       </section>
 
       <section className="min-h-0 flex-1">
-        <h5 className="mb-1 text-xs uppercase tracking-wide text-faint">Logs</h5>
+        <h5 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Logs</h5>
         {lines.length === 0 ? (
           <EmptyState title="No logs yet" description="Deploy this project to see its log." />
         ) : (
           <pre
             data-testid="drawer-logs"
-            className="max-h-48 overflow-auto rounded-lg border border-subtle bg-inset p-2 text-xs text-secondary"
+            className="max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2 text-xs text-slate-300"
           >
             {lines.join('\n')}
           </pre>
         )}
       </section>
 
-      <footer className="flex items-center justify-between gap-2 border-t border-subtle pt-3">
-        <span className="text-[11px] text-faint">
+      <footer className="flex items-center justify-between gap-2 border-t border-slate-800 pt-3">
+        <span className="text-[11px] text-slate-600">
           Redeploy re-runs the pipeline (backend, then frontend).
         </span>
         <Button
