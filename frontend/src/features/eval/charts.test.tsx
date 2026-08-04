@@ -90,12 +90,19 @@ describe('BarChart geometry', () => {
   ];
 
   it('keeps the value label inside the viewBox for the largest bar', () => {
-    render(<BarChart data={data} format={(v) => v.toLocaleString()} />);
+    // The formatter is applied by the caller, so the expected string is derived from it rather
+    // than hardcoded: `toLocaleString()` is locale-sensitive (en-IN groups 125000 as "1,25,000"),
+    // and pinning one locale's output would make this assert the runner's environment instead of
+    // the chart's geometry — which is the only thing it is here to check.
+    const format = (v: number): string => v.toLocaleString();
+    const expected = format(125000);
+
+    render(<BarChart data={data} format={format} />);
     const svg = screen.getByTestId('bar-chart');
     const { width } = viewBox(svg);
-    const label = Array.from(svg.querySelectorAll('text')).find((t) => t.textContent === '125,000');
+    const label = Array.from(svg.querySelectorAll('text')).find((t) => t.textContent === expected);
     expect(label).toBeDefined();
-    const right = Number(label?.getAttribute('x')) + textWidth('125,000');
+    const right = Number(label?.getAttribute('x')) + textWidth(expected);
     expect(right).toBeLessThanOrEqual(width);
   });
 
