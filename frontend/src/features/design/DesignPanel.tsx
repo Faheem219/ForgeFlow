@@ -120,9 +120,14 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
   // Opening a different *version* clears any screen choice; the picker then defaults to that
   // version's own screen. Deliberately not keyed on `versionRef` — the artifact can resolve after
-  // the user has already picked a screen, and a default must never stomp a choice.
+  // the user has already picked a screen, and a default must never stomp a choice. The same
+  // applies to the version list itself: its first resolution (null → latest id) is a load, not a
+  // switch, and a screen picked while it was still in flight must survive it.
+  const prevSelectedId = useRef<string | null>(null);
   useEffect(() => {
-    setScreenRef(null);
+    const prev = prevSelectedId.current;
+    prevSelectedId.current = selectedId;
+    if (prev !== null && prev !== selectedId) setScreenRef(null);
   }, [selectedId]);
 
   const shownRef = screenRef ?? versionRef;
