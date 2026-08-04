@@ -5,6 +5,7 @@ import { Badge, Button, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
+import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest } from '../../lib/types';
 // Neither import pulls Monaco in — the heavy editor stays behind the lazy `Ide` boundary.
 import { readFile } from '../ide/api';
@@ -113,7 +114,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   // "Building" is whatever the SERVER says is in flight, falling back to the in-flight request for
   // the moment before the first poll lands. Deriving it from `intent.isPending` alone is what made a
   // refresh look idle while the agent kept working.
-  const busy = Boolean(serverBuild) || intent.isPending;
+  //
+  // The fallback is bounded by the run's terminal event rather than by the request alone: a POST
+  // whose connection a proxy dropped never settles, so `isPending` on its own could hold the
+  // spinner on forever *after* the build had finished and its report had already rendered.
+  // `useTaskStream` clears on `run.finished` (emitted from the conductor's `finally`, detached or
+  // not), so whichever signal lands first wins.
+  const task = useTaskStream(projectId, { pending: intent.isPending, stage: 'build' });
+  const busy = Boolean(serverBuild) || task.busy;
   const hasBuild = Boolean(latestReportId);
 
   // Live telemetry from the realtime channel (re-baselined per run), merged with the durable list

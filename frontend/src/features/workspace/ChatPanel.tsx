@@ -6,6 +6,7 @@ import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
 import type { MessageDto, MessageRole, Stage } from '../../lib/types';
+import { deriveTaskStream } from '../../lib/useTaskStream';
 import { listMessages, submitIntent } from './api';
 import { STAGE_LABELS } from './stageMeta';
 
@@ -39,13 +40,13 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     () => events.filter((e) => e.project_id === channel && e.event !== 'ping'),
     [events, channel],
   );
+  // Streamed text is folded PER TURN rather than by concatenating every `agent.token` still in the
+  // ring buffer. Without the turn bracket (`agent.stream.start` resets, `run.finished` closes), a
+  // finished turn's text lingered here across stages and across projects — there was no event that
+  // would ever clear it. See lib/useTaskStream.ts.
   const streamed = useMemo(
-    () =>
-      activity
-        .filter((e) => e.event === 'agent.token')
-        .map((e) => String(e.payload.token ?? e.payload.text ?? ''))
-        .join(''),
-    [activity],
+    () => deriveTaskStream(events, projectId, 0).streamed,
+    [events, projectId],
   );
 
   const send = useMutation({
