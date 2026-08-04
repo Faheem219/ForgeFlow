@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Badge, Button, EmptyState, Input, Modal, Spinner } from '../../components/ui';
+import { Badge, Button, ConfirmDialog, EmptyState, Input, Modal, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import { STAGE_LABELS } from '../workspace/stageMeta';
 import { createProject, listProjects } from './api';
+import { useDeleteProject } from './useDeleteProject';
 
 const MINUTE = 60_000;
 const UNITS: Array<[limit: number, ms: number, unit: Intl.RelativeTimeFormatUnit]> = [
@@ -32,8 +33,11 @@ export default function Dashboard(): JSX.Element {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState('');
+  /** Project pending deletion — holds the ConfirmDialog's subject; null closes it. */
+  const [doomed, setDoomed] = useState<{ id: string; name: string } | null>(null);
 
   const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: listProjects });
+  const { remove, isDeleting } = useDeleteProject();
 
   const create = useMutation({
     mutationFn: (projectName: string) => createProject(projectName),
@@ -82,7 +86,9 @@ export default function Dashboard(): JSX.Element {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="project-list">
           {projects.map((project) => (
-            <li key={project.id}>
+            // The open-project control and the delete control are SIBLINGS (a button cannot nest a
+            // button), with delete floated over the card's corner and revealed on hover/focus.
+            <li key={project.id} className="group relative">
               <button
                 type="button"
                 data-testid={`project-${project.id}`}
@@ -98,6 +104,28 @@ export default function Dashboard(): JSX.Element {
                   <span aria-hidden>·</span>
                   <span>Updated {relativeTime(project.updated_at)}</span>
                 </span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete ${project.name}`}
+                data-testid={`delete-project-${project.id}`}
+                onClick={() => setDoomed({ id: project.id, name: project.name })}
+                className="absolute bottom-3 right-3 rounded-md p-1.5 text-slate-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <svg
+                  aria-hidden
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="h-4 w-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3.5 5.5h13m-10.5 0v-1a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1m-8 3v6m3-6v6m3-6v6M5 5.5l.7 10.1a1.5 1.5 0 0 0 1.5 1.4h5.6a1.5 1.5 0 0 0 1.5-1.4l.7-10.1"
+                  />
+                </svg>
               </button>
             </li>
           ))}
@@ -129,6 +157,24 @@ export default function Dashboard(): JSX.Element {
           />
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={doomed !== null}
+        onClose={() => setDoomed(null)}
+        title="Delete project"
+        description={
+          <>
+            This permanently deletes <span className="font-medium">{doomed?.name}</span> — its
+            sandbox, its database, its conversation, and every artifact. There is no undo.
+          </>
+        }
+        confirmPhrase={doomed?.name}
+        confirmLabel="Delete forever"
+        loading={isDeleting}
+        onConfirm={() => {
+          if (doomed) remove(doomed.id, { onDeleted: () => setDoomed(null) });
+        }}
+      />
     </div>
   );
 }

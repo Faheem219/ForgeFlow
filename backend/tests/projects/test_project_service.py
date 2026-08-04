@@ -76,11 +76,30 @@ async def test_delete_removes_project_and_its_stage_states() -> None:
     project = await ProjectService().create_project(owner, "gone-soon")
     assert project.id is not None
 
-    await ProjectService().delete(project.id, owner)
+    report = await ProjectService().delete(project.id, owner)
 
     with pytest.raises(NotFoundError):
         await ProjectService().get_owned(project.id, owner)
     assert await StageStateRepo().list_for_project(project.id) == []
+    # No sandbox/app DB exists in the test environment; the delete must fail soft and say so
+    # instead of raising — a stopped Docker daemon must never block removal.
+    assert report.sandbox_removed is False
+    assert isinstance(report.warnings, list)
+
+
+async def test_delete_cascades_project_scoped_documents() -> None:
+    from app.db.models import Run
+
+    owner = PydanticObjectId()
+    project = await ProjectService().create_project(owner, "cascade-me")
+    assert project.id is not None
+    await Run(project_id=project.id, kind="conductor:build").insert()
+    await Run(project_id=project.id, kind="codegen:build").insert()
+
+    report = await ProjectService().delete(project.id, owner)
+
+    assert report.documents_removed >= 2
+    assert await Run.find({"project_id": project.id}).count() == 0
 
 
 async def test_transition_stage_rejects_illegal_hard_prereq() -> None:

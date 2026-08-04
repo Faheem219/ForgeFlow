@@ -76,7 +76,13 @@ async def test_delete_project(client: AsyncClient) -> None:
     project_id = create.json()["id"]
 
     deleted = await client.delete(f"/projects/{project_id}", headers=_auth(token))
-    assert deleted.status_code == 204
+    assert deleted.status_code == 200
+    report = deleted.json()
+    assert report["id"] == project_id
+    # External teardown fails soft (no Docker / no app DB in the test environment), so the report
+    # must carry the outcome fields rather than pretending everything was reclaimed.
+    assert {"sandbox_removed", "app_db_dropped", "documents_removed", "warnings"} <= report.keys()
+    assert isinstance(report["warnings"], list)
 
     fetched = await client.get(f"/projects/{project_id}", headers=_auth(token))
     assert fetched.status_code == 404

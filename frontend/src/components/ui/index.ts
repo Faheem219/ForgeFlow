@@ -1,5 +1,6 @@
 export { Badge } from './Badge';
 export { Button, type ButtonProps } from './Button';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { EmptyState } from './EmptyState';
 export { Input, type InputProps } from './Input';
 export { Modal, type ModalProps } from './Modal';

@@ -7,15 +7,25 @@ rather than touching the repos directly.
 
 from __future__ import annotations
 
+import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from beanie import PydanticObjectId
+from beanie import Document, PydanticObjectId
 from bson.errors import InvalidId
 
 # SystemError shadows the builtin (taxonomy name fixed by the plan); A004 suppressed on-line.
 from app.core.errors import NotFoundError, SystemError, UserError  # noqa: A004
-from app.db.models import Project, StageState
+from app.db.models import (
+    Deployment,
+    Project,
+    RepairAttempt,
+    RequirementSpec,
+    Run,
+    StageState,
+    TestRun,
+    TestSuite,
+)
 from app.db.models.common import utcnow
 from app.db.models.enums import ProjectStatus, Stage, StageStatus
 from app.db.repos import ProjectRepo, StageStateRepo
@@ -24,6 +34,29 @@ from app.orchestrator.messages import MessageService
 from app.projects.state_machine import Action, apply_transition
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
+
+logger = logging.getLogger(__name__)
+
+#: Per-project collections cascaded on delete. Stage states, messages and artifacts are handled
+#: separately (they own blobs / need per-document cleanup); everything else is a plain bulk delete.
+CASCADE_MODELS: tuple[type[Document], ...] = (
+    RequirementSpec,
+    TestSuite,
+    TestRun,
+    RepairAttempt,
+    Deployment,
+    Run,
+)
+
+
+@dataclass
+class DeleteReport:
+    """What a delete actually reclaimed. Warnings name external resources that outlived it."""
+
+    sandbox_removed: bool = False
+    app_db_dropped: bool = False
+    documents_removed: int = 0
+    warnings: list[str] = field(default_factory=list)
 
 
 def parse_object_id(raw: str, label: str = "Project") -> PydanticObjectId:
@@ -89,14 +122,78 @@ class ProjectService:
         await project.save()
         return project
 
-    async def delete(self, project_id: PydanticObjectId, user_id: PydanticObjectId) -> None:
+    async def delete(
+        self,
+        project_id: PydanticObjectId,
+        user_id: PydanticObjectId,
+        *,
+        drop_app_data: bool = True,
+    ) -> DeleteReport:
+        """Delete a project and everything it owns.
+
+        Ordering is deliberate: **external** resources (sandbox container + volume, the per-project
+        application database) go first, while the ``Project`` document still exists to identify
+        them. Dropping the document first would orphan a running container and a live database with
+        no record pointing at either.
+
+        External teardown FAILS SOFT. A stopped Docker daemon or an unreachable Atlas cluster must
+        not leave the user with a project they cannot remove — the metadata cascade proceeds and the
+        report names what could not be reclaimed, so it can be surfaced and retried out-of-band.
+        Metadata deletion, by contrast, is allowed to raise: a half-deleted project in our own store
+        is a bug, not a degraded mode.
+        """
         project = await self.get_owned(project_id, user_id)
-        # Cascade: stage states, conversation, and versioned artifacts (+ their offloaded blobs).
+        report = DeleteReport()
+
+        # -- external resources (best effort) ----------------------------------------------
+        try:
+            from app.sandbox.manager import get_manager
+
+            await get_manager().destroy(project, remove_volume=True)
+            report.sandbox_removed = True
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - deliberately broad; teardown must not block delete
+            report.warnings.append(f"sandbox: {exc}")
+            logger.warning(
+                "project delete: sandbox teardown failed",
+                extra={"project_id": str(project_id), "error": str(exc)},
+            )
+
+        if drop_app_data:
+            try:
+                from app.deploy.db_provision import DbProvisioner
+
+                report.app_db_dropped = await DbProvisioner().teardown(project, drop_data=True)
+            except Exception as exc:  # noqa: BLE001 - same rationale as above
+                report.warnings.append(f"app database: {exc}")
+                logger.warning(
+                    "project delete: app database teardown failed",
+                    extra={"project_id": str(project_id), "error": str(exc)},
+                )
+
+        # -- control-plane metadata (must succeed) -----------------------------------------
         for state in await self._stages.list_for_project(project_id):
             await state.delete()
         await MessageService().delete_for_project(project_id)
         await ArtifactService().delete_for_project(project_id)
+
+        # Everything else keyed by project_id. Kept as a table so a new per-project collection is
+        # one line away from being cascaded — the failure mode here is silent orphan documents.
+        for model in CASCADE_MODELS:
+            # Beanie returns ``DeleteResult | None`` (None when the motor driver reports nothing),
+            # so the count is read defensively — it is a report field, never a control-flow value.
+            result = await model.find({"project_id": project_id}).delete()
+            report.documents_removed += getattr(result, "deleted_count", 0) or 0
+
         await project.delete()
+
+        await emit(
+            str(project_id),
+            EventType.project_deleted,
+            {"project_id": str(project_id), "warnings": report.warnings},
+        )
+        return report
 
     async def list_stages(
         self, project_id: PydanticObjectId, user_id: PydanticObjectId
