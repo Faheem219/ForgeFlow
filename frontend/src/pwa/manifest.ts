@@ -1,5 +1,7 @@
 import type { ManifestOptions } from 'vite-plugin-pwa';
 
+import { dark } from '../app/theme/palette';
+
 // PWA manifest (D14 — ForgeFlow itself is an installable PWA). Consumed by vite.config.ts
 // and asserted by manifest.test.ts.
 export const pwaManifest: Partial<ManifestOptions> = {
@@ -10,8 +12,9 @@ export const pwaManifest: Partial<ManifestOptions> = {
   description: 'AI-native, human-in-the-loop app builder.',
   lang: 'en',
   dir: 'ltr',
-  theme_color: '#312e81',
-  background_color: '#020617',
+  // The install-time chrome color; the runtime meta swap follows the live theme.
+  theme_color: dark.canvas,
+  background_color: dark.canvas,
   display: 'standalone',
   orientation: 'any',
   categories: ['developer', 'productivity'],

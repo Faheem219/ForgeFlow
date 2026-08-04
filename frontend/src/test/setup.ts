@@ -1,4 +1,9 @@
 import '@testing-library/jest-dom/vitest';
+import { MotionGlobalConfig } from 'framer-motion';
+
+// Make AnimatePresence exits and transitions synchronous in jsdom — tests that assert an element
+// is REMOVED (closed modal, dismissed toast) must not race an exit animation's timer.
+MotionGlobalConfig.skipAnimations = true;
 
 // Node's global fetch/Request (undici) reject jsdom's AbortSignal instances with
 // "Expected signal to be an instance of AbortSignal". React-router's data router passes one when
@@ -32,4 +37,36 @@ if (!('DOMMatrixReadOnly' in globalThis)) {
   globalThis.DOMMatrixReadOnly = class {
     m22 = 1;
   } as unknown as typeof DOMMatrixReadOnly;
+}
+
+// jsdom has no matchMedia. framer-motion's MotionConfig(reducedMotion="user") and the theme
+// store's `system` mode both consult it; a guarded stub keeps them on their default branches.
+// Tests that need a specific answer stub it themselves (see themeStore.test.ts).
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
+// jsdom has no IntersectionObserver; framer-motion's whileInView needs one to mount.
+if (typeof window !== 'undefined' && typeof window.IntersectionObserver === 'undefined') {
+  class StubIntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: readonly number[] = [];
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  (window as { IntersectionObserver: unknown }).IntersectionObserver = StubIntersectionObserver;
 }

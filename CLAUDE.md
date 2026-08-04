@@ -22,7 +22,7 @@ You are building **ForgeFlow**: an AI-native, human-in-the-loop **PWA** that tak
 ## Tech stack
 
 - **Control plane:** FastAPI (Python 3.11, `uv`), Pydantic v2, Motor + Beanie (MongoDB), `anthropic` SDK, `docker` SDK, WebSockets, `httpx`, `cryptography`, `pytest`.
-- **Frontend:** React 18 + Vite + TS + Tailwind (dark, indigo/violet), Zustand, TanStack Query, `@monaco-editor/react`, `xterm.js`, `@xyflow/react` (React Flow), `vite-plugin-pwa`.
+- **Frontend:** React 18 + Vite + TS + Tailwind (semantic tokens, light+dark, indigo/violet), Zustand, TanStack Query, `@monaco-editor/react`, `xterm.js`, `@xyflow/react` (React Flow), `vite-plugin-pwa`; UI-revamp additions (authorized): `framer-motion`, `react-resizable-panels`, `lucide-react`, `clsx`+`tailwind-merge`, `@fontsource` Inter/JetBrains Mono.
 - **Generated apps (fixed):** React+Vite+TS / Express+TS / Mongoose / Zod / Vitest / Jest+supertest / Playwright.
 - **Sandbox image:** Node 20 + pnpm + Playwright + git, non-root.
 - **Deploy:** Vercel (SPA FE), Render (Node BE). **BE is never deployed to Vercel.**

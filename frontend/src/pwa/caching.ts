@@ -76,8 +76,8 @@ export const navigateFallbackDenylist: RegExp[] = [
   /\/[^/?]+\.[^/?]+$/,
 ];
 
-/** Precache globs for the app shell + static assets. */
-export const PRECACHE_GLOBS = ['**/*.{js,css,html,svg,png,ico,webmanifest}'];
+/** Precache globs for the app shell + static assets (woff2: the self-hosted Inter/JetBrains). */
+export const PRECACHE_GLOBS = ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'];
 
 /**
  * Kept out of the precache: Monaco's language workers are huge (ts.worker alone is ~6 MB — the

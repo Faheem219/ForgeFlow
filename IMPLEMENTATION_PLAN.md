@@ -71,7 +71,7 @@ Three planes plus external providers. (See `forgeflow_user_flow.drawio` for the 
 
 ## 4. Tech Stack
 
-**Platform frontend:** React 18 + Vite + TypeScript + Tailwind CSS (dark theme, indigo/violet accents), React Router, Zustand (state), TanStack Query (server state), `@monaco-editor/react` (IDE), `xterm.js` (terminal), `@xyflow/react` (React Flow topology), `vite-plugin-pwa`/Workbox (PWA), native WebSocket client.
+**Platform frontend:** React 18 + Vite + TypeScript + Tailwind CSS (semantic token theming, light + dark, indigo/violet accents), React Router, Zustand (state), TanStack Query (server state), `@monaco-editor/react` (IDE), `xterm.js` (terminal), `@xyflow/react` (React Flow topology), `vite-plugin-pwa`/Workbox (PWA), native WebSocket client. UI-revamp additions (authorized 2026-08-04): `framer-motion` (micro-interactions), `react-resizable-panels` (draggable splitters), `lucide-react` (icons), `clsx`+`tailwind-merge` (class composition), `@fontsource-variable/inter` + `@fontsource/jetbrains-mono` (self-hosted fonts).
 
 **Platform backend:** FastAPI + Uvicorn, Python 3.11, `uv` (env/deps), Pydantic v2 (schemas/settings), Motor + Beanie (MongoDB ODM), `anthropic` Python SDK (agents; optionally the Claude Agent SDK), `docker` SDK (sandbox), `websockets`/FastAPI WS, `httpx` (providers), `cryptography` (secret encryption), `python-jose`/`passlib[bcrypt]` (auth), `pytest`+`pytest-asyncio` (tests), `ruff`+`black`+`mypy` (quality).
 

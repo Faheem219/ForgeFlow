@@ -2,44 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens (dark, indigo/violet). Tailwind `brand`/`accent` scales live in tailwind.config. */
-:root {
-  color-scheme: dark;
-  --surface: #020617; /* slate-950 */
-  --surface-raised: #0f172a; /* slate-900 */
-  --border: #1e293b; /* slate-800 */
-  --text: #f1f5f9; /* slate-100 */
-  --text-muted: #94a3b8; /* slate-400 */
-  --brand: #6366f1;
-  --accent: #8b5cf6;
-  --radius: 0.75rem;
-}
+/*
+ * Design tokens live in src/app/theme/palette.ts — the Tailwind plugin in tailwind.config.ts
+ * emits them as CSS custom properties under :root[data-theme='dark'|'light']. Nothing here
+ * declares a color by hand; base styles compose the semantic utilities instead.
+ */
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    @apply bg-surface-canvas font-sans text-fg antialiased;
+    /* Calmer variable-font rendering: contextual alternates + tabular-ready UI numerals. */
+    font-feature-settings:
+      'calt' 1,
+      'cv11' 1;
   }
 
   /* Visible, consistent keyboard focus for a11y. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-slate-950;
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-surface-canvas;
   }
 
   ::selection {
-    background-color: rgb(99 102 241 / 0.35);
+    background-color: rgb(var(--ff-brand) / 0.3);
   }
 }
 
 /* Slim, theme-matched scrollbars. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: rgb(var(--ff-edge-strong)) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #334155;
+  background-color: rgb(var(--ff-edge-strong));
   border-radius: 9999px;
 }

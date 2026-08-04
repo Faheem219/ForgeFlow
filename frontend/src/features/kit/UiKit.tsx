@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { ThemeToggle } from '../../app/layout/ThemeToggle';
 import { Badge, Button, EmptyState, Input, Modal, Panel, Spinner, Tabs } from '../../components/ui';
 import { toast } from '../../lib/stores/toastStore';
 
@@ -9,7 +10,11 @@ export default function UiKit(): JSX.Element {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-8">
-      <h1 className="text-2xl font-semibold text-slate-100">UI Kit</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-100">UI Kit</h1>
+        {/* Theme switching lives here until the token sweep lands app-wide. */}
+        <ThemeToggle />
+      </div>
 
       <Panel title="Buttons">
         <div className="flex flex-wrap items-center gap-3">

@@ -1,10 +1,45 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#312e81" />
+    <meta name="theme-color" content="#09090b" />
+    <meta
+      name="description"
+      content="ForgeFlow takes a web-app idea from design through requirements, build, test and self-healing repair to a deployed, validated URL — with you in the loop at every stage."
+    />
+    <meta property="og:title" content="ForgeFlow" />
+    <meta
+      property="og:description"
+      content="AI-native app builder: screenshots in, deployed URL out — human-in-the-loop at every stage."
+    />
+    <meta property="og:type" content="website" />
     <title>ForgeFlow</title>
+    <script>
+      // Pre-paint theme stamp — runs before any stylesheet or bundle so a cold load never
+      // flashes the wrong theme. Reads the RAW mode string themeStore writes (see
+      // lib/stores/themeStore.ts); the two canvas hexes below are asserted against
+      // src/app/theme/palette.ts by htmlSync.test.ts, so they cannot drift silently.
+      (function () {
+        try {
+          var mode = localStorage.getItem('forgeflow-theme-mode') || 'dark';
+          var light =
+            mode === 'light' ||
+            (mode === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: light)').matches);
+          var theme = light ? 'light' : 'dark';
+          var root = document.documentElement;
+          root.setAttribute('data-theme', theme);
+          root.classList.toggle('dark', theme === 'dark');
+          root.style.colorScheme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', theme === 'light' ? '#f7f7f8' : '#09090b');
+        } catch (e) {
+          /* storage disabled — keep the dark default */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
