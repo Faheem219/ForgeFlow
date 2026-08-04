@@ -87,10 +87,9 @@ function renderEscalation(onResumed = vi.fn()) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  render(
-    <Escalation projectId={PROJECT} escalation={ESCALATION} onResumed={onResumed} />,
-    { wrapper },
-  );
+  render(<Escalation projectId={PROJECT} escalation={ESCALATION} onResumed={onResumed} />, {
+    wrapper,
+  });
   return onResumed;
 }
 

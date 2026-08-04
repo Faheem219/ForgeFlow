@@ -142,7 +142,9 @@ describe('RepairView', () => {
 
     fireEvent.click(screen.getByTestId('toggle-diff-1'));
     await waitFor(() => expect(screen.getByTestId('attempt-diff')).toBeInTheDocument());
-    expect(screen.getByTestId('attempt-diff')).toHaveTextContent('if (!title) return res.status(400)');
+    expect(screen.getByTestId('attempt-diff')).toHaveTextContent(
+      'if (!title) return res.status(400)',
+    );
   });
 
   it('exposes repair and cancel controls', () => {

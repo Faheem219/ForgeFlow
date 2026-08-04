@@ -120,7 +120,8 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     id: 'providers',
     label: 'Design providers',
     group: 'Pipeline',
-    blurb: 'The active design backend (Stitch / Figma / fake), its credentials, and the fallback order.',
+    blurb:
+      'The active design backend (Stitch / Figma / fake), its credentials, and the fallback order.',
   },
   {
     id: 'sandbox',
@@ -132,19 +133,22 @@ export const ADMIN_SECTIONS: AdminSectionMeta[] = [
     id: 'preview',
     label: 'Live preview',
     group: 'Pipeline',
-    blurb: 'Dev-server commands, ports, health probes and the docker networks preview traffic uses.',
+    blurb:
+      'Dev-server commands, ports, health probes and the docker networks preview traffic uses.',
   },
   {
     id: 'testing',
     label: 'Testing & validation',
     group: 'Pipeline',
-    blurb: 'Suite timeouts, which E2E subset runs against production, and warm-up for sleeping hosts.',
+    blurb:
+      'Suite timeouts, which E2E subset runs against production, and warm-up for sleeping hosts.',
   },
   {
     id: 'repair',
     label: 'Repair loop',
     group: 'Pipeline',
-    blurb: 'The bounds that keep self-healing finite: iteration cap, stall threshold, context budget.',
+    blurb:
+      'The bounds that keep self-healing finite: iteration cap, stall threshold, context budget.',
   },
   {
     id: 'deploy',

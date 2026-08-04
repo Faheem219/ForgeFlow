@@ -2,7 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Badge, Button, ConfirmDialog, EmptyState, Input, Modal, Spinner } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Input,
+  Modal,
+  Spinner,
+} from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import { STAGE_LABELS } from '../workspace/stageMeta';
@@ -24,7 +32,11 @@ function relativeTime(iso: string): string {
   const elapsed = Date.now() - then;
   if (elapsed < MINUTE) return 'just now';
   const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-  const [, ms, unit] = UNITS.find(([limit]) => elapsed < limit) as [number, number, Intl.RelativeTimeFormatUnit];
+  const [, ms, unit] = UNITS.find(([limit]) => elapsed < limit) as [
+    number,
+    number,
+    Intl.RelativeTimeFormatUnit,
+  ];
   return format.format(-Math.round(elapsed / ms), unit);
 }
 

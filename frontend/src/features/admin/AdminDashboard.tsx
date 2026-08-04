@@ -133,8 +133,9 @@ export function AdminDashboard(): JSX.Element {
               : meta?.blurb}
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            Precedence is <span className="font-mono text-slate-500">admin &gt; env &gt; default</span>.
-            Changes apply immediately unless a key is marked <em>restart required</em>.
+            Precedence is{' '}
+            <span className="font-mono text-slate-500">admin &gt; env &gt; default</span>. Changes
+            apply immediately unless a key is marked <em>restart required</em>.
           </p>
         </header>
 

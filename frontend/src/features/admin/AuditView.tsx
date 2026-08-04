@@ -15,7 +15,9 @@ function Row({ entry }: { entry: ConfigAudit }): JSX.Element {
       <div className="flex flex-wrap items-center gap-2">
         <code className="text-slate-100">{entry.key}</code>
         <Badge tone={entry.action === 'delete' ? 'warning' : 'brand'}>{entry.action}</Badge>
-        <span className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString()}</span>
+        <span className="text-xs text-slate-500">
+          {new Date(entry.created_at).toLocaleString()}
+        </span>
       </div>
       <p className="mt-1 font-mono text-xs text-slate-400">
         <span className="text-red-300">{value(entry.before)}</span>

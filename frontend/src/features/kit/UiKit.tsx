@@ -1,18 +1,34 @@
 import { useState } from 'react';
 
 import { ThemeToggle } from '../../app/layout/ThemeToggle';
-import { Badge, Button, EmptyState, Input, Modal, Panel, Spinner, Tabs } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Input,
+  Kbd,
+  Modal,
+  Panel,
+  Segmented,
+  Skeleton,
+  Spinner,
+  Stat,
+  Tabs,
+  Tooltip,
+} from '../../components/ui';
 import { toast } from '../../lib/stores/toastStore';
 
 /** Dev-only showcase of every UI-kit component (route: /_kit). */
 export default function UiKit(): JSX.Element {
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [segment, setSegment] = useState<'code' | 'preview'>('code');
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-100">UI Kit</h1>
-        {/* Theme switching lives here until the token sweep lands app-wide. */}
+        <h1 className="text-2xl font-semibold text-fg">UI Kit</h1>
         <ThemeToggle />
       </div>
 
@@ -42,6 +58,7 @@ export default function UiKit(): JSX.Element {
         <div className="max-w-sm space-y-3">
           <Input label="Email" type="email" placeholder="you@example.com" />
           <Input placeholder="No label" />
+          <Input label="With hint" hint="Shown under the field." placeholder="…" />
         </div>
       </Panel>
 
@@ -51,15 +68,47 @@ export default function UiKit(): JSX.Element {
             {
               id: 'a',
               label: 'Overview',
-              content: <p className="text-sm text-slate-400">Overview panel.</p>,
+              content: <p className="text-sm text-fg-subtle">Overview panel.</p>,
             },
             {
               id: 'b',
               label: 'Details',
-              content: <p className="text-sm text-slate-400">Details panel.</p>,
+              content: <p className="text-sm text-fg-subtle">Details panel.</p>,
             },
           ]}
         />
+      </Panel>
+
+      <Panel title="Small pieces">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="flex items-center gap-1 text-sm text-fg-muted">
+            Command palette <Kbd>Ctrl</Kbd>
+            <Kbd>K</Kbd>
+          </span>
+          <Tooltip label="A short explanation">
+            <Button size="sm" variant="ghost">
+              Hover me
+            </Button>
+          </Tooltip>
+          <Segmented
+            ariaLabel="View"
+            value={segment}
+            onChange={setSegment}
+            options={[
+              { value: 'code', label: 'Code' },
+              { value: 'preview', label: 'Preview' },
+            ]}
+          />
+        </div>
+        <div className="mt-4 grid max-w-md grid-cols-3 gap-3">
+          <Stat label="Tests" value="128" tone="success" detail="all passing" />
+          <Stat label="Cost" value="₹41.20" />
+          <Stat label="Repairs" value="2" tone="danger" />
+        </div>
+        <div className="mt-4 max-w-sm space-y-2">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
       </Panel>
 
       <Panel title="Feedback">
@@ -67,6 +116,9 @@ export default function UiKit(): JSX.Element {
           <Spinner />
           <Button variant="secondary" onClick={() => setModalOpen(true)}>
             Open modal
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
+            Open confirm
           </Button>
           <Button
             variant="secondary"
@@ -100,6 +152,16 @@ export default function UiKit(): JSX.Element {
       >
         This is a modal dialog. Press Escape or click the backdrop to close.
       </Modal>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => setConfirmOpen(false)}
+        title="Delete example"
+        confirmPhrase="example"
+        confirmLabel="Delete forever"
+        description="Typed-name confirmation for irreversible actions."
+      />
     </main>
   );
 }

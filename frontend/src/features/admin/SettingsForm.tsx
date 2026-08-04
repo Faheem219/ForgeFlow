@@ -263,7 +263,8 @@ function SettingRow({
           </div>
           <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-600">
             <span>
-              code default: <span className="font-mono">{String(setting.default ?? '') || '—'}</span>
+              code default:{' '}
+              <span className="font-mono">{String(setting.default ?? '') || '—'}</span>
             </span>
             {hint ? <span>allowed: {hint}</span> : null}
             {setting.choices.length > 0 ? <span>one of: {setting.choices.join(' · ')}</span> : null}
@@ -335,8 +336,7 @@ export function SettingsForm({
       });
       onChanged();
     },
-    onError: (err) =>
-      setErrors({ __form: errorMessage(err, 'Could not save these changes') }),
+    onError: (err) => setErrors({ __form: errorMessage(err, 'Could not save these changes') }),
   });
 
   if (settings.length === 0) {

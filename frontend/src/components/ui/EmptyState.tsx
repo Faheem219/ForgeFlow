@@ -12,10 +12,10 @@ export function EmptyState({
   action?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-800 px-6 py-12 text-center">
-      {icon ? <div className="mb-3 text-slate-500">{icon}</div> : null}
-      <p className="text-sm font-medium text-slate-200">{title}</p>
-      {description ? <p className="mt-1 max-w-sm text-sm text-slate-400">{description}</p> : null}
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-edge-strong px-6 py-12 text-center">
+      {icon ? <div className="mb-3 text-fg-faint">{icon}</div> : null}
+      <p className="text-sm font-medium text-fg">{title}</p>
+      {description ? <p className="mt-1 max-w-sm text-sm text-fg-subtle">{description}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );

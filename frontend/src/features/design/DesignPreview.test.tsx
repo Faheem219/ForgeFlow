@@ -62,7 +62,9 @@ describe('DesignPreview', () => {
   });
 
   it('shows no tab bar for a single-screen design', () => {
-    render(<DesignPreview html="<p>only</p>" css="" screens={[{ id: 's1', title: 'x', html: '' }]} />);
+    render(
+      <DesignPreview html="<p>only</p>" css="" screens={[{ id: 's1', title: 'x', html: '' }]} />,
+    );
     expect(screen.queryByTestId('design-screens')).not.toBeInTheDocument();
     expect(screen.getByTestId('design-preview-frame').getAttribute('srcdoc')).toContain('only');
   });

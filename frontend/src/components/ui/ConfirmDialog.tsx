@@ -77,7 +77,7 @@ export function ConfirmDialog({
       }
     >
       <div className="space-y-3">
-        {description ? <div className="text-sm text-slate-300">{description}</div> : null}
+        {description ? <div className="text-sm text-fg-muted">{description}</div> : null}
         {children}
         {confirmPhrase ? (
           <form

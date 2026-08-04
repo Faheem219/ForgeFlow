@@ -169,9 +169,10 @@ export function RepairView({
     return out;
   }, [events, projectId]);
 
-  const trail = running && live.length > 0
-    ? live.map((it) => it.failing_count)
-    : (report?.metrics.failing_by_iteration ?? live.map((it) => it.failing_count));
+  const trail =
+    running && live.length > 0
+      ? live.map((it) => it.failing_count)
+      : (report?.metrics.failing_by_iteration ?? live.map((it) => it.failing_count));
 
   const metrics = report?.metrics;
   const tokens = metrics?.tokens_spent ?? live.at(-1)?.tokens ?? 0;
@@ -190,7 +191,10 @@ export function RepairView({
             </span>
           ) : null}
           {running ? (
-            <span className="flex items-center gap-1 text-xs text-slate-400" data-testid="repair-running">
+            <span
+              className="flex items-center gap-1 text-xs text-slate-400"
+              data-testid="repair-running"
+            >
               <Spinner /> repairing…
             </span>
           ) : null}
@@ -222,7 +226,9 @@ export function RepairView({
         <>
           <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-800 p-3">
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Failing per iteration</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Failing per iteration
+              </p>
               <Sparkline values={trail} />
             </div>
             <dl className="flex gap-4 text-xs text-slate-400">

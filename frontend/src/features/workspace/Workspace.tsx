@@ -164,13 +164,20 @@ export default function Workspace(): JSX.Element {
     <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-slate-100">{projectQuery.data.name}</h1>
+          <h1 className="truncate text-xl font-semibold text-slate-100">
+            {projectQuery.data.name}
+          </h1>
           <p className="text-sm text-slate-400">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ToolToggle label="Stages" on={stagesOpen} onClick={toggleStages} testId="toggle-stages" />
+          <ToolToggle
+            label="Stages"
+            on={stagesOpen}
+            onClick={toggleStages}
+            testId="toggle-stages"
+          />
           <span className="mx-1 hidden h-5 w-px bg-slate-800 sm:block" aria-hidden />
           <ToolToggle
             label="Data"

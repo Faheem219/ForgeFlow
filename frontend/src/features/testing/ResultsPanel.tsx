@@ -39,7 +39,8 @@ function FailureDetail({ result }: { result: TestResultDto }): JSX.Element | nul
       ) : null}
       {result.failure.files_referenced.length > 0 ? (
         <p className="text-slate-500">
-          Implicated: <span className="font-mono">{result.failure.files_referenced.join(', ')}</span>
+          Implicated:{' '}
+          <span className="font-mono">{result.failure.files_referenced.join(', ')}</span>
         </p>
       ) : null}
     </div>

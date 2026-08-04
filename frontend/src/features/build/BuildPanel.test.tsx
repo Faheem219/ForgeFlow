@@ -29,7 +29,10 @@ interface MockState {
 
 const REPORT = {
   boot_status: 'healthy',
-  files_changed: ['backend/src/features/todo/todo.routes.ts', 'frontend/src/features/todo/TodoPage.tsx'],
+  files_changed: [
+    'backend/src/features/todo/todo.routes.ts',
+    'frontend/src/features/todo/TodoPage.tsx',
+  ],
   features_built: ['Todos'],
   follow_ups: [],
   notes: [],

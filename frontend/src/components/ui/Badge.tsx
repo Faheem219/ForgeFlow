@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger';
 
 const tones: Record<Tone, string> = {
-  neutral: 'bg-slate-800 text-slate-300',
-  brand: 'bg-brand-600/20 text-brand-300',
-  success: 'bg-emerald-600/20 text-emerald-300',
-  warning: 'bg-amber-600/20 text-amber-300',
-  danger: 'bg-red-600/20 text-red-300',
+  neutral: 'bg-surface-raised text-fg-muted border-edge',
+  brand: 'bg-brand/10 text-brand border-brand/20',
+  success: 'bg-success/10 text-success border-success/20',
+  warning: 'bg-warning/10 text-warning border-warning/20',
+  danger: 'bg-danger/10 text-danger border-danger/20',
 };
 
 export function Badge({
@@ -19,7 +19,7 @@ export function Badge({
 }): JSX.Element {
   return (
     <span
-      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${tones[tone]}`}
     >
       {children}
     </span>

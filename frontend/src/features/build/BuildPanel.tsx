@@ -335,7 +335,8 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               </Badge>
             ) : null}
             <span className="truncate text-xs text-slate-400">
-              {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'} changed
+              {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'}{' '}
+              changed
               {report.commit ? (
                 <span className="ml-2 font-mono text-slate-500">{report.commit.slice(0, 8)}</span>
               ) : null}

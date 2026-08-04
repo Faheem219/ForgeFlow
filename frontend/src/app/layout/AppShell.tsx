@@ -1,10 +1,13 @@
-import type { ReactNode } from 'react';
+import { ChartNoAxesColumn, LayoutGrid, PanelLeft, Settings2, ShieldCheck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { Button } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { useAuthStore } from '../../lib/stores/authStore';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { useUiStore } from '../../lib/stores/uiStore';
+import { ThemeToggle } from './ThemeToggle';
 
 const rtLabel: Record<string, string> = {
   open: 'live',
@@ -12,73 +15,24 @@ const rtLabel: Record<string, string> = {
   closed: 'offline',
 };
 const rtDot: Record<string, string> = {
-  open: 'bg-emerald-400',
-  connecting: 'bg-amber-400 animate-pulse',
-  closed: 'bg-slate-600',
-};
-
-/** Inline stroke icons — the sidebar collapses to icons only, so each nav item needs a real one. */
-function Icon({ path }: { path: ReactNode }): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-[18px] w-[18px] shrink-0"
-      aria-hidden
-    >
-      {path}
-    </svg>
-  );
-}
-
-const ICONS: Record<string, ReactNode> = {
-  dashboard: (
-    <>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </>
-  ),
-  eval: (
-    <>
-      <path d="M3 3v18h18" />
-      <path d="M7 15l4-5 3 3 5-7" />
-    </>
-  ),
-  settings: (
-    <>
-      <path d="M4 6h16M4 12h16M4 18h16" />
-      <circle cx="9" cy="6" r="2" />
-      <circle cx="15" cy="12" r="2" />
-      <circle cx="8" cy="18" r="2" />
-    </>
-  ),
-  admin: (
-    <>
-      <path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6z" />
-      <path d="M9.5 12l1.8 1.8L15 10" />
-    </>
-  ),
+  open: 'bg-success',
+  connecting: 'bg-warning animate-pulse',
+  closed: 'bg-fg-faint',
 };
 
 interface NavItem {
   to: string;
   label: string;
   end: boolean;
-  icon: string;
+  icon: LucideIcon;
   adminOnly?: boolean;
 }
 
 const nav: NavItem[] = [
-  { to: '/', label: 'Dashboard', end: true, icon: 'dashboard' },
-  { to: '/eval', label: 'Evaluation', end: false, icon: 'eval' },
-  { to: '/settings', label: 'Settings', end: false, icon: 'settings' },
-  { to: '/admin', label: 'Admin', end: false, icon: 'admin', adminOnly: true },
+  { to: '/', label: 'Dashboard', end: true, icon: LayoutGrid },
+  { to: '/eval', label: 'Evaluation', end: false, icon: ChartNoAxesColumn },
+  { to: '/settings', label: 'Settings', end: false, icon: Settings2 },
+  { to: '/admin', label: 'Admin', end: false, icon: ShieldCheck, adminOnly: true },
 ];
 
 export function AppShell(): JSX.Element {
@@ -95,25 +49,29 @@ export function AppShell(): JSX.Element {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-surface-canvas">
       <aside
-        className={`flex shrink-0 flex-col border-r border-slate-800 bg-slate-900/40 transition-all ${
-          collapsed ? 'w-16' : 'w-56'
-        }`}
+        className={cn(
+          'flex shrink-0 flex-col border-r border-edge bg-surface transition-all duration-200',
+          collapsed ? 'w-16' : 'w-56',
+        )}
       >
         <div
-          className={`flex h-14 shrink-0 items-center gap-2 ${collapsed ? 'justify-center px-0' : 'px-4'}`}
+          className={cn(
+            'flex h-14 shrink-0 items-center gap-2.5',
+            collapsed ? 'justify-center px-0' : 'px-4',
+          )}
         >
           <span
-            className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500"
+            className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-brand to-accent shadow-sm"
             aria-hidden
           />
           {!collapsed ? (
-            <span className="font-semibold tracking-tight text-slate-100">ForgeFlow</span>
+            <span className="font-semibold tracking-tight text-fg">ForgeFlow</span>
           ) : null}
         </div>
 
-        <nav className="flex-1 space-y-1 px-2 py-2">
+        <nav className="flex-1 space-y-0.5 px-2 py-2">
           {nav
             .filter((item) => !item.adminOnly || user?.role === 'admin')
             .map((item) => (
@@ -123,16 +81,16 @@ export function AppShell(): JSX.Element {
                 end={item.end}
                 title={item.label}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
-                    collapsed ? 'justify-center' : ''
-                  } ${
+                  cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                    collapsed && 'justify-center',
                     isActive
-                      ? 'bg-brand-600/20 font-medium text-brand-200'
-                      : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
-                  }`
+                      ? 'bg-brand/10 font-medium text-brand'
+                      : 'text-fg-muted hover:bg-surface-raised hover:text-fg',
+                  )
                 }
               >
-                <Icon path={ICONS[item.icon]} />
+                <item.icon aria-hidden className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
                 {!collapsed ? <span className="truncate">{item.label}</span> : null}
               </NavLink>
             ))}
@@ -140,7 +98,7 @@ export function AppShell(): JSX.Element {
 
         {/* Build version — lets a user confirm an update actually took effect (phase-49). */}
         <div
-          className="shrink-0 px-4 py-2 text-xs text-slate-600"
+          className="shrink-0 px-4 py-2 text-xs text-fg-faint"
           title={`ForgeFlow v${__APP_VERSION__}`}
           data-testid="app-version"
         >
@@ -149,36 +107,28 @@ export function AppShell(): JSX.Element {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-800 px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-edge px-4">
           <button
             type="button"
             aria-label="Toggle sidebar"
             onClick={toggleSidebar}
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
+            className="rounded-lg p-2 text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
           >
-            <Icon
-              path={
-                <>
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                </>
-              }
-            />
+            <PanelLeft aria-hidden className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
           <div className="flex items-center gap-3 text-sm">
             <span
-              className="flex items-center gap-1.5 rounded-full border border-slate-800 px-2.5 py-1 text-xs text-slate-400"
+              className="flex items-center gap-1.5 rounded-full border border-edge px-2.5 py-1 text-xs text-fg-muted"
               title="Realtime connection"
               data-testid="rt-status"
             >
               <span className={`h-1.5 w-1.5 rounded-full ${rtDot[rtStatus]}`} aria-hidden />
               {rtLabel[rtStatus]}
             </span>
-            <span title="Theme: dark" aria-hidden>
-              🌙
-            </span>
+            <ThemeToggle />
             <span
               data-testid="current-user"
-              className="hidden max-w-[16rem] truncate text-slate-300 sm:block"
+              className="hidden max-w-[16rem] truncate text-fg-muted sm:block"
             >
               {user?.email}
             </span>

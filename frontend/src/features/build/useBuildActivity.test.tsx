@@ -10,7 +10,14 @@ let seq = 0;
 
 function write(path: string, projectId = PROJECT): RealtimeEvent {
   seq += 1;
-  return { event: 'fs.write', project_id: projectId, stage: 'build', payload: { path }, seq, ts: '' };
+  return {
+    event: 'fs.write',
+    project_id: projectId,
+    stage: 'build',
+    payload: { path },
+    seq,
+    ts: '',
+  };
 }
 
 function progress(step: string): RealtimeEvent {
@@ -68,7 +75,10 @@ describe('useBuildActivity', () => {
   it('does not replay the pre-mount backlog as if it were landing now', () => {
     // The workspace connects before the Build panel mounts, so the store already holds an earlier
     // run's writes — showing them would fake progress that is not happening.
-    useRealtimeStore.setState({ channel: PROJECT, events: [write('stale/from-a-previous-run.ts')] });
+    useRealtimeStore.setState({
+      channel: PROJECT,
+      events: [write('stale/from-a-previous-run.ts')],
+    });
 
     const { result } = renderHook(() => useBuildActivity(PROJECT));
     expect(result.current.files).toEqual([]);
