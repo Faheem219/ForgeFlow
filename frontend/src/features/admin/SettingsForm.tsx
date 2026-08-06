@@ -64,7 +64,7 @@ function Editor({
         <input
           type="checkbox"
           data-testid={`toggle-${setting.key}`}
-          className="h-4 w-4 accent-brand-500"
+          className="h-4 w-4 accent-brand"
           checked={Boolean(draft)}
           disabled={disabled}
           onChange={(e) => onDraft(e.target.checked)}
@@ -173,67 +173,89 @@ function SettingRow({
   const busy = save.isPending || reset.isPending || setSecret.isPending;
   const hint = rangeHint(setting);
 
+  /*
+   * One row in the grouped list: identity on the left, control on the right. The row is flat —
+   * the group carries the border — so ~110 settings read as a list to scan, not a wall of cards.
+   * A dirty row is marked by a brand spine + wash rather than swapping its whole chrome.
+   */
   return (
     <div
-      className={`rounded-xl border p-3 transition ${
-        dirty ? 'border-brand/50 bg-brand/5' : 'border-edge bg-surface'
+      className={`relative px-4 py-4 transition-colors lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 ${
+        dirty ? 'bg-brand/5' : 'hover:bg-surface-raised/40'
       }`}
       data-testid={`setting-${setting.key}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-fg">{setting.label ?? setting.key}</span>
-        <SourceBadge source={setting.source} />
-        {setting.locked ? <Badge tone="danger">read-only</Badge> : null}
-        {setting.restart_required ? (
-          <span title="Applies on restart, or to newly-created sandboxes">
-            <Badge tone="warning">restart required</Badge>
+      <span
+        aria-hidden
+        className={`absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-brand transition-opacity ${
+          dirty ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-fg">{setting.label ?? setting.key}</span>
+          <SourceBadge source={setting.source} />
+          {setting.locked ? <Badge tone="danger">read-only</Badge> : null}
+          {setting.restart_required ? (
+            <span title="Applies on restart, or to newly-created sandboxes">
+              <Badge tone="warning">restart required</Badge>
+            </span>
+          ) : null}
+          {dirty ? <Badge tone="brand">unsaved</Badge> : null}
+          {showCategory ? <span className="text-xs text-fg-faint">in {showCategory}</span> : null}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-fg-muted">{setting.description}</p>
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-fg-faint">
+          <code className="font-mono text-fg-subtle">
+            {setting.env_var ?? setting.key.toUpperCase()}
+          </code>
+          <span>
+            default: <span className="font-mono">{String(setting.default ?? '') || '—'}</span>
           </span>
-        ) : null}
-        {dirty ? <Badge tone="brand">unsaved</Badge> : null}
-        {showCategory ? <span className="text-xs text-fg-faint">in {showCategory}</span> : null}
+          {hint ? <span>allowed: {hint}</span> : null}
+          {setting.choices.length > 0 ? <span>one of: {setting.choices.join(' · ')}</span> : null}
+        </div>
       </div>
 
-      <code className="mt-1 block font-mono text-[11px] text-fg-subtle">
-        {setting.env_var ?? setting.key.toUpperCase()}
-      </code>
-      <p className="mt-1 text-xs text-fg-muted">{setting.description}</p>
-
-      {setting.locked ? (
-        <div className="mt-2 space-y-1">
-          <span
-            data-testid={`locked-value-${setting.key}`}
-            className="inline-block rounded-lg border border-edge bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-fg-muted"
-          >
-            {displayValue(setting)}
-          </span>
-          <p className="text-xs text-warning">{setting.locked_reason}</p>
-        </div>
-      ) : setting.sensitive ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <SensitiveField
-            isSet={Boolean(setting.value)}
-            busy={setSecret.isPending}
-            onSubmit={(secret) => setSecret.mutate(secret)}
-            note={
-              setting.source === 'db'
-                ? 'Set from this panel — encrypted at rest, and never shown again.'
-                : 'Currently coming from the environment. Setting it here overrides that.'
-            }
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy || !canReset}
-            title={canReset ? 'Remove the override and fall back to env/default' : 'Not overridden'}
-            data-testid={`reset-${setting.key}`}
-            onClick={() => reset.mutate()}
-          >
-            Reset
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-3 lg:mt-0">
+        {setting.locked ? (
+          <div className="space-y-1">
+            <span
+              data-testid={`locked-value-${setting.key}`}
+              className="inline-block rounded-lg border border-edge bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-fg-muted"
+            >
+              {displayValue(setting)}
+            </span>
+            <p className="text-xs text-warning">{setting.locked_reason}</p>
+          </div>
+        ) : setting.sensitive ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <SensitiveField
+              isSet={Boolean(setting.value)}
+              busy={setSecret.isPending}
+              onSubmit={(secret) => setSecret.mutate(secret)}
+              note={
+                setting.source === 'db'
+                  ? 'Set from this panel — encrypted at rest, and never shown again.'
+                  : 'Currently coming from the environment. Setting it here overrides that.'
+              }
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || !canReset}
+              title={
+                canReset ? 'Remove the override and fall back to env/default' : 'Not overridden'
+              }
+              data-testid={`reset-${setting.key}`}
+              onClick={() => reset.mutate()}
+            >
+              Reset
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
             <Editor
               setting={setting}
               draft={current}
@@ -261,22 +283,14 @@ function SettingRow({
               Reset
             </Button>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-fg-faint">
-            <span>
-              code default:{' '}
-              <span className="font-mono">{String(setting.default ?? '') || '—'}</span>
-            </span>
-            {hint ? <span>allowed: {hint}</span> : null}
-            {setting.choices.length > 0 ? <span>one of: {setting.choices.join(' · ')}</span> : null}
-          </div>
-        </>
-      )}
+        )}
 
-      {error ? (
-        <p className="mt-2 text-xs text-danger" data-testid={`error-${setting.key}`}>
-          {error}
-        </p>
-      ) : null}
+        {error ? (
+          <p className="mt-2 text-xs text-danger" data-testid={`error-${setting.key}`}>
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -344,19 +358,22 @@ export function SettingsForm({
   }
 
   return (
-    <div className="space-y-2" data-testid="settings-form">
-      {settings.map((s) => (
-        <SettingRow
-          key={s.key}
-          setting={s}
-          draft={drafts[s.key]}
-          onDraft={(v) => setDraft(s.key, v)}
-          error={errors[s.key]}
-          onError={(message) => setError(s.key, message)}
-          onSaved={onChanged}
-          showCategory={categoryLabels?.[s.category]}
-        />
-      ))}
+    <div className="space-y-3" data-testid="settings-form">
+      {/* One bordered group, hairline-divided rows — a list to scan, not a wall of cards. */}
+      <div className="divide-y divide-edge overflow-hidden rounded-xl border border-edge bg-surface">
+        {settings.map((s) => (
+          <SettingRow
+            key={s.key}
+            setting={s}
+            draft={drafts[s.key]}
+            onDraft={(v) => setDraft(s.key, v)}
+            error={errors[s.key]}
+            onError={(message) => setError(s.key, message)}
+            onSaved={onChanged}
+            showCategory={categoryLabels?.[s.category]}
+          />
+        ))}
+      </div>
 
       {errors.__form ? (
         <p className="text-xs text-danger" data-testid="bulk-error">

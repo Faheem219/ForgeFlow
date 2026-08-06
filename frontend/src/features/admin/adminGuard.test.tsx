@@ -10,7 +10,8 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/login" element={<div>login page</div>} />
-        <Route path="/" element={<div>home</div>} />
+        {/* Non-admins are sent to the app home, which lives at /dashboard. */}
+        <Route path="/dashboard" element={<div>home</div>} />
         <Route
           path="/admin"
           element={

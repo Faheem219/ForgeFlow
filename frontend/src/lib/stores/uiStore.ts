@@ -11,6 +11,9 @@ interface UiState {
   assistantOpen: boolean;
   toggleStages: () => void;
   toggleAssistant: () => void;
+  /** Bumped by global surfaces (command palette) to ask the dashboard to open its create dialog. */
+  newProjectTick: number;
+  requestNewProject: () => void;
 }
 
 /** Small shell-UI state (sidebar + workspace rail collapse), persisted across reloads. */
@@ -24,6 +27,8 @@ export const useUiStore = create<UiState>()(
       assistantOpen: true,
       toggleStages: () => set((s) => ({ stagesOpen: !s.stagesOpen })),
       toggleAssistant: () => set((s) => ({ assistantOpen: !s.assistantOpen })),
+      newProjectTick: 0,
+      requestNewProject: () => set((s) => ({ newProjectTick: s.newProjectTick + 1 })),
     }),
     { name: 'forgeflow-ui' },
   ),

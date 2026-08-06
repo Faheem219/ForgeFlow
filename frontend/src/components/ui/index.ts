@@ -7,6 +7,7 @@ export { Kbd, Segmented, Skeleton, Stat, Tooltip, type SegmentedOption } from '.
 export { Modal, type ModalProps, type ModalSize } from './Modal';
 export { Panel } from './Panel';
 export { Spinner } from './Spinner';
+export { SpotlightCard, type SpotlightCardProps } from './SpotlightCard';
 export { Tabs, type TabItem } from './Tabs';
 export { Toaster } from './Toaster';
 export { fieldClasses } from './fieldStyles';

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, EmptyState, Input, Spinner } from '../../components/ui';
 import { toastError } from '../../lib/errors';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
@@ -265,7 +266,14 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-edge">
-            {contentQuery.isFetching || screenQuery.isFetching ? (
+            {busy ? (
+              // Generating a design is a provider round-trip measured in tens of seconds, and the
+              // preview is blank the whole time — the pipeline mark says what is happening.
+              <div className="flex h-full items-center justify-center">
+                <AgentWorking label="Generating the design" />
+              </div>
+            ) : contentQuery.isFetching || screenQuery.isFetching ? (
+              // A refetch of an existing design is quick; a spinner is the honest weight for it.
               <div className="flex h-full items-center justify-center">
                 <Spinner />
               </div>

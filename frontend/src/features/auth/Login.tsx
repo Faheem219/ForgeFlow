@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { Button, Input } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useAuthStore } from '../../lib/stores/authStore';
 import { login } from './api';
-import { AuthShell, Field } from './AuthShell';
+import { AuthShell } from './AuthShell';
 
 export default function Login(): JSX.Element {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ export default function Login(): JSX.Element {
     try {
       const res = await login(email, password);
       setAuth(res.access_token, res.user);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Login failed');
     } finally {
@@ -35,14 +36,14 @@ export default function Login(): JSX.Element {
       footer={
         <>
           Need an account?{' '}
-          <Link className="text-brand-text hover:underline" to="/register">
+          <Link className="font-medium text-brand-text hover:underline" to="/register">
             Create one
           </Link>
         </>
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field
+        <Input
           label="Email"
           type="email"
           autoComplete="email"
@@ -50,7 +51,7 @@ export default function Login(): JSX.Element {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Field
+        <Input
           label="Password"
           type="password"
           autoComplete="current-password"
@@ -60,17 +61,16 @@ export default function Login(): JSX.Element {
           onChange={(e) => setPassword(e.target.value)}
         />
         {error ? (
-          <p className="text-sm text-danger" role="alert">
+          <p
+            role="alert"
+            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+          >
             {error}
           </p>
         ) : null}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-lg bg-brand px-3 py-2 font-medium text-white hover:bg-brand disabled:opacity-50"
-        >
+        <Button type="submit" loading={submitting} className="w-full">
           {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
       </form>
     </AuthShell>
   );

@@ -1,4 +1,6 @@
-import { Badge, EmptyState, Spinner } from '../../components/ui';
+import { Database } from 'lucide-react';
+
+import { Badge, EmptyState, Skeleton } from '../../components/ui';
 import type { CollectionDto } from '../../lib/types';
 
 /**
@@ -18,8 +20,13 @@ export function CollectionsList({
 }): JSX.Element {
   if (loading) {
     return (
-      <div className="flex justify-center py-6" data-testid="collections-loading">
-        <Spinner />
+      <div className="space-y-1" data-testid="collections-loading" aria-hidden>
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
+            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="h-4 w-8 rounded-full" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -27,6 +34,7 @@ export function CollectionsList({
   if (collections.length === 0) {
     return (
       <EmptyState
+        icon={<Database aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
         title="No collections yet"
         description="Your app's collections appear here once it writes its first document."
       />

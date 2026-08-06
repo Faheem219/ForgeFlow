@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { History } from 'lucide-react';
 
-import { Badge, EmptyState, Spinner } from '../../components/ui';
+import { Badge, EmptyState, Skeleton } from '../../components/ui';
 import { listAudit } from './api';
 import type { ConfigAudit } from './types';
 
@@ -37,14 +38,25 @@ export function AuditView(): JSX.Element {
 
   if (query.isLoading) {
     return (
-      <div className="flex justify-center py-6">
-        <Spinner />
+      <div className="space-y-2" aria-hidden>
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="space-y-1.5 rounded-xl border border-edge p-3">
+            <Skeleton className="h-4 w-56" />
+            <Skeleton className="h-3 w-72" />
+          </div>
+        ))}
       </div>
     );
   }
   const entries = query.data ?? [];
   if (entries.length === 0) {
-    return <EmptyState title="No changes yet" description="Config edits will be recorded here." />;
+    return (
+      <EmptyState
+        icon={<History aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+        title="No changes yet"
+        description="Config edits will be recorded here."
+      />
+    );
   }
   return (
     <ul className="space-y-2" data-testid="audit-list">

@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
+import { KeyRound, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { Badge, Button, EmptyState, Panel, Spinner } from '../../components/ui';
+import { Badge, Button, EmptyState, Panel, Skeleton, fieldClasses } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { DURATION, EASE } from '../../lib/motion';
 import { toast } from '../../lib/stores/toastStore';
 import type { CredentialKind } from '../../lib/types';
 import { deleteCredential, listCredentials, putCredential } from './api';
@@ -16,9 +19,6 @@ const KIND_LABELS: Record<CredentialKind, string> = {
 };
 
 const KINDS = Object.keys(KIND_LABELS) as CredentialKind[];
-
-const inputClass =
-  'w-full rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand';
 
 /**
  * Bring-your-own provider tokens (phase-34). Strictly write-only: the form posts a secret, and the
@@ -82,7 +82,7 @@ export function Credentials(): JSX.Element {
           <label className="text-sm">
             <span className="mb-1 block text-fg-muted">Provider</span>
             <select
-              className={`${inputClass} w-40`}
+              className={`${fieldClasses} w-40`}
               data-testid="credential-kind"
               value={kind}
               onChange={(e) => setKind(e.target.value as CredentialKind)}
@@ -100,7 +100,7 @@ export function Credentials(): JSX.Element {
             <input
               type="password"
               autoComplete="off"
-              className={inputClass}
+              className={fieldClasses}
               data-testid="credential-secret"
               value={secret}
               placeholder="Paste the token — it is never shown again"
@@ -108,7 +108,12 @@ export function Credentials(): JSX.Element {
             />
           </label>
 
-          <Button type="submit" disabled={busy || !secret.trim()} data-testid="credential-save">
+          <Button
+            type="submit"
+            loading={save.isPending}
+            disabled={busy || !secret.trim()}
+            data-testid="credential-save"
+          >
             {save.isPending ? 'Saving…' : 'Save token'}
           </Button>
         </form>
@@ -116,45 +121,67 @@ export function Credentials(): JSX.Element {
         <div>
           <h4 className="mb-2 text-xs uppercase tracking-wide text-fg-subtle">Stored</h4>
           {credentialsQuery.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner />
+            // Ghosts with the same bones as real rows, so the resolve never jumps the layout.
+            <div className="space-y-1" aria-hidden>
+              {Array.from({ length: 2 }, (_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 rounded-lg border border-edge px-3 py-2"
+                >
+                  <Skeleton className="h-7 w-7 rounded-lg" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="ml-auto h-4 w-16" />
+                </div>
+              ))}
             </div>
           ) : credentials.length === 0 ? (
             <EmptyState
+              icon={<KeyRound aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
               title="No tokens stored"
               description="Add a provider token above to use your own account for deploys."
             />
           ) : (
             <ul className="space-y-1" data-testid="credential-list">
-              {credentials.map((c) => (
-                <li
-                  key={`${c.kind}-${c.scope}`}
-                  data-testid={`credential-row-${c.kind}`}
-                  className="flex items-center justify-between rounded-lg border border-edge px-3 py-2 text-sm"
-                >
-                  <span className="flex items-center gap-2 text-fg">
-                    {KIND_LABELS[c.kind]}
-                    <Badge tone={c.scope === 'byo' ? 'brand' : 'neutral'}>{c.scope}</Badge>
-                    {c.last4 ? (
-                      <span className="font-mono text-xs text-fg-subtle">····{c.last4}</span>
-                    ) : null}
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-xs text-fg-subtle">
-                      {new Date(c.created_at).toLocaleDateString()}
+              <AnimatePresence initial={false}>
+                {credentials.map((c) => (
+                  <motion.li
+                    key={`${c.kind}-${c.scope}`}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -12 }}
+                    transition={{ duration: DURATION.base, ease: EASE }}
+                    data-testid={`credential-row-${c.kind}`}
+                    className="group flex items-center justify-between rounded-lg border border-edge px-3 py-2 text-sm transition-colors hover:border-edge-strong hover:bg-surface-raised/50"
+                  >
+                    <span className="flex items-center gap-2.5 text-fg">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-text">
+                        <KeyRound aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </span>
+                      <span className="font-medium">{KIND_LABELS[c.kind]}</span>
+                      <Badge tone={c.scope === 'byo' ? 'brand' : 'neutral'}>{c.scope}</Badge>
+                      {c.last4 ? (
+                        <span className="font-mono text-xs text-fg-subtle">····{c.last4}</span>
+                      ) : null}
                     </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      data-testid={`credential-delete-${c.kind}`}
-                      onClick={() => remove.mutate(c.kind)}
-                    >
-                      Delete
-                    </Button>
-                  </span>
-                </li>
-              ))}
+                    <span className="flex items-center gap-3">
+                      <span className="text-xs text-fg-subtle">
+                        {new Date(c.created_at).toLocaleDateString()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Delete ${KIND_LABELS[c.kind]} token`}
+                        data-testid={`credential-delete-${c.kind}`}
+                        onClick={() => remove.mutate(c.kind)}
+                        className="rounded-md p-1.5 text-fg-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        <Trash2 aria-hidden className="h-4 w-4" strokeWidth={1.75} />
+                      </button>
+                    </span>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ul>
           )}
         </div>

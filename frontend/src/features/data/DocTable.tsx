@@ -1,4 +1,6 @@
-import { Button, EmptyState, Spinner } from '../../components/ui';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Inbox } from 'lucide-react';
+
+import { Button, EmptyState, Skeleton } from '../../components/ui';
 import type { DataDocument, DocumentPageDto } from '../../lib/types';
 import { columnsOf, formatCell, nextSort, type SortState } from './table';
 
@@ -21,8 +23,15 @@ export function DocTable({
 }): JSX.Element {
   if (loading && !page) {
     return (
-      <div className="flex justify-center py-8" data-testid="docs-loading">
-        <Spinner />
+      <div
+        className="space-y-1 rounded-lg border border-edge p-2"
+        data-testid="docs-loading"
+        aria-hidden
+      >
+        <Skeleton className="h-6 w-full" />
+        {Array.from({ length: 5 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
       </div>
     );
   }
@@ -30,6 +39,7 @@ export function DocTable({
   if (!page || page.documents.length === 0) {
     return (
       <EmptyState
+        icon={<Inbox aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
         title="No documents"
         description="Nothing matches here yet. Create one, or clear the filter."
       />
@@ -57,7 +67,15 @@ export function DocTable({
                     >
                       <span className="font-mono">{column}</span>
                       <span aria-hidden className={active ? 'text-brand-text' : 'text-fg-faint'}>
-                        {active ? (sort?.direction === 1 ? '▲' : '▼') : '↕'}
+                        {active ? (
+                          sort?.direction === 1 ? (
+                            <ChevronUp className="h-3 w-3" strokeWidth={2} />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" strokeWidth={2} />
+                          )
+                        ) : (
+                          <ChevronsUpDown className="h-3 w-3" strokeWidth={2} />
+                        )}
                       </span>
                     </button>
                   </th>

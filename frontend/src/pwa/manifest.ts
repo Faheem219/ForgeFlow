@@ -18,7 +18,8 @@ export const pwaManifest: Partial<ManifestOptions> = {
   display: 'standalone',
   orientation: 'any',
   categories: ['developer', 'productivity'],
-  start_url: '/',
+  // An installed ForgeFlow opens the tool, not the marketing page `/` serves to visitors.
+  start_url: '/dashboard',
   scope: '/',
   icons: [
     { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

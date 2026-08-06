@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Coins } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import { Badge, EmptyState, Spinner } from '../../components/ui';
+import { Badge, EmptyState, Skeleton } from '../../components/ui';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import type { BudgetDto, RunDto } from '../../lib/types';
 import { getProjectCost, listRuns } from './api';
@@ -36,8 +37,9 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
       </div>
       {uncapped ? null : (
         <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+          {/* Width transitions so a refresh reads as the bar moving, not a redraw. */}
           <div
-            className={`h-full rounded-full ${
+            className={`h-full rounded-full transition-[width] duration-500 ease-out ${
               budget.halted ? 'bg-danger' : budget.warning ? 'bg-warning' : 'bg-brand'
             }`}
             style={{ width: `${ratio * 100}%` }}
@@ -94,16 +96,31 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
   }, [events, projectId, queryClient]);
 
   if (costQuery.isLoading) {
+    // Same bones as the resolved layout, so the numbers land without a jump.
     return (
-      <div className="flex h-24 items-center justify-center">
-        <Spinner />
+      <div className="space-y-3" aria-hidden>
+        <div className="grid grid-cols-3 gap-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="space-y-1.5 rounded-lg border border-edge bg-surface px-2 py-2">
+              <Skeleton className="h-2.5 w-12" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-16 w-full rounded-lg" />
       </div>
     );
   }
 
   const cost = costQuery.data;
   if (!cost) {
-    return <EmptyState title="No cost data" description="Spend appears once an agent runs." />;
+    return (
+      <EmptyState
+        icon={<Coins aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+        title="No cost data"
+        description="Spend appears once an agent runs."
+      />
+    );
   }
 
   const runs = runsQuery.data ?? [];
@@ -166,7 +183,7 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
             {runs.map((run) => (
               <li
                 key={run.id}
-                className="flex items-center justify-between gap-2 rounded border border-edge/60 px-2 py-1 text-xs"
+                className="flex items-center justify-between gap-2 rounded border border-edge/60 px-2 py-1 text-xs transition-colors hover:border-edge-strong hover:bg-surface-raised/50"
                 data-testid={`run-${run.id}`}
               >
                 <span className="min-w-0 flex-1 truncate">

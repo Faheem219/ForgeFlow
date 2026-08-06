@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Database, MessageSquareText, Rows3, SquareTerminal, Trash2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -26,11 +28,13 @@ const CostPanel = lazy(() => import('../cost/CostPanel'));
 /** A compact toolbar toggle: filled when the target is showing, quiet when hidden. */
 function ToolToggle({
   label,
+  icon: Icon,
   on,
   onClick,
   testId,
 }: {
   label: string;
+  icon: LucideIcon;
   on: boolean;
   onClick: () => void;
   testId?: string;
@@ -43,6 +47,7 @@ function ToolToggle({
       data-testid={testId}
       onClick={onClick}
     >
+      <Icon aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
       {label}
     </Button>
   );
@@ -117,7 +122,7 @@ export default function Workspace(): JSX.Element {
         description: 'This project no longer exists.',
         variant: 'warning',
       });
-      navigate('/');
+      navigate('/dashboard');
     }
   }, [events, projectId, queryClient, navigate]);
 
@@ -174,31 +179,35 @@ export default function Workspace(): JSX.Element {
         <div className="flex flex-wrap items-center gap-2">
           <ToolToggle
             label="Stages"
+            icon={Rows3}
             on={stagesOpen}
             onClick={toggleStages}
             testId="toggle-stages"
           />
-          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
           <ToolToggle
             label="Data"
+            icon={Database}
             on={view === 'data'}
             onClick={() => setView((v) => (v === 'data' ? 'stage' : 'data'))}
             testId="toggle-data"
           />
           <ToolToggle
             label="Terminal"
+            icon={SquareTerminal}
             on={terminalOpen}
             onClick={() => setTerminalOpen((open) => !open)}
             testId="toggle-terminal"
           />
-          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
           <ToolToggle
             label="Assistant"
+            icon={MessageSquareText}
             on={assistantOpen}
             onClick={toggleAssistant}
             testId="toggle-assistant"
           />
-          <span className="mx-1 hidden h-5 w-px bg-surface-raised sm:block" aria-hidden />
+          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
           <Button
             size="sm"
             variant="ghost"
@@ -206,6 +215,7 @@ export default function Workspace(): JSX.Element {
             className="text-danger hover:bg-danger/10"
             onClick={() => setConfirmDelete(true)}
           >
+            <Trash2 aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
             Delete
           </Button>
         </div>
@@ -280,7 +290,7 @@ export default function Workspace(): JSX.Element {
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        onConfirm={() => remove(projectId, { onDeleted: () => navigate('/') })}
+        onConfirm={() => remove(projectId, { onDeleted: () => navigate('/dashboard') })}
         loading={isDeleting}
         title="Delete project"
         confirmLabel="Delete forever"

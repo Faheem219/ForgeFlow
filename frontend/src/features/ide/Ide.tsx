@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileCode2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button, EmptyState, Modal, Spinner } from '../../components/ui';
@@ -177,6 +178,7 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
         ) : (
           <div className="flex flex-1 items-center justify-center p-6">
             <EmptyState
+              icon={<FileCode2 aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
               title="No file open"
               description="Pick a file from the tree — or watch one appear as the agent writes it."
             />
@@ -191,8 +193,8 @@ export function Ide({ projectId }: { projectId: string }): JSX.Element {
       >
         <div className="space-y-4">
           <p className="text-sm text-fg-muted">
-            <span className="font-medium text-fg">{conflict}</span> was written in the
-            sandbox while you had unsaved changes. Nothing has been overwritten.
+            <span className="font-medium text-fg">{conflict}</span> was written in the sandbox while
+            you had unsaved changes. Nothing has been overwritten.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => void resolveConflict('mine')}>

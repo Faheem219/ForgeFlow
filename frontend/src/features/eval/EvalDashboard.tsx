@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { FileDown, FlaskConical } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
-import { Badge, Button, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Button, EmptyState, Skeleton } from '../../components/ui';
+import { EASE_OUT, gsap, motionOK, useGSAP } from '../../lib/gsap';
 import { toast } from '../../lib/stores/toastStore';
 import type { EvalOutcome, EvalRecordDto, EvalSummary } from '../../lib/types';
 import { fetchReport, getEvalSummary, listEvalRuns } from './api';
@@ -51,6 +53,7 @@ function download(filename: string, text: string, mime: string): void {
 export function EvalDashboard(): JSX.Element {
   const [source, setSource] = useState<string | undefined>(undefined);
   const [exporting, setExporting] = useState<string | null>(null);
+  const scope = useRef<HTMLDivElement | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ['eval-summary', source],
@@ -61,6 +64,22 @@ export function EvalDashboard(): JSX.Element {
   const data = summaryQuery.data;
   const records = useMemo(() => data?.records ?? [], [data]);
   const summary: EvalSummary | undefined = data?.summary;
+
+  // Tiles and chart panels rise in once when the evidence resolves — same beat as the dashboard.
+  useGSAP(
+    () => {
+      if (!motionOK() || !summaryQuery.isSuccess) return;
+      gsap.from('[data-eval-section]', {
+        opacity: 0,
+        y: 16,
+        duration: 0.45,
+        ease: EASE_OUT,
+        stagger: 0.06,
+        clearProps: 'all',
+      });
+    },
+    { scope, dependencies: [summaryQuery.isSuccess] },
+  );
 
   async function exportReport(format: 'csv' | 'md'): Promise<void> {
     setExporting(format);
@@ -79,9 +98,23 @@ export function EvalDashboard(): JSX.Element {
   }
 
   if (summaryQuery.isLoading) {
+    // Ghost of the real layout — header, stat tiles, a chart panel — so the resolve doesn't jump.
     return (
-      <div className="flex h-40 items-center justify-center">
-        <Spinner />
+      <div className="space-y-4" aria-hidden>
+        <div className="space-y-1.5">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-3.5 w-56" />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="space-y-2 rounded-xl border border-edge bg-surface px-3 py-3">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-52 w-full rounded-xl" />
       </div>
     );
   }
@@ -89,6 +122,7 @@ export function EvalDashboard(): JSX.Element {
   if (!data?.available || !summary) {
     return (
       <EmptyState
+        icon={<FlaskConical aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
         title="No evaluation runs yet"
         description="Run the harness to produce evidence: uv run python -m app.eval.runner --spec all"
       />
@@ -103,11 +137,11 @@ export function EvalDashboard(): JSX.Element {
   }));
 
   return (
-    <div className="space-y-4" data-testid="eval-dashboard">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+    <div ref={scope} className="mx-auto max-w-7xl space-y-4" data-testid="eval-dashboard">
+      <header data-eval-section className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-medium text-fg">Evaluation</h2>
-          <p className="text-xs text-fg-subtle">
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">Evaluation</h2>
+          <p className="mt-0.5 text-sm text-fg-muted">
             {summary.specs} specs · {summary.scored} scored
             {data.source ? ` · ${data.source}` : ''}
           </p>
@@ -119,7 +153,7 @@ export function EvalDashboard(): JSX.Element {
               data-testid="eval-run-picker"
               value={data.source ?? ''}
               onChange={(e) => setSource(e.target.value || undefined)}
-              className="rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1.5 text-xs text-fg"
+              className="rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1.5 text-xs text-fg outline-none transition-colors focus:border-brand"
             >
               {runsQuery.data?.map((run) => (
                 <option key={run.source} value={run.source}>
@@ -135,6 +169,7 @@ export function EvalDashboard(): JSX.Element {
             loading={exporting === 'csv'}
             onClick={() => void exportReport('csv')}
           >
+            <FileDown aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
             Export CSV
           </Button>
           <Button
@@ -144,13 +179,14 @@ export function EvalDashboard(): JSX.Element {
             loading={exporting === 'md'}
             onClick={() => void exportReport('md')}
           >
+            <FileDown aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
             Export Markdown
           </Button>
         </div>
       </header>
 
       {/* The one number this view leads with, then its supporting tiles. */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-eval-section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Repair delta"
           value={pct(summary.repair_delta.mean, true)}
@@ -175,7 +211,7 @@ export function EvalDashboard(): JSX.Element {
         />
       </div>
 
-      <section className="rounded-xl border border-edge bg-surface-overlay p-3">
+      <section data-eval-section className="rounded-xl border border-edge bg-surface-overlay p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-fg-muted">First-pass → post-repair, per spec</h3>
           <Legend
@@ -188,7 +224,7 @@ export function EvalDashboard(): JSX.Element {
         <Dumbbell data={dumbbell} beforeLabel="First-pass" afterLabel="Post-repair" />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div data-eval-section className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border border-edge bg-surface-overlay p-3">
           <h3 className="mb-2 text-xs font-medium text-fg-muted">
             Repair iterations per spec
@@ -215,7 +251,7 @@ export function EvalDashboard(): JSX.Element {
       </div>
 
       {summary.screenshot_to_url_seconds.count > 0 ? (
-        <section className="rounded-xl border border-edge bg-surface-overlay p-3">
+        <section data-eval-section className="rounded-xl border border-edge bg-surface-overlay p-3">
           <h3 className="mb-2 text-xs font-medium text-fg-muted">
             Idea → live URL
             <span className="ml-2 font-normal text-fg-subtle">
@@ -237,7 +273,7 @@ export function EvalDashboard(): JSX.Element {
       ) : null}
 
       {/* The table view: every value the charts show, reachable without hovering. */}
-      <section className="rounded-xl border border-edge bg-surface">
+      <section data-eval-section className="rounded-xl border border-edge bg-surface">
         <h3 className="border-b border-edge px-3 py-2 text-xs font-medium text-fg-muted">
           Per spec
         </h3>
@@ -266,7 +302,7 @@ export function EvalDashboard(): JSX.Element {
               {records.map((r) => (
                 <tr
                   key={r.spec_id}
-                  className="border-t border-edge/60"
+                  className="border-t border-edge/60 transition-colors hover:bg-surface-raised/50"
                   data-testid={`eval-row-${r.spec_id}`}
                 >
                   <td className="px-3 py-1.5 font-mono text-fg">{r.spec_id}</td>

@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
-import { Badge, Button, Spinner } from '../../components/ui';
+import { AgentWorking } from '../../components/AgentWorking';
+import { Badge, Button, Skeleton } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
+import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentAction, RequirementSpecInput, StageStatus } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
@@ -87,7 +89,16 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
     [],
   );
 
-  const busy = intent.isPending;
+  /*
+   * Driven by the realtime run, not by the request.
+   *
+   * `intent.isPending` only covers the POST; the agent keeps working long after it returns, and a
+   * dropped connection would leave it pending forever. `useTaskStream` clears on the conductor's
+   * terminal `run.finished`, which is what makes the indicator stop the moment the work is
+   * actually done — and only then.
+   */
+  const task = useTaskStream(projectId, { pending: intent.isPending, stage: 'requirements' });
+  const busy = task.busy;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -120,9 +131,20 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {specQuery.isLoading ? (
+        {busy ? (
           <div className="flex h-full items-center justify-center">
-            <Spinner />
+            <AgentWorking label={task.step ? `${task.step}` : 'Drafting the requirements'} />
+          </div>
+        ) : specQuery.isLoading ? (
+          // Form-shaped ghost: label + field pairs, so the spec resolving doesn't jump the panel.
+          <div className="space-y-4 p-1" aria-hidden>
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-3.5 w-28" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+            <Skeleton className="h-24 w-full" />
           </div>
         ) : view === 'review' && spec ? (
           <ReviewSummary spec={spec} onEdit={() => setMode('edit')} />

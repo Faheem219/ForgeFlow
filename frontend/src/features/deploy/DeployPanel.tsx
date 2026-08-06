@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
@@ -187,6 +188,17 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           {deployDisabledReason} It is the one ordering ForgeFlow enforces — everything else is
           optional.
         </p>
+      ) : null}
+
+      {/* Above the grid, so it survives selecting a node mid-deploy — the indicator has to answer
+          "is it still working?" for the whole run, whatever else you are looking at. */}
+      {busy ? (
+        <section
+          className="flex shrink-0 justify-center rounded-xl border border-edge bg-surface py-5"
+          data-testid="deploy-progress"
+        >
+          <AgentWorking label="Deploying" />
+        </section>
       ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2fr_1fr]">

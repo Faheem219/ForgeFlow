@@ -21,7 +21,7 @@ export function RequireAdmin({ children }: { children: ReactElement }): ReactEle
     return <Navigate to="/login" replace />;
   }
   if (role !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 }

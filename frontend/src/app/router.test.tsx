@@ -48,14 +48,19 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('router', () => {
-  it('redirects unauthenticated users to /login', () => {
+  it('serves the public landing page at the root', async () => {
     renderAt('/');
+    expect(await screen.findByText('in one guided flow.')).toBeInTheDocument();
+  });
+
+  it('redirects unauthenticated users from /dashboard to /login', () => {
+    renderAt('/dashboard');
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
   });
 
   it('renders the dashboard when authenticated', async () => {
     signIn();
-    renderAt('/');
+    renderAt('/dashboard');
     expect(await screen.findByText('No projects yet')).toBeInTheDocument();
   });
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, EmptyState } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
@@ -215,13 +216,18 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
         </p>
       ) : null}
 
-      {busy && liveStep ? (
-        <p
-          className="rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-xs text-brand-text"
+      {busy ? (
+        // A live validation run is a full Playwright suite against the deployed URL — minutes with
+        // nothing else on screen. The step label is kept as the caption so the mark says *which*
+        // part of the run is going, not merely that something is.
+        <div
+          className="flex items-center justify-center rounded-xl border border-edge bg-surface py-6"
           data-testid="validate-progress"
         >
-          {STEP_LABELS[liveStep] ?? liveStep}…
-        </p>
+          <AgentWorking
+            label={liveStep ? (STEP_LABELS[liveStep] ?? liveStep) : 'Validating the live URL'}
+          />
+        </div>
       ) : null}
 
       {/* The payoff: a verified deployment, and the link. */}

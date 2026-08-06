@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { Suspense, lazy } from 'react';
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 
 import AdminDashboard from '../features/admin/AdminDashboard';
@@ -14,7 +15,19 @@ import Workspace from '../features/workspace/Workspace';
 import NotFound from './NotFound';
 import { AppShell } from './layout/AppShell';
 
+// The landing page carries GSAP + its scroll plugins — signed-in users going straight to the
+// app never pay for it.
+const Landing = lazy(() => import('../features/landing/Landing'));
+
 export const routes: RouteObject[] = [
+  {
+    path: '/',
+    element: (
+      <Suspense fallback={null}>
+        <Landing />
+      </Suspense>
+    ),
+  },
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
   { path: '/_kit', element: <UiKit /> },
@@ -25,7 +38,7 @@ export const routes: RouteObject[] = [
       </RequireAuth>
     ),
     children: [
-      { path: '/', element: <Dashboard /> },
+      { path: '/dashboard', element: <Dashboard /> },
       { path: '/projects/:id', element: <Workspace /> },
       { path: '/eval', element: <EvalDashboard /> },
       { path: '/settings', element: <Settings /> },

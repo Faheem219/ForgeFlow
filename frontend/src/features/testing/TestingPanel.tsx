@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
+import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest, TestRunDto } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
@@ -69,6 +71,13 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
 
   const report = repairQuery.data ?? null;
 
+  // Both a test run and a repair iteration are agent work on this stage; either should show the
+  // indicator, and the realtime run — not the request — decides when it stops.
+  const task = useTaskStream(projectId, {
+    pending: intent.isPending || repair.isPending,
+    stage: 'test',
+  });
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -77,6 +86,11 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
           <span data-testid="test-stage-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
+          {task.busy ? (
+            <span className="text-xs font-normal text-fg-muted">
+              {task.step ? `${task.step}…` : 'running…'}
+            </span>
+          ) : null}
         </span>
         <div className="flex gap-2">
           <Button
@@ -98,6 +112,17 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
           </Button>
         </div>
       </header>
+
+      {/* Persistent for the whole run: a repair loop keeps iterating long after the first results
+          land, so the indicator sits above the columns rather than replacing either of them. */}
+      {task.busy ? (
+        <section
+          className="flex shrink-0 justify-center rounded-xl border border-edge bg-surface py-5"
+          data-testid="test-progress"
+        >
+          <AgentWorking label={task.step ? task.step : 'Generating and running tests'} />
+        </section>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
         <div className="min-h-0 overflow-auto">

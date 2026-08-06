@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { ThemeToggle } from '../../app/layout/ThemeToggle';
+import { AgentWorking } from '../../components/AgentWorking';
 import {
   Badge,
   Button,
@@ -108,6 +109,14 @@ export default function UiKit(): JSX.Element {
         <div className="mt-4 max-w-sm space-y-2">
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
+        </div>
+      </Panel>
+
+      {/* The long-wait indicator lives here too: it only appears mid-run inside the build and
+          design panels, which makes it almost impossible to look at while working on it. */}
+      <Panel title="Agent working (long waits)">
+        <div className="flex justify-center py-4">
+          <AgentWorking label="Generating the app" />
         </div>
       </Panel>
 

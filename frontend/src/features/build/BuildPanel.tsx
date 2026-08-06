@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 
+import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, Spinner } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
@@ -221,7 +224,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                 data-testid="build-menu"
                 onClick={() => setMenuOpen((v) => !v)}
               >
-                ⋯
+                <MoreHorizontal aria-hidden className="h-4 w-4" strokeWidth={1.75} />
               </Button>
               {menuOpen ? (
                 <div
@@ -261,6 +264,20 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
           data-testid="build-activity"
         >
+          {/*
+            Shown for the WHOLE run, not just until the first file lands.
+
+            It previously collapsed once output appeared, on the reasoning that the file list is
+            more informative. That was wrong: files streaming in do not tell you whether the agent
+            is still working or has stopped, so the indicator disappearing mid-run reads as "done"
+            when it is not. It stays until the run's terminal event clears `busy`.
+          */}
+          {busy ? (
+            <div className="flex justify-center border-b border-edge py-6">
+              <AgentWorking label={activityLabel || 'Starting the build'} />
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-2 px-4 py-2">
             {busy ? <Spinner size="sm" /> : null}
             <span className="text-xs font-medium text-fg-muted" data-testid="build-activity-label">
@@ -342,7 +359,13 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               ) : null}
             </span>
             <span className="ml-auto text-fg-subtle" aria-hidden>
-              {reportOpen ? '▾' : '▸'}
+              <ChevronRight
+                className={cn(
+                  'h-4 w-4 transition-transform duration-150',
+                  reportOpen && 'rotate-90',
+                )}
+                strokeWidth={1.75}
+              />
             </span>
           </button>
           {reportOpen ? (

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { Badge, Spinner } from '../../components/ui';
+import { Badge, Skeleton } from '../../components/ui';
 import { getGlobalCost } from './api';
 import type { Budget } from './types';
 
@@ -32,8 +32,9 @@ export function Observability(): JSX.Element {
 
   if (query.isLoading) {
     return (
-      <div className="flex justify-center py-6">
-        <Spinner />
+      <div className="space-y-4" aria-hidden>
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-28 w-full rounded-xl" />
       </div>
     );
   }

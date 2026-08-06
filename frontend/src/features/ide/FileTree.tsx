@@ -1,5 +1,7 @@
+import { ChevronRight, FileCode2, Folder, FolderOpen } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { cn } from '../../lib/cn';
 import type { FileNode } from '../../lib/types';
 import { type TreeNode, buildTree } from './fileTreeModel';
 
@@ -35,12 +37,34 @@ function Row({
         data-testid={`tree-${node.type}-${node.path}`}
         onClick={() => (isDir ? onToggle(node.path) : onOpen(node.path))}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        className={`flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left text-sm ${
+        className={`group flex w-full items-center gap-1 rounded py-1 pr-2 text-left text-sm transition-colors ${
           isActive ? 'bg-brand/15 text-brand-text' : 'text-fg-muted hover:bg-surface-raised'
         }`}
       >
-        <span className="w-3 shrink-0 text-xs text-fg-subtle" aria-hidden>
-          {isDir ? (isOpen ? '▾' : '▸') : ''}
+        <span
+          className="flex w-3.5 shrink-0 items-center justify-center text-fg-subtle"
+          aria-hidden
+        >
+          {isDir ? (
+            <ChevronRight
+              className={cn('h-3 w-3 transition-transform duration-150', isOpen && 'rotate-90')}
+              strokeWidth={2}
+            />
+          ) : null}
+        </span>
+        <span
+          aria-hidden
+          className={cn('shrink-0', isActive ? 'text-brand-text' : 'text-fg-subtle')}
+        >
+          {isDir ? (
+            isOpen ? (
+              <FolderOpen className="h-3.5 w-3.5" strokeWidth={1.75} />
+            ) : (
+              <Folder className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )
+          ) : (
+            <FileCode2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+          )}
         </span>
         <span className="truncate">{node.name}</span>
       </button>
