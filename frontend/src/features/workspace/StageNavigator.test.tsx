@@ -33,6 +33,14 @@ describe('StageNavigator', () => {
     expect(screen.getByText('In progress')).toBeInTheDocument();
   });
 
+  it('lists requirements before design', () => {
+    // The 2026-08-06 reorder: what the app must do comes before what it looks like.
+    renderNav({});
+    const order = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
+    expect(order[0]).toContain('Requirements');
+    expect(order[1]).toContain('Design');
+  });
+
   it('lets the user click any stage (enter-anywhere)', () => {
     const { onSelect } = renderNav({});
     fireEvent.click(screen.getByTestId('stage-build'));

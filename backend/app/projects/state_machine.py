@@ -4,7 +4,7 @@ persisting.
 
 Stage order (for downstream/staleness purposes only — **not** a required sequence)::
 
-    design -> requirements -> build -> test -> deploy -> validate
+    requirements -> design -> build -> test -> deploy -> validate
 
 Truth table (the source the tests in ``test_state_machine.py`` are written against)::
 
@@ -35,8 +35,8 @@ from enum import StrEnum
 from app.db.models.enums import Stage, StageStatus
 
 STAGE_ORDER: tuple[Stage, ...] = (
-    Stage.design,
     Stage.requirements,
+    Stage.design,
     Stage.build,
     Stage.test,
     Stage.deploy,

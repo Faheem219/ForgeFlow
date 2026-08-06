@@ -25,10 +25,21 @@ from app.design.base import (
     provider_error,
 )
 from app.design.registry import register_provider
-from app.design.service import META_PROVIDER, META_SOURCE, DesignService
+from app.design.service import (
+    META_PROVIDER,
+    META_PROVIDER_META,
+    META_SOURCE,
+    DesignService,
+)
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.conductor import Conductor
-from app.orchestrator.schemas import Intent, IntentAction
+from app.orchestrator.requirements import (
+    CriterionInput,
+    FeatureInput,
+    RequirementSpecInput,
+    RequirementsService,
+)
+from app.orchestrator.schemas import Intent, IntentAction, IntentResponse
 from app.projects.service import ProjectService
 from app.projects.state_machine import Action
 from tests.resilience.conftest import ScriptedDesignProvider
@@ -61,6 +72,31 @@ def _intent(
     return Intent(
         project_id=pid, stage=Stage.design, action=action, message=message, payload=payload or {}
     )
+
+
+async def _save_requirements(pid: PydanticObjectId) -> None:
+    """A saved spec, with the requirements *stage* deliberately left untouched (see below)."""
+    await RequirementsService().save(
+        pid,
+        RequirementSpecInput(
+            features=[
+                FeatureInput(
+                    name="Todos",
+                    description="manage a todo list",
+                    acceptance_criteria=[CriterionInput(text="Adding a todo shows it in the list")],
+                )
+            ]
+        ),
+    )
+
+
+def _prompt_sent(resp: IntentResponse) -> str | None:
+    """What actually reached the provider — the `fake` provider echoes its prompt into meta."""
+    provider_meta = resp.artifacts[0].meta[META_PROVIDER_META]
+    assert isinstance(provider_meta, dict)
+    prompt = provider_meta["prompt"]
+    assert prompt is None or isinstance(prompt, str)
+    return prompt
 
 
 async def test_generate_from_text_creates_awaiting_user_version(design_env: None) -> None:
@@ -218,21 +254,120 @@ async def test_refine_after_completion_marks_downstream_stale(design_env: None) 
     user = PydanticObjectId()
     pid = await _project(user)
 
-    # Generate → approve (complete), and complete requirements so it can go stale.
+    # Generate → approve (complete), and complete build so it can go stale. Build — not
+    # requirements: since the 2026-08-06 reorder requirements is *upstream* of design, so a design
+    # refine must leave it alone (a UI tweak does not invalidate the feature list).
     await Conductor().handle_intent(
         user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
     )
     await Conductor().handle_intent(user, _intent(pid, IntentAction.proceed))
     await ProjectService().transition_stage(pid, user, Stage.requirements, Action.complete)
+    await ProjectService().transition_stage(pid, user, Stage.build, Action.complete)
 
     resp = await Conductor().handle_intent(
         user, _intent(pid, IntentAction.refine, message="make it dark")
     )
 
-    assert Stage.requirements in resp.stale
+    assert Stage.build in resp.stale
+    assert Stage.requirements not in resp.stale
     stages = await ProjectService().list_stages(pid, user)
+    build = next(s for s in stages if s.stage is Stage.build)
+    assert build.status is StageStatus.stale
     requirements = next(s for s in stages if s.stage is Stage.requirements)
-    assert requirements.status is StageStatus.stale
+    assert requirements.status is StageStatus.complete
+
+
+# ---------------------------------------------------------------- requirements as design context
+# Requirements precede design since 2026-08-06, so a design generated *after* them should know what
+# the app has to do. The dependency is soft: with no spec, the provider call is what it always was.
+
+
+async def test_generate_from_text_sends_the_prompt_unchanged_without_requirements(
+    design_env: None,
+) -> None:
+    user = PydanticObjectId()
+    pid = await _project(user)
+
+    resp = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+
+    assert _prompt_sent(resp) == "a todo app"  # byte-for-byte the pre-reorder behavior
+
+
+async def test_generate_from_text_folds_in_the_requirements_when_they_exist(
+    design_env: None,
+) -> None:
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _save_requirements(pid)
+
+    resp = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+
+    prompt = _prompt_sent(resp)
+    assert isinstance(prompt, str)
+    assert prompt.startswith("a todo app")  # the user's own words still lead
+    assert "Todos" in prompt
+    assert "manage a todo list" in prompt
+    assert "Adding a todo shows it in the list" in prompt
+
+
+async def test_requirements_context_does_not_wait_on_the_stage_being_complete(
+    design_env: None,
+) -> None:
+    """Content and stage-completion are decoupled: a *saved* spec is enough.
+
+    `_save_requirements` never touches the requirements stage, so it is still `empty` here — and
+    the summary must be used anyway. Gating on the stage's status would quietly turn a soft
+    dependency into a workflow requirement (D12)."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _save_requirements(pid)
+
+    stages = await ProjectService().list_stages(pid, user)
+    assert next(s for s in stages if s.stage is Stage.requirements).status is StageStatus.empty
+
+    resp = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+    assert "Todos" in str(_prompt_sent(resp))
+
+
+async def test_screenshot_generate_carries_the_requirements_but_needs_no_prompt(
+    design_env: None,
+) -> None:
+    """The hero path (screenshots only, no requirements) must send exactly what it sent before."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    ref = await get_blob_store().put(b"\x89PNG fake bytes")
+    payload: dict[str, object] = {
+        "image_refs": [{"ref": ref, "filename": "a.png", "media_type": "image/png"}]
+    }
+
+    bare = await Conductor().handle_intent(user, _intent(pid, IntentAction.refine, payload=payload))
+    assert _prompt_sent(bare) is None  # unchanged: no prompt at all
+
+    await _save_requirements(pid)
+    informed = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload=payload)
+    )
+    assert "Todos" in str(_prompt_sent(informed))
+
+
+async def test_a_skipped_requirements_stage_leaves_the_design_prompt_alone(
+    design_env: None,
+) -> None:
+    """Skipping requirements is a first-class choice — design must behave as if it never existed."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await ProjectService().transition_stage(pid, user, Stage.requirements, Action.skip)
+
+    resp = await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+    assert _prompt_sent(resp) == "a todo app"
 
 
 async def test_provider_error_propagates_with_a_fallback_hint(

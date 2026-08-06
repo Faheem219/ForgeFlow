@@ -11,10 +11,14 @@ interface WorkspaceState {
   reset: () => void;
 }
 
+// The fallback stage before a project's own `current_stage` resolves — requirements, matching the
+// backend's default entry stage (see STAGE_ORDER in features/workspace/stageMeta.ts).
+const DEFAULT_STAGE: Stage = 'requirements';
+
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   projectId: null,
-  activeStage: 'design',
+  activeStage: DEFAULT_STAGE,
   openProject: (projectId, activeStage) => set({ projectId, activeStage }),
   setActiveStage: (activeStage) => set({ activeStage }),
-  reset: () => set({ projectId: null, activeStage: 'design' }),
+  reset: () => set({ projectId: null, activeStage: DEFAULT_STAGE }),
 }));

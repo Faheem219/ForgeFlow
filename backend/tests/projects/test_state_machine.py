@@ -16,14 +16,26 @@ from app.projects.state_machine import (
 # ---------------------------------------------------------------------- downstream_of
 
 
-def test_downstream_of_design_is_everything_after() -> None:
-    assert downstream_of(Stage.design) == (
-        Stage.requirements,
+def test_downstream_of_requirements_is_everything_after() -> None:
+    assert downstream_of(Stage.requirements) == (
+        Stage.design,
         Stage.build,
         Stage.test,
         Stage.deploy,
         Stage.validate,
     )
+
+
+def test_design_is_downstream_of_requirements_not_upstream() -> None:
+    """The 2026-08-06 reorder: you decide *what* the app does before designing its UI, so a
+    requirements change invalidates the design — not the other way round."""
+    assert downstream_of(Stage.design) == (
+        Stage.build,
+        Stage.test,
+        Stage.deploy,
+        Stage.validate,
+    )
+    assert Stage.requirements not in downstream_of(Stage.design)
 
 
 def test_downstream_of_validate_is_empty() -> None:
@@ -32,8 +44,8 @@ def test_downstream_of_validate_is_empty() -> None:
 
 def test_stage_order_matches_pipeline() -> None:
     assert STAGE_ORDER == (
-        Stage.design,
         Stage.requirements,
+        Stage.design,
         Stage.build,
         Stage.test,
         Stage.deploy,
@@ -136,26 +148,39 @@ def test_refine_reopens_stage_to_in_progress() -> None:
 
 def test_refine_marks_strictly_downstream_non_empty_stages_stale() -> None:
     states = {
-        Stage.design: StageStatus.complete,
         Stage.requirements: StageStatus.complete,
+        Stage.design: StageStatus.complete,
         Stage.build: StageStatus.in_progress,
         Stage.test: StageStatus.empty,  # never touched — must NOT become stale
         Stage.deploy: StageStatus.empty,
         Stage.validate: StageStatus.empty,
     }
-    result = apply_transition(states, Stage.design, Action.refine)
+    result = apply_transition(states, Stage.requirements, Action.refine)
 
-    assert set(result.stale) == {Stage.requirements, Stage.build}
-    assert result.states[Stage.requirements] is StageStatus.stale
+    assert set(result.stale) == {Stage.design, Stage.build}
+    assert result.states[Stage.design] is StageStatus.stale
     assert result.states[Stage.build] is StageStatus.stale
     assert result.states[Stage.test] is StageStatus.empty
     assert result.states[Stage.deploy] is StageStatus.empty
 
 
+def test_refining_design_does_not_stale_requirements() -> None:
+    """A UI tweak does not invalidate the feature list — the cascade only runs downstream."""
+    states = {
+        Stage.requirements: StageStatus.complete,
+        Stage.design: StageStatus.complete,
+        Stage.build: StageStatus.complete,
+    }
+    result = apply_transition(states, Stage.design, Action.refine)
+
+    assert set(result.stale) == {Stage.build}
+    assert result.states[Stage.requirements] is StageStatus.complete
+
+
 def test_refine_does_not_mark_upstream_stale() -> None:
     states = {
-        Stage.design: StageStatus.complete,
         Stage.requirements: StageStatus.complete,
+        Stage.design: StageStatus.complete,
         Stage.build: StageStatus.complete,
     }
     result = apply_transition(states, Stage.build, Action.refine)
@@ -174,9 +199,9 @@ def test_refine_on_last_stage_has_nothing_downstream_to_stale() -> None:
 def test_refine_never_removes_artifacts_only_marks_status() -> None:
     """The state machine only ever returns a status snapshot — it has no concept of deleting
     artifacts, which live in a separate collection the service layer never touches on refine."""
-    states = {Stage.design: StageStatus.complete, Stage.requirements: StageStatus.complete}
-    result = apply_transition(states, Stage.design, Action.refine)
-    assert result.states[Stage.requirements] is StageStatus.stale  # not "empty" / removed
+    states = {Stage.requirements: StageStatus.complete, Stage.design: StageStatus.complete}
+    result = apply_transition(states, Stage.requirements, Action.refine)
+    assert result.states[Stage.design] is StageStatus.stale  # not "empty" / removed
 
 
 # ---------------------------------------------------------------------- hard prereqs

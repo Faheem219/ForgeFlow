@@ -15,7 +15,9 @@ from app.db.models.enums import ProjectStatus, Stage
 class Project(Document):
     user_id: PydanticObjectId
     name: str
-    current_stage: Stage = Stage.design
+    # Requirements is the entry stage (2026-08-06 reorder): knowing what the app must do comes
+    # before designing its UI. Non-linearity is unchanged — any stage is still enterable directly.
+    current_stage: Stage = Stage.requirements
     status: ProjectStatus = ProjectStatus.active
     stack: str = "fixed-mern-ts"
     sandbox_id: str | None = None

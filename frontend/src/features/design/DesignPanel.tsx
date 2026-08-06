@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, EmptyState, Input, Spinner } from '../../components/ui';
 import { toastError } from '../../lib/errors';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
@@ -51,7 +52,9 @@ function parsePayload(content: string | null | undefined): DesignContent {
 
 export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   const queryClient = useQueryClient();
+  const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const [prompt, setPrompt] = useState('');
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [instruction, setInstruction] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [screenRef, setScreenRef] = useState<string | null>(null);
@@ -148,6 +151,16 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
   const designStatus = stagesQuery.data?.find((s) => s.stage === 'design')?.status ?? 'empty';
 
+  // Requirements now precedes design, and a design generated from a known feature list is a better
+  // one. It is only ever a nudge: `empty` means the user has not decided yet, so suggest it once.
+  // `skipped`/`complete`/`stale` are all deliberate choices — say nothing. Dismissal is component
+  // state, not persisted: it must not survive as a rule that hides the hint on some later project
+  // or visit where requirements are genuinely still untouched.
+  const requirementsStatus =
+    stagesQuery.data?.find((s) => s.stage === 'requirements')?.status ?? 'empty';
+  const showRequirementsNudge =
+    !nudgeDismissed && stagesQuery.isSuccess && requirementsStatus === 'empty';
+
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
     onSuccess: () => {
@@ -233,6 +246,36 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
           </Button>
         </div>
       </header>
+
+      {showRequirementsNudge ? (
+        <aside
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-edge bg-surface-sunken/60 px-3 py-2"
+          data-testid="requirements-nudge"
+        >
+          <p className="text-xs text-fg-muted">
+            Defining what your app needs to do first makes for a better design — but you can design
+            now and capture requirements later.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="requirements-nudge-go"
+              onClick={() => setActiveStage('requirements')}
+            >
+              Go to Requirements
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="requirements-nudge-dismiss"
+              onClick={() => setNudgeDismissed(true)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </aside>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
         {/* Preview + refine */}

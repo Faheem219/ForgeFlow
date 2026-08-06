@@ -39,14 +39,16 @@ async def test_refine_event_lists_stale_stages_in_payload() -> None:
     assert project.id is not None
     hub = get_hub()
 
-    await ProjectService().transition_stage(project.id, owner, Stage.design, Action.complete)
     await ProjectService().transition_stage(project.id, owner, Stage.requirements, Action.complete)
+    await ProjectService().transition_stage(project.id, owner, Stage.design, Action.complete)
 
     async with hub.subscription(str(project.id)) as queue:
-        await ProjectService().transition_stage(project.id, owner, Stage.design, Action.refine)
+        await ProjectService().transition_stage(
+            project.id, owner, Stage.requirements, Action.refine
+        )
         event = await queue.get()
 
-    assert event.payload["stale"] == ["requirements"]
+    assert event.payload["stale"] == ["design"]
 
 
 async def test_every_transition_action_emits_exactly_one_event() -> None:

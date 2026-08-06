@@ -11,6 +11,11 @@ non-linear model (D12). It maps the three UI actions onto the design lifecycle:
 - ``proceed`` — **approve** the latest design (→ ``complete``); no provider call.
 - ``skip`` — opt out; downstream must tolerate a missing design.
 
+Since requirements moved ahead of design (2026-08-06), a **generate** additionally folds the latest
+``RequirementSpec`` into the provider prompt when one exists, so the UI reflects what the app has to
+do rather than being drawn from screenshots/text alone. This is a **soft** dependency and stays one:
+no prereq, no gate, and with no spec the provider call is byte-for-byte what it was before.
+
 The handler returns an :class:`ArtifactSpec` and lets the **conductor** persist it (single writer),
 so the new version is linked to the assistant reply and returned in the intent response. Provider
 failures (quota/auth) propagate as :class:`ProviderError` with a ``fallback_hint`` — a clear message
@@ -35,6 +40,7 @@ from app.design.service import (
     DesignService,
     design_artifact_fields,
 )
+from app.orchestrator.requirements import RequirementsService
 from app.orchestrator.schemas import (
     ArtifactSpec,
     Intent,
@@ -44,9 +50,15 @@ from app.orchestrator.schemas import (
 )
 
 if TYPE_CHECKING:  # avoid an import cycle: stages/__init__ imports this module
+    from app.db.models import RequirementSpec
     from app.orchestrator.stages.base import StageContext
 
 OWN_PROVIDER = "own"  # sentinel provider key for bring-your-own designs (no MCP call)
+
+#: Caps on the requirements block folded into a design prompt. This is *prompt context*, not a
+#: dump: design providers take a prompt, and a spec pasted in full buries the design intent.
+REQ_CONTEXT_MAX_FEATURES = 8
+REQ_CONTEXT_MAX_CRITERIA = 3
 
 
 class DesignStageHandler:
@@ -98,10 +110,11 @@ class DesignStageHandler:
             summary = "Imported your design."
         elif intake.image_refs:
             images = await self._load_images(intake.image_refs)
+            image_prompt = _with_requirements(intake.text, await _requirements_context(project_id))
             outcome = await invoke_with_fallback(
                 project,
                 DesignCapability.from_image,
-                lambda p: p.generate_from_image(images, intake.text),
+                lambda p: p.generate_from_image(images, image_prompt),
             )
             result = outcome.result
             text, meta = design_artifact_fields(result, source="image")
@@ -110,7 +123,8 @@ class DesignStageHandler:
                 outcome.note(),
             )
         elif intake.text and intake.text.strip():
-            prompt = intake.text.strip()
+            context = await _requirements_context(project_id)
+            prompt = f"{intake.text.strip()}\n\n{context}" if context else intake.text.strip()
             outcome = await invoke_with_fallback(
                 project,
                 DesignCapability.from_text,
@@ -181,6 +195,48 @@ class DesignStageHandler:
 def _summary(base: str, note: str | None) -> str:
     """Fold an optional fallback note into the assistant's summary line."""
     return f"{base} (Note: {note})" if note else base
+
+
+# -- requirements as design context (soft, never a prerequisite) --------------------------------
+
+
+async def _requirements_context(project_id: PydanticObjectId) -> str | None:
+    """A concise summary of the project's latest requirements, or ``None`` when there are none.
+
+    Read straight from :class:`RequirementsService` — the *content*, not the requirements stage's
+    status: a spec that was saved but never marked complete still describes the app, and the two
+    have been decoupled since phase-25. ``None`` (skipped stage, empty spec, or a project that
+    never visited requirements) leaves the provider call exactly as it was before this existed,
+    which is what keeps the hero path — screenshots → deployed URL — working untouched (D12).
+    """
+    spec = await RequirementsService().latest(project_id)
+    if spec is None or not spec.features:
+        return None
+    return _format_requirements(spec)
+
+
+def _format_requirements(spec: RequirementSpec) -> str:
+    lines = [
+        "The app must support the following features — design the UI so they are all achievable:"
+    ]
+    for feature in spec.features[:REQ_CONTEXT_MAX_FEATURES]:
+        line = f"- {feature.name}"
+        if feature.description:
+            line += f": {feature.description}"
+        lines.append(line)
+        for criterion in feature.acceptance_criteria[:REQ_CONTEXT_MAX_CRITERIA]:
+            lines.append(f"  - {criterion.text}")
+    if len(spec.features) > REQ_CONTEXT_MAX_FEATURES:
+        lines.append(f"- (+{len(spec.features) - REQ_CONTEXT_MAX_FEATURES} more features)")
+    return "\n".join(lines)
+
+
+def _with_requirements(prompt: str | None, context: str | None) -> str | None:
+    """Append the requirements context to an optional prompt, preserving ``None`` when neither."""
+    if not context:
+        return prompt
+    base = (prompt or "").strip()
+    return f"{base}\n\n{context}" if base else context
 
 
 def _project_id(ctx: StageContext) -> PydanticObjectId:

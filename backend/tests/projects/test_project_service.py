@@ -134,13 +134,13 @@ async def test_transition_stage_propagates_stale_on_refine() -> None:
     project = await ProjectService().create_project(owner, "p")
     assert project.id is not None
 
-    await ProjectService().transition_stage(project.id, owner, Stage.design, Action.complete)
     await ProjectService().transition_stage(project.id, owner, Stage.requirements, Action.complete)
+    await ProjectService().transition_stage(project.id, owner, Stage.design, Action.complete)
     outcome = await ProjectService().transition_stage(
-        project.id, owner, Stage.design, Action.refine
+        project.id, owner, Stage.requirements, Action.refine
     )
 
-    assert outcome.stale == (Stage.requirements,)
+    assert outcome.stale == (Stage.design,)
     states = await ProjectService().list_stages(project.id, owner)
-    requirements_state = next(s for s in states if s.stage is Stage.requirements)
-    assert requirements_state.status is StageStatus.stale
+    design_state = next(s for s in states if s.stage is Stage.design)
+    assert design_state.status is StageStatus.stale

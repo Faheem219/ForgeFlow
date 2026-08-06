@@ -5,9 +5,11 @@ import type { LucideIcon } from 'lucide-react';
 
 import type { Stage, StageStatus } from '../../lib/types';
 
+// Requirements precedes design (2026-08-06 reorder) — you decide what the app must do before its
+// UI is designed. Order drives the nav + the staleness cascade only; it gates nothing (D12).
 export const STAGE_ORDER: Stage[] = [
-  'design',
   'requirements',
+  'design',
   'build',
   'test',
   'deploy',

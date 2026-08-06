@@ -1,6 +1,6 @@
 """Stage-handler contract (phase-08).
 
-Every stage (design/requirements/build/test/deploy/validate) implements :class:`StageHandler`.
+Every stage (requirements/design/build/test/deploy/validate) implements :class:`StageHandler`.
 Handlers are **pure orchestration units**: they receive an :class:`Intent` + a :class:`StageContext`
 and return a :class:`StageResult` describing what to persist — the conductor does the actual
 persistence, transition, and event emission. This keeps stages independently shippable: a real

@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useToastStore } from '../../lib/stores/toastStore';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
+import type { Stage, StageStatus } from '../../lib/types';
 import { DesignPanel } from './DesignPanel';
 
 const PROJECT = 'p1';
@@ -23,6 +25,7 @@ interface MockState {
   /** Screens the provider reports for the whole project (the app, not one version). */
   screens: Array<{ ref: string; title: string; preview_image: string | null }>;
   screenBodies: Record<string, string>;
+  stages: Array<{ stage: Stage; status: StageStatus; artifacts: string[] }>;
 }
 
 function installFetch(state: MockState): void {
@@ -58,7 +61,7 @@ function installFetch(state: MockState): void {
       );
     }
     if (url.includes('/stages')) {
-      return Promise.resolve(json([{ stage: 'design', status: 'awaiting_user', artifacts: [] }]));
+      return Promise.resolve(json(state.stages));
     }
     if (url.includes('/artifacts?')) return Promise.resolve(json(state.versions));
     if (url.includes('/artifacts/')) return Promise.resolve(json(state.artifact));
@@ -127,8 +130,14 @@ beforeEach(() => {
     intentCalls: [],
     screens: [],
     screenBodies: {},
+    // Requirements complete by default, so only the nudge tests below exercise the nudge.
+    stages: [
+      { stage: 'design', status: 'awaiting_user', artifacts: [] },
+      { stage: 'requirements', status: 'complete', artifacts: [] },
+    ],
   };
   useToastStore.setState({ toasts: [] });
+  useWorkspaceStore.getState().reset();
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -293,6 +302,64 @@ describe('DesignPanel', () => {
         payload: { own_design: { html: '<h1>mine</h1>', css: '' } },
       });
     });
+  });
+
+  // The requirements-first nudge (2026-08-06 reorder). It is a hint, never a gate: design stays
+  // fully usable with no requirements at all, which is what the hero path depends on.
+  describe('requirements nudge', () => {
+    const untouched = (): MockState['stages'] => [
+      { stage: 'design', status: 'empty', artifacts: [] },
+      { stage: 'requirements', status: 'empty', artifacts: [] },
+    ];
+
+    it('suggests requirements first when they are untouched, without blocking design', async () => {
+      state.stages = untouched();
+      installFetch(state);
+      renderPanel();
+
+      expect(await screen.findByTestId('requirements-nudge')).toBeInTheDocument();
+      // …and design still works: nothing is disabled by the missing requirements.
+      fireEvent.change(screen.getByTestId('design-prompt'), { target: { value: 'a todo app' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Generate from text' }));
+      await waitFor(() => expect(state.intentCalls.at(-1)).toMatchObject({ stage: 'design' }));
+    });
+
+    it('sends the user to the requirements stage', async () => {
+      state.stages = untouched();
+      installFetch(state);
+      renderPanel();
+
+      fireEvent.click(await screen.findByTestId('requirements-nudge-go'));
+      expect(useWorkspaceStore.getState().activeStage).toBe('requirements');
+    });
+
+    it('goes away when dismissed', async () => {
+      state.stages = untouched();
+      installFetch(state);
+      renderPanel();
+
+      fireEvent.click(await screen.findByTestId('requirements-nudge-dismiss'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('requirements-nudge')).not.toBeInTheDocument(),
+      );
+    });
+
+    it.each(['skipped', 'complete', 'stale'] as const)(
+      'stays quiet once requirements are %s — the user already decided',
+      async (status) => {
+        state.stages = [
+          { stage: 'design', status: 'empty', artifacts: [] },
+          { stage: 'requirements', status, artifacts: [] },
+        ];
+        installFetch(state);
+        renderPanel();
+
+        await screen.findByTestId('design-status');
+        await waitFor(() =>
+          expect(screen.queryByTestId('requirements-nudge')).not.toBeInTheDocument(),
+        );
+      },
+    );
   });
 
   it('surfaces a provider error with its fallback hint', async () => {

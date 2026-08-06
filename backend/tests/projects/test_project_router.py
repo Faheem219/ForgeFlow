@@ -35,7 +35,7 @@ async def test_create_list_get_project(client: AsyncClient) -> None:
     assert create.status_code == 201
     project = create.json()
     assert project["name"] == "Todo App"
-    assert project["current_stage"] == "design"
+    assert project["current_stage"] == "requirements"  # the entry stage (2026-08-06 reorder)
 
     listing = await client.get("/projects", headers=_auth(token))
     assert listing.status_code == 200
