@@ -57,6 +57,30 @@ class SuggestResponse(BaseModel):
     criteria: list[SuggestedCriterionPublic]
 
 
+class DraftRequest(BaseModel):
+    """Body for the whole-spec AI-assist: a freeform description of what the app must do."""
+
+    description: str
+
+
+class DraftedFeaturePublic(BaseModel):
+    """One proposed feature. Deliberately criterion-*id*-less: nothing here is saved, so no
+    criterion has a stable join key yet — ids are minted only by ``RequirementsService.save()``."""
+
+    name: str
+    description: str = ""
+    inputs: list[str] = Field(default_factory=list)
+    expected_behaviors: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[SuggestedCriterionPublic] = Field(default_factory=list)
+
+
+class DraftResponse(BaseModel):
+    """An editable draft. Empty ``features`` means "no usable draft" — the UI falls back to the
+    manual form rather than treating it as a failure."""
+
+    features: list[DraftedFeaturePublic] = Field(default_factory=list)
+
+
 # --------------------------------------------------------------------- output schemas
 
 
@@ -232,6 +256,9 @@ def _criterion_id(
 
 __all__ = [
     "CriterionInput",
+    "DraftRequest",
+    "DraftResponse",
+    "DraftedFeaturePublic",
     "FeatureInput",
     "RequirementSpecInput",
     "RequirementSpecPublic",

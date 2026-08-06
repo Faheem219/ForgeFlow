@@ -1,5 +1,10 @@
 import { ApiError, apiFetch } from '../../lib/apiClient';
-import type { RequirementSpecDto, RequirementSpecInput, SuggestedCriterion } from '../../lib/types';
+import type {
+  DraftedFeature,
+  RequirementSpecDto,
+  RequirementSpecInput,
+  SuggestedCriterion,
+} from '../../lib/types';
 
 /** Latest saved spec, or `null` when the project has no requirements yet (404 → null). */
 export async function getRequirements(projectId: string): Promise<RequirementSpecDto | null> {
@@ -37,6 +42,20 @@ export function suggestCriteria(
     `/projects/${projectId}/requirements/suggest`,
     { method: 'POST', body: JSON.stringify({ name, description }) },
   ).then((r) => r.criteria);
+}
+
+/**
+ * Optional AI-assist: a freeform description → a whole draft feature list (Haiku). The draft is
+ * never persisted — it seeds the guided form, and only an explicit save creates a version.
+ */
+export function draftRequirements(
+  projectId: string,
+  description: string,
+): Promise<DraftedFeature[]> {
+  return apiFetch<{ features: DraftedFeature[] }>(`/projects/${projectId}/requirements/draft`, {
+    method: 'POST',
+    body: JSON.stringify({ description }),
+  }).then((r) => r.features);
 }
 
 /** Map a saved spec back into the request shape, preserving criterion ids for stable joins. */

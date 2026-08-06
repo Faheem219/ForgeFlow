@@ -17,6 +17,9 @@ from app.db.repos import RunRepo
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.conductor import BUILD_RUN_KINDS, Conductor
 from app.orchestrator.requirements import (
+    DraftedFeaturePublic,
+    DraftRequest,
+    DraftResponse,
     RequirementSpecInput,
     RequirementSpecPublic,
     RequirementsService,
@@ -24,6 +27,7 @@ from app.orchestrator.requirements import (
     SuggestRequest,
     SuggestResponse,
 )
+from app.orchestrator.requirements_draft import draft_features
 from app.orchestrator.requirements_suggest import suggest_criteria
 from app.orchestrator.schemas import (
     ActivityPublic,
@@ -178,4 +182,39 @@ async def suggest_requirements(
     suggestions = await suggest_criteria(project, body.name, body.description)
     return SuggestResponse(
         criteria=[SuggestedCriterionPublic(text=s.text, kind=s.kind) for s in suggestions]
+    )
+
+
+@requirements_router.post(
+    "/{project_id}/requirements/draft",
+    response_model=DraftResponse,
+    dependencies=[Depends(expensive_rate_limit)],
+)
+async def draft_requirements(
+    project_id: str,
+    body: DraftRequest,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> DraftResponse:
+    """Whole-spec AI-assist: a freeform description → an editable draft feature list (Haiku).
+
+    Nothing is persisted — the draft seeds the guided form, and only an explicit save creates a
+    ``RequirementSpec`` version.
+    """
+    pid = await _owned_project_id(project_id, user_id)
+    project = await ProjectService().get_owned(pid, user_id)
+    features = await draft_features(project, body.description)
+    return DraftResponse(
+        features=[
+            DraftedFeaturePublic(
+                name=f.name,
+                description=f.description,
+                inputs=f.inputs,
+                expected_behaviors=f.expected_behaviors,
+                acceptance_criteria=[
+                    SuggestedCriterionPublic(text=c.text, kind=c.kind)
+                    for c in f.acceptance_criteria
+                ],
+            )
+            for f in features
+        ]
     )

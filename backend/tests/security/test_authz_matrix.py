@@ -59,6 +59,7 @@ BODY_FOR_PATH: dict[str, dict[str, Any]] = {
         "features": [{"name": "F", "acceptance_criteria": [{"text": "works"}]}]
     },
     "/projects/{project_id}/requirements/suggest": {"name": "F", "description": "d"},
+    "/projects/{project_id}/requirements/draft": {"description": "a todo app"},
     "/projects/{project_id}/exec": {"cmd": "echo hi"},
     "/projects/{project_id}/fs/file": {"path": "a.txt", "content": "x"},
     "/projects/{project_id}/fs/dir": {"path": "sub"},

@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 
 import { Button, Spinner } from '../../components/ui';
-import type { CriterionKind, RequirementSpecInput, SuggestedCriterion } from '../../lib/types';
+import type {
+  CriterionKind,
+  DraftedFeature,
+  RequirementSpecInput,
+  SuggestedCriterion,
+} from '../../lib/types';
 
 // ------------------------------------------------------------------ draft model (client-only keys)
 
@@ -46,6 +51,32 @@ const feature = (): DraftFeature => ({
   behaviors: [],
   criteria: [criterion()],
 });
+
+/** Is this row still untouched? Blank rows are dropped when a draft lands, so it stands alone. */
+function isBlank(f: DraftFeature): boolean {
+  return (
+    !f.name.trim() &&
+    !f.description.trim() &&
+    !f.inputs.some((i) => i.value.trim()) &&
+    !f.behaviors.some((b) => b.value.trim()) &&
+    !f.criteria.some((c) => c.text.trim())
+  );
+}
+
+/** An AI-drafted feature → an editable, removable, unsaved row (no criterion ids: nothing saved). */
+function fromDraft(d: DraftedFeature): DraftFeature {
+  return {
+    key: uid(),
+    name: d.name,
+    description: d.description,
+    inputs: d.inputs.map((v) => item(v)),
+    behaviors: d.expected_behaviors.map((v) => item(v)),
+    criteria:
+      d.acceptance_criteria.length > 0
+        ? d.acceptance_criteria.map((c) => criterion(c.text, c.kind))
+        : [criterion()],
+  };
+}
 
 function seed(initial: RequirementSpecInput | null): DraftFeature[] {
   if (!initial || initial.features.length === 0) return [feature()];
@@ -147,12 +178,20 @@ export interface RequirementsFormProps {
   /** Optional Haiku assist — proposals are appended as editable rows, never overwriting input. */
   onSuggest?: (name: string, description: string) => Promise<SuggestedCriterion[]>;
   onSuggestError?: (message: string) => void;
+  /** Optional Haiku assist — a freeform description → a whole draft feature list. */
+  onDraft?: (description: string) => Promise<DraftedFeature[]>;
+  onDraftError?: (message: string) => void;
 }
 
 /**
  * The guided "fill-in-the-blanks" capture form (D6). Add features → fill name/description/inputs/
  * behaviors/acceptance-criteria (with a `kind` selector) → Save. Validation mirrors the backend so
  * errors surface inline before the round-trip. The optional AI-assist only *appends* proposals.
+ *
+ * Two AI on-ramps sit alongside the manual path, never replacing it: per-feature "Suggest" proposes
+ * acceptance criteria for a feature you have named, and "Generate draft" turns a plain-language
+ * description of the whole app into a starting feature list. Both produce ordinary editable rows —
+ * nothing is saved until you press Save.
  */
 export function RequirementsForm({
   initialSpec,
@@ -161,10 +200,14 @@ export function RequirementsForm({
   onCancel,
   onSuggest,
   onSuggestError,
+  onDraft,
+  onDraftError,
 }: RequirementsFormProps): JSX.Element {
   const [features, setFeatures] = useState<DraftFeature[]>(() => seed(initialSpec));
   const [errors, setErrors] = useState<FormErrors>({ features: {} });
   const [suggesting, setSuggesting] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
+  const [drafting, setDrafting] = useState(false);
 
   const errored = useMemo(
     () =>
@@ -208,8 +251,68 @@ export function RequirementsForm({
     }
   };
 
+  const runDraft = async (): Promise<void> => {
+    if (!onDraft || !description.trim()) return;
+    setDrafting(true);
+    try {
+      const drafted = await onDraft(description.trim());
+      if (drafted.length > 0) {
+        // Anything the user already filled in survives; only untouched starter rows give way.
+        setFeatures((prev) => [...prev.filter((f) => !isBlank(f)), ...drafted.map(fromDraft)]);
+        setErrors({ features: {} });
+      } else {
+        onDraftError?.('No draft was returned. Add features manually, or try again.');
+      }
+    } catch {
+      onDraftError?.('Could not draft requirements. Add features manually, or try again.');
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   return (
     <div className="space-y-4" data-testid="requirements-form">
+      {onDraft ? (
+        <section
+          className="space-y-2 rounded-xl border border-edge bg-surface-sunken/50 p-4"
+          data-testid="requirements-draft"
+        >
+          <div>
+            <h4 className="text-sm font-medium text-fg">Start from a description</h4>
+            <p className="text-xs text-fg-subtle">
+              Describe the whole app in plain language and we&apos;ll propose a first set of
+              features. Everything it suggests is editable — nothing is saved until you press Save.
+            </p>
+          </div>
+          <label className="block text-sm">
+            <span className="sr-only">What does your app need to do?</span>
+            <textarea
+              className={inputClass}
+              data-testid="draft-description"
+              rows={3}
+              value={description}
+              placeholder="What does your app need to do? e.g. “A todo app where people sign in, add todos with a due date, and mark them done.”"
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+          <Button
+            size="sm"
+            variant="secondary"
+            data-testid="draft-generate"
+            disabled={!description.trim() || drafting}
+            onClick={() => void runDraft()}
+          >
+            {drafting ? (
+              <span className="flex items-center gap-1">
+                <Spinner /> Drafting…
+              </span>
+            ) : (
+              'Generate draft (AI)'
+            )}
+          </Button>
+        </section>
+      ) : null}
+
       {errors.form ? (
         <p className="text-sm text-rose-400" role="alert" data-testid="form-error">
           {errors.form}

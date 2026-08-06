@@ -266,6 +266,18 @@ export interface SuggestedCriterion {
   kind: CriterionKind;
 }
 
+/**
+ * One feature of an AI-drafted spec (POST /projects/{id}/requirements/draft). Criterion `id`s are
+ * absent by design: a draft is unsaved, so nothing has a stable join key until the user saves.
+ */
+export interface DraftedFeature {
+  name: string;
+  description: string;
+  inputs: string[];
+  expected_behaviors: string[];
+  acceptance_criteria: SuggestedCriterion[];
+}
+
 // --- Credentials (phase-34) ---
 
 export type CredentialKind = 'vercel' | 'render' | 'mongo_uri' | 'stitch' | 'figma';

@@ -31,6 +31,7 @@ pytestmark = pytest.mark.usefixtures("mongo_db")
 EXPENSIVE_ROUTES = {
     ("POST", "/projects/{project_id}/intent"),
     ("POST", "/projects/{project_id}/requirements/suggest"),
+    ("POST", "/projects/{project_id}/requirements/draft"),
     ("POST", "/projects/{project_id}/exec"),
     ("POST", "/projects/{project_id}/sandbox/ensure"),
     ("POST", "/projects/{project_id}/tests/run"),

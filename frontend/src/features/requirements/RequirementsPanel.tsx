@@ -9,7 +9,13 @@ import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentAction, RequirementSpecInput, StageStatus } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
-import { getRequirements, saveRequirements, specToInput, suggestCriteria } from './api';
+import {
+  draftRequirements,
+  getRequirements,
+  saveRequirements,
+  specToInput,
+  suggestCriteria,
+} from './api';
 import { RequirementsForm } from './RequirementsForm';
 import { ReviewSummary } from './ReviewSummary';
 
@@ -88,6 +94,14 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
     (message: string) => toast({ title: 'AI-suggest', description: message, variant: 'error' }),
     [],
   );
+  const handleDraft = useCallback(
+    (description: string) => draftRequirements(projectId, description),
+    [projectId],
+  );
+  const handleDraftError = useCallback(
+    (message: string) => toast({ title: 'AI-draft', description: message, variant: 'error' }),
+    [],
+  );
 
   /*
    * Driven by the realtime run, not by the request.
@@ -156,6 +170,8 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
             onCancel={spec ? () => setMode('review') : undefined}
             onSuggest={handleSuggest}
             onSuggestError={handleSuggestError}
+            onDraft={handleDraft}
+            onDraftError={handleDraftError}
           />
         )}
       </div>
