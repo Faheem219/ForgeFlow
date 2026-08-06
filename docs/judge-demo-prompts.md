@@ -1,6 +1,6 @@
 # ForgeFlow — Judge demo prompts (copy-paste)
 
-Short, rehearsed scenarios that show the **bare functionality** end to end: idea → design → requirements
+Short, rehearsed scenarios that show the **bare functionality** end to end: idea → requirements → design
 → build → test → **repair** → deploy → live URL, plus the admin config plane.
 
 Everything below is literal text to type. Pick **A** (the 8-minute headline) and keep **B**/**C** in

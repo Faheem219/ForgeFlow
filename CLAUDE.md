@@ -1,6 +1,6 @@
 # CLAUDE.md — ForgeFlow Operating Manual
 
-You are building **ForgeFlow**: an AI-native, human-in-the-loop **PWA** that takes a web-app idea (from screenshots or a structured spec) through **design → requirements → build → test + self-healing repair → deploy → live validation**, letting the user refine, revisit, or skip **any** stage.
+You are building **ForgeFlow**: an AI-native, human-in-the-loop **PWA** that takes a web-app idea (from screenshots or a structured spec) through **requirements → design → build → test + self-healing repair → deploy → live validation**, letting the user refine, revisit, or skip **any** stage.
 
 **Read `IMPLEMENTATION_PLAN.md` fully before doing anything.** It is the source of truth (context, decisions, architecture, domain model, and the phase roadmap). This file is *how you work*; the plan is *what you build*; `plans/phase-XX-*.md` are the detailed specs.
 
@@ -76,7 +76,7 @@ See Section 5 of the plan. Backend under `backend/app/**` (core, db, auth, proje
 ## Domain glossary
 
 - **Project** — a user's app-in-progress; owns stage states, conversation, artifacts, a sandbox, and a per-project DB.
-- **Stage** — one of design/requirements/build/test/deploy/validate; each has an independent `StageState` (enables non-linear jumps/skips).
+- **Stage** — one of requirements/design/build/test/deploy/validate; each has an independent `StageState` (enables non-linear jumps/skips). That is the **product** order (D15, 2026-08-06) — it drives the nav, the default entry stage and the staleness cascade (`STAGE_ORDER`), and gates nothing. The `Stage` enum's own declaration order is unrelated and still lists `design` first; nothing depends on it.
 - **Conductor** — the orchestrator that routes user intents to stage handlers and owns transition legality.
 - **Artifact** — a versioned output (design, code change, requirement, test, test result, repair attempt, deployment, infra plan).
 - **Sandbox** — the per-project Docker container where generated code lives, runs, and is tested.

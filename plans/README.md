@@ -70,6 +70,17 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 
 ✚ *Epic 12 (phases 51–53) was added per the user's directive — see "Additions beyond the roadmap" below.*
 
+## Changelog (post-roadmap changes)
+
+| Date | Change | Touches | Notes |
+|------|--------|---------|-------|
+| 2026-08-06 | **Stage order: design-first → requirements-first** (`IMPLEMENTATION_PLAN.md` D15) | [16](./phase-16-designprovider-interface-registry.md)–[19](./phase-19-design-stage-handler-ui.md) (Design), [25](./phase-25-requirements-schema-api.md)–[26](./phase-26-requirements-ui.md) (Requirements) | Requirements now precedes design in the nav, as the default entry stage of a new project, and in the staleness cascade. Design optionally folds a saved `RequirementSpec` into the design-provider prompt (soft — unchanged behavior without one), and the design panel shows a dismissible nudge toward requirements when they are untouched. A whole-spec AI draft endpoint (freeform description → editable feature list, Haiku, never auto-saved) was added next to the existing per-feature suggest. **No new hard prerequisites** — `deploy ⇐ build` and `validate ⇐ deploy` remain the only ones (D12). |
+
+> **Why the live stage order does not match the phase numbering.** Phase numbers record the order the
+> system was *built* (design in Epic 3, requirements in Epic 5); the stage order records the order a
+> user *works*. They diverged with the 2026-08-06 reorder above. Shipped phase files are deliberately
+> **not** renumbered — their numbers are cross-referenced from code comments, tests and other plans.
+
 ## Milestone map (from `IMPLEMENTATION_PLAN.md` §11)
 
 | Milestone | Scope | Phases | Outcome |

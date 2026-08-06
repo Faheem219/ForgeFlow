@@ -26,6 +26,22 @@ These were decided deliberately. Do **not** silently change them; if a phase for
 | D12 | **Non-linear orchestration invariant:** **no stage is mandatory.** Users can enter at any stage, refine any output conversationally, jump back, or skip forward. | Core product promise; every stage handler and UI must honor it. |
 | D13 | **Evaluation harness** is a first-class deliverable: benchmark of app specs measuring first-pass vs post-repair pass rate, repair-iteration count, and screenshot→URL time. | Turns the project into publishable/pitchable evidence. |
 | D14 | **The platform itself is a PWA** (installable, offline app shell). It builds regular web apps (not PWAs, not mobile/native). | Per scope. |
+| D15 | **Stage order is requirements-first** (`requirements → design → build → test → deploy → validate`). Supersedes the design-first ordering used up to 2026-08-06. | You should not design a UI before you know what the app has to do. See the decision note below. |
+
+### Decision log
+
+**2026-08-06 — stage roadmap reordered from design-first to requirements-first (D15).**
+Per product decision, requirements now precedes design *everywhere*: the stage navigator, the default
+entry stage of a new project, and the staleness-cascade order (refining requirements now marks design
+and everything after it `stale`; refining design no longer touches requirements). Design additionally
+consumes the finalized requirements as extra context in the design-provider prompt when a
+`RequirementSpec` exists, and remains fully functional — byte-for-byte unchanged — without one. A
+whole-spec AI draft (freeform description → proposed feature list, `MODEL_ROUTING`/Haiku, never
+auto-saved) was added alongside the existing manual form and per-feature suggest.
+**The non-linearity invariant (D12) is unchanged — no new hard prerequisites.** `deploy ⇐ build` and
+`validate ⇐ deploy` remain the only mandatory ordering; requirements ⇒ design is a soft nudge in the
+UI, never a gate. Phase files 16–19 (design) and 25–26 (requirements) are **not** renumbered — phase
+numbering records build order, not product order (see `plans/README.md`).
 
 ---
 
@@ -33,7 +49,7 @@ These were decided deliberately. Do **not** silently change them; if a phase for
 
 **In scope (v1):**
 - Auth, projects dashboard, per-project workspace.
-- Six pipeline stages (each optional): Design → Requirements → Build → Test+Repair → Deploy → Live Validation.
+- Six pipeline stages (each optional): Requirements → Design → Build → Test+Repair → Deploy → Live Validation.
 - Web IDE (Monaco + terminal + live preview) over per-project Docker sandboxes.
 - Pluggable design (Stitch/Figma) from screenshots or text.
 - Agentic generation of the fixed stack; conversational change requests.
@@ -164,7 +180,7 @@ forgeflow/
 
 ## 8. The Non-Linear Orchestration Model
 
-- **Stages:** `design → requirements → build → test → deploy → validate`, plus an implicit `idle/dashboard`.
+- **Stages:** `requirements → design → build → test → deploy → validate`, plus an implicit `idle/dashboard`. This order drives presentation and the staleness cascade only — it is **not** a required sequence (see D15).
 - **State machine (`projects/state_machine.py`):** each project holds independent `StageState` per stage. Transitions are **not** forced to be sequential:
   - **Enter anywhere:** user may start at `build` (own designs) or even later.
   - **Skip:** any stage may be marked `skipped`; downstream stages must tolerate missing upstream artifacts (e.g., test-gen warns if no requirements exist and offers to capture them or infer minimal ones).

@@ -1,7 +1,7 @@
 # ForgeFlow
 
 AI-native, human-in-the-loop **PWA** that carries a web-app idea — from screenshots or a
-structured spec — through **design → requirements → build → test + self-healing repair →
+structured spec — through **requirements → design → build → test + self-healing repair →
 deploy → live validation**, letting you refine, revisit, or skip **any** stage.
 
 - **What to build:** [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) (source of truth).
