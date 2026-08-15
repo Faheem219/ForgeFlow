@@ -68,7 +68,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [52](./phase-52-admin-dashboard-ui.md) | Admin dashboard UI | 12 · Admin & Config ✚ | 03, 04, 51 | ✅ |
 | [53](./phase-53-openai-compatible-provider.md) | OpenAI-compatible LLM provider | 12 · Admin & Config ✚ | 20, 01, 51 | ✅ |
 | [54](./phase-54-skeleton-demo-removal.md) | Skeleton demo removal & tool-surface hardening | 13 · Build Reliability ✚ | 21, 22, 23 | ✅ |
-| [55](./phase-55-build-verification-selfheal.md) | Build verification & bounded self-heal | 13 · Build Reliability ✚ | 23, 24, 29, 30, 31 | ⬜ |
+| [55](./phase-55-build-verification-selfheal.md) | Build verification & bounded self-heal | 13 · Build Reliability ✚ | 23, 24, 29, 30, 31 | ✅ |
 | [56](./phase-56-phased-build-plan.md) | Phased build plan & phase-by-phase codegen | 13 · Build Reliability ✚ | 54, 55 | ⬜ |
 
 ✚ *Epics 12 (phases 51–53) and 13 (phases 54–56) were added per the user's directive — see "Additions beyond the roadmap" below.*

@@ -6,7 +6,7 @@
 - **Title:** Build verification & bounded self-heal
 - **Epic:** Epic 13 — Build Reliability *(added per user directive)*
 - **Milestone:** M2 *(hardens M2's stated outcome — a generated **running app**)*
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-15; shipped as two commits — plumbing then verification)*
 
 ## Goal
 
@@ -233,3 +233,36 @@ No migrations, no volumes, no containers to reap.
 - **The known preview gap.** A hung-but-alive dev server reports `starting` forever (`preview.py:190-195`) — there is no "unhealthy but running" state, and `_wait_healthy` (L300-308) returns on deadline without recording why. Treating post-timeout `starting` as unhealthy, with the log tail as evidence, is an inference rather than an observation. The clean fix is a `PreviewStatus.unhealthy` member, which touches the shared enum and the frontend — deferred rather than smuggled in here.
 - **Flagged, not bundled: `anthropic_max_output_tokens` 4096 → 8192.** A large page write must fit in a single turn; a truncated write yields broken syntax that then burns repair iterations fixing our own truncation. The registry already permits up to 200 000 (`config_registry.py:225`). Left as an operator decision because it changes cost on every call, not just on build.
 - **Cost posture.** The added Sonnet surface is bounded by `build_integration_max_iterations` (3) and only ever runs on `code`-class failures. `enforce_budget` already runs before and after every turn, so the existing caps bind unchanged; `Run.cost` on the `repair:loop` run is the D13 eval unit for measuring whether self-heal pays for itself.
+
+## Implementation status (as-built, 2026-08-15)
+
+Shipped as the planned two commits: **plumbing** (`ef1578e`, phase-55 1/2) then **verification** (`3660229`, phase-55 2/2).
+
+**Done — every task 1–16 landed:**
+
+- **Commit 1 — plumbing (tasks 1–8, 14, 15), no behaviour change.**
+  1. `ArtifactService.get_latest_of_kind` added; `codegen._previous_report` repointed at it (filters by `meta.kind`, so a phase-56 `build_plan` can't hide the last report).
+  2. `run_tool_loop` gained an optional per-call `max_turns` (defaults to the config read).
+  3. `PreviewService.log_tail` + a bounded per-process `deque` filled in `_pump` (`preview_log_tail_lines`).
+  4. `DockerExecHandle.wait()` returns `EXIT_UNKNOWN` (−1), never 0, when `ExitCode` is null — the hot-path behaviour change, its own test.
+  5. `SandboxManager.container_state` → `running | exited | missing`.
+  6. `ensure_dependencies` now returns its `ExecOutcome | None` (was `bool`); `test_deps_bootstrap` adjusted.
+  7. `changed_paths` added to `WorkspaceGit` + `WorkspaceService` (`git diff --name-only`).
+  8. `RepairLoopController` parameterized: `stage` / `owns_stage_status` (ctor) + per-run `max_iterations`, all defaulted so the Test stage is byte-identical; `_MAX_REGRESSIONS` promoted to config `repair_max_regressions`.
+  14. Seven config keys registered (`config.py` + `config_registry.py` + `.env.example`), covered by `test_registry_complete`.
+  15. `EventType.build_report` (promoted from the ad-hoc string) + `EventType.build_verify`.
+- **Commit 2 — verification (tasks 9–13, 16).**
+  9. `app/agents/build_errors.py` — `BuildFailureKind` + `classify_output` / `classify_exception` over the full corpus (container-dead / OOM / pids / disk / registry / DB / timeout), erring toward `code`; the `exit_code=0, container_alive=False → environment` trap is tested.
+  10. `app/testing/synthetic.py` — `typecheck_failures` (paths re-rooted package-relative → `frontend/src/…`, grouped per file, capped), `boot_failure`, `command_failure`, `persist_synthetic_run`.
+  11. `app/agents/build_context.py` — `BuildRepairContextAnalyzer` widens an empty editable set from `fallback_paths` then `changed_paths`, inside the `repair_context_max_chars` cap; `_add_files_within_budget`/`_finish` promoted to public `add_files`/`persist`.
+  12. `app/orchestrator/stages/build_verify.py` — `BuildVerificationController` (install → typecheck → boot → placeholder → repair), all collaborators injected; classify-before-adapt so env/provider/budget spend **zero** iterations; a model-free pre-check escalates `no_repair_target`; loop bounded by `build_integration_max_iterations` + a wall-clock ceiling.
+  13. `build.py` — codegen → verify → gate inside one `Run`/`ToolContext`; `complete ⟺ typecheck_ok ∧ no placeholder ∧ both dev servers running`, with the fixed `stop_reason` vocabulary in `_summarize`.
+  16. **Repository awareness:** satisfied by reusing phase-54's compact `_existing_code` inventory + repository-map prompt framing (paths + sizes, contents read on demand) — no new subsystem, which would overlap phase-56 and bloat context.
+
+**Verification performed:** all new/adjusted unit suites pass against a live Mongo (classifier corpus, synthetic re-rooting, widening analyzer + budget, completion-gate truth table, env short-circuit `iterations == []`, self-heal red→green and stall→escalate, stage-param regression guard, dead-container `wait()`, artifact-kind lookup, preview log tail); `ruff` + `black` clean; `mypy` clean on all changed modules. Two pre-existing, environmental reds are unrelated to this phase: the Docker/Colima-dependent sandbox suites (real subprocess/symlink on the Windows dev box) and `test_repair_audit_trail::test_every_iteration_is_recorded_as_an_attempt` (a fake that never sets `resulting_run_id`, red on the pre-phase tree too).
+
+**Remaining / follow-ups (not blockers):**
+
+- **Manual, docker-backed verification** (the "Manual verification steps" above) has **not** been run here — no Docker/Colima on the dev box. Run it before relying on the happy-path / env-short-circuit / code-repair demos.
+- **Cancellation threading.** `BuildVerificationController` honours a `cancel` event and a `build_max_wall_clock_s` deadline, but `BuildStageHandler` does not yet construct/pass a `cancel` event — the wall-clock bound still applies; wiring an explicit cancel is a small follow-up.
+- **Deferred by design (unchanged from the plan):** the `stop_reason` **frontend panel** (lands with phase-56), a `PreviewStatus.unhealthy` member for hung-but-alive servers, and the `anthropic_max_output_tokens` 4096→8192 bump (operator decision).
