@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { advanceCursor, highWaterMark } from '../../lib/eventCursor';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 
 /** Progress steps the codegen agent emits, in the order it runs them. */
@@ -45,17 +46,21 @@ export function useBuildActivity(projectId: string, resetKey: unknown = null): B
   const [step, setStep] = useState('');
   const [label, setLabel] = useState('');
   const [target, setTarget] = useState('');
+  // The cursor is the hub's monotonic `seq`, not an index into `events`. The store's ring is
+  // bounded, so once a build's traffic fills it the array stops growing and an index cursor pins
+  // at the cap — `slice(cursor)` then yields nothing forever and this hook goes deaf mid-build.
+  // See lib/eventCursor.ts.
   const cursor = useRef<number | null>(null);
   const baseline = useRef<string | null>(null);
 
   // Re-baseline on project switch or when a new run starts. The cursor is moved to the live event
-  // count *here* rather than on the next effect pass — deferring it would swallow any write that
+  // mark *here* rather than on the next effect pass — deferring it would swallow any write that
   // arrives in between, which is exactly the window a fresh build starts in.
   useEffect(() => {
     const token = `${projectId}::${String(resetKey)}`;
     if (baseline.current !== token) {
       baseline.current = token;
-      cursor.current = useRealtimeStore.getState().events.length;
+      cursor.current = highWaterMark(useRealtimeStore.getState().events);
       setFiles([]);
       setStep('');
       setLabel('');
@@ -65,12 +70,14 @@ export function useBuildActivity(projectId: string, resetKey: unknown = null): B
 
   useEffect(() => {
     if (cursor.current === null) {
-      cursor.current = events.length; // ignore the pre-mount backlog
+      cursor.current = highWaterMark(events); // ignore the pre-mount backlog
       return;
     }
-    const fresh = events.slice(cursor.current);
+    const { fresh, nextSeq } = advanceCursor(events, cursor.current);
+    // Park the cursor before the early return: a batch can be empty because the log RESET to a
+    // lower seq, and leaving the mark above the new channel's head would strand the hook there.
+    cursor.current = nextSeq;
     if (fresh.length === 0) return;
-    cursor.current = events.length;
 
     const written: string[] = [];
     let latestStep = '';

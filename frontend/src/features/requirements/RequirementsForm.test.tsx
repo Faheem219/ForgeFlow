@@ -86,7 +86,9 @@ describe('RequirementsForm', () => {
   });
 
   it('turns a freeform description into an editable, unsaved draft', async () => {
-    const onDraft = vi.fn().mockResolvedValue([
+    const onDraft = vi.fn().mockResolvedValue({
+      app_name: 'Focus',
+      features: [
       {
         name: 'Todos',
         description: 'manage a todo list',
@@ -101,7 +103,8 @@ describe('RequirementsForm', () => {
         expected_behaviors: [],
         acceptance_criteria: [{ text: 'A user can log in', kind: 'unit' }],
       },
-    ]);
+      ],
+    });
     const onSave = vi.fn();
     render(<RequirementsForm initialSpec={null} onSave={onSave} onDraft={onDraft} />);
 
@@ -133,15 +136,18 @@ describe('RequirementsForm', () => {
   });
 
   it('keeps features the user already filled in when a draft arrives', async () => {
-    const onDraft = vi.fn().mockResolvedValue([
-      {
-        name: 'Todos',
-        description: '',
-        inputs: [],
-        expected_behaviors: [],
-        acceptance_criteria: [{ text: 'can add a todo', kind: 'either' }],
-      },
-    ]);
+    const onDraft = vi.fn().mockResolvedValue({
+      app_name: 'Focus',
+      features: [
+        {
+          name: 'Todos',
+          description: '',
+          inputs: [],
+          expected_behaviors: [],
+          acceptance_criteria: [{ text: 'can add a todo', kind: 'either' }],
+        },
+      ],
+    });
     render(<RequirementsForm initialSpec={null} onSave={vi.fn()} onDraft={onDraft} />);
 
     fireEvent.change(screen.getByTestId('feature-name-0'), { target: { value: 'Mine' } });
@@ -152,8 +158,60 @@ describe('RequirementsForm', () => {
     expect(value('feature-name-0')).toBe('Mine'); // the user's own row is never overwritten
   });
 
+  it('proposes an app name the user can edit, and saves it', async () => {
+    const onDraft = vi.fn().mockResolvedValue({
+      app_name: 'Focus',
+      features: [
+        {
+          name: 'Todos',
+          description: '',
+          inputs: [],
+          expected_behaviors: [],
+          acceptance_criteria: [{ text: 'can add a todo', kind: 'either' }],
+        },
+      ],
+    });
+    const onSave = vi.fn();
+    render(<RequirementsForm initialSpec={null} onSave={onSave} onDraft={onDraft} />);
+
+    fireEvent.change(screen.getByTestId('draft-description'), { target: { value: 'a todo app' } });
+    fireEvent.click(screen.getByTestId('draft-generate'));
+    await waitFor(() => expect(value('app-name')).toBe('Focus'));
+
+    // It is a proposal, not a decision: the user renames it and that is what is saved.
+    fireEvent.change(screen.getByTestId('app-name'), { target: { value: 'Momentum' } });
+    fireEvent.click(screen.getByTestId('requirements-save'));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].app_name).toBe('Momentum');
+  });
+
+  it('never overwrites a name the user already typed', async () => {
+    const onDraft = vi.fn().mockResolvedValue({
+      app_name: 'Focus',
+      features: [
+        {
+          name: 'Todos',
+          description: '',
+          inputs: [],
+          expected_behaviors: [],
+          acceptance_criteria: [{ text: 'can add a todo', kind: 'either' }],
+        },
+      ],
+    });
+    render(<RequirementsForm initialSpec={null} onSave={vi.fn()} onDraft={onDraft} />);
+
+    fireEvent.change(screen.getByTestId('app-name'), { target: { value: 'Mine' } });
+    fireEvent.change(screen.getByTestId('draft-description'), { target: { value: 'a todo app' } });
+    fireEvent.click(screen.getByTestId('draft-generate'));
+
+    await waitFor(() => expect(value('feature-name-0')).toBe('Todos'));
+    expect(value('app-name')).toBe('Mine');
+  });
+
   it('falls back to manual entry when the draft call fails', async () => {
-    const onDraft = vi.fn().mockRejectedValue(new Error('502'));
+    const failure = new Error('502');
+    const onDraft = vi.fn().mockRejectedValue(failure);
     const onDraftError = vi.fn();
     render(
       <RequirementsForm
@@ -169,6 +227,9 @@ describe('RequirementsForm', () => {
 
     await waitFor(() => expect(onDraftError).toHaveBeenCalled());
     expect(String(onDraftError.mock.calls[0][0])).toMatch(/manually/i);
+    // The rejection rides along so the host can report the server's own words — an unconfigured
+    // provider key says how to fix itself, where the generic fallback would bury it.
+    expect(onDraftError.mock.calls[0][1]).toBe(failure);
     expect(screen.getByTestId('feature-name-0')).toBeInTheDocument(); // the form still works
   });
 

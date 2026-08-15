@@ -205,9 +205,14 @@ async def invoke_with_fallback(
             if not _is_recoverable(exc):
                 raise
             if key != keys[-1]:
-                logger.info(
-                    "design provider fell back",
-                    extra={"from_provider": key, "reason": reasons[key]},
+                # The user-facing note is deliberately short ("stitch rejected the request"), so
+                # the provider's own message is only ever seen here — log it, or a fallback is
+                # undiagnosable after the fact.
+                logger.warning(
+                    "design provider %s failed (%s); falling back: %s",
+                    key,
+                    reasons[key],
+                    exc.message,
                 )
             continue
         return DesignOutcome(result=result, provider_key=key, attempted=attempted, reasons=reasons)

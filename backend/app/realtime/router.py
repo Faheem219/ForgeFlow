@@ -74,9 +74,15 @@ async def ws_project(
 ) -> None:
     user = await authenticate_ws(token)
     if user is None:
+        # Closing before accept() gets swallowed by the ASGI server into a bare HTTP 403 upgrade
+        # rejection (uvicorn's websockets_impl collapses ANY pre-accept close into 403, dropping
+        # the code entirely) — no real client can ever read WS_UNAUTHORIZED off that. Accept first
+        # so the close frame — and its code — actually reaches the client.
+        await websocket.accept()
         await websocket.close(code=WS_UNAUTHORIZED)
         return
     if not await authorize_project(user, project_id):
+        await websocket.accept()
         await websocket.close(code=WS_FORBIDDEN)
         return
 

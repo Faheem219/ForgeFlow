@@ -67,7 +67,13 @@ class FakeDesignProvider:
         """Whether this ref was minted by *this* provider (so it survives a process restart)."""
         return design_ref.startswith(("fake-text-", "fake-image-"))
 
-    async def generate_from_text(self, prompt: str) -> DesignResult:
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult:
         ref = f"fake-text-{_digest(prompt)}"
         return self._remember(
             DesignResult(
@@ -81,7 +87,12 @@ class FakeDesignProvider:
         )
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult:
         if not images:
             raise provider_error(self.key, "At least one image is required")

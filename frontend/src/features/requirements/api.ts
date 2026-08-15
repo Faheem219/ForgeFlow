@@ -1,6 +1,6 @@
 import { ApiError, apiFetch } from '../../lib/apiClient';
 import type {
-  DraftedFeature,
+  DraftedSpec,
   RequirementSpecDto,
   RequirementSpecInput,
   SuggestedCriterion,
@@ -48,19 +48,17 @@ export function suggestCriteria(
  * Optional AI-assist: a freeform description → a whole draft feature list (Haiku). The draft is
  * never persisted — it seeds the guided form, and only an explicit save creates a version.
  */
-export function draftRequirements(
-  projectId: string,
-  description: string,
-): Promise<DraftedFeature[]> {
-  return apiFetch<{ features: DraftedFeature[] }>(`/projects/${projectId}/requirements/draft`, {
+export function draftRequirements(projectId: string, description: string): Promise<DraftedSpec> {
+  return apiFetch<DraftedSpec>(`/projects/${projectId}/requirements/draft`, {
     method: 'POST',
     body: JSON.stringify({ description }),
-  }).then((r) => r.features);
+  });
 }
 
 /** Map a saved spec back into the request shape, preserving criterion ids for stable joins. */
 export function specToInput(spec: RequirementSpecDto): RequirementSpecInput {
   return {
+    app_name: spec.app_name,
     features: spec.features.map((f) => ({
       name: f.name,
       description: f.description,

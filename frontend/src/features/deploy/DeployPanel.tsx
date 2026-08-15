@@ -5,6 +5,7 @@ import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import type {
   DeployMode,
@@ -14,7 +15,7 @@ import type {
   TopologyNodeId,
 } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
-import { STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
+import { nextStage, STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
 import { NodeDrawer } from './NodeDrawer';
 import { Topology } from './Topology';
 import { getLatestDeployment } from './api';
@@ -100,13 +101,21 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
   const views = useMemo(() => nodeViews(snapshot, live), [snapshot, live]);
   const selectedView = views.find((v) => v.id === selected) ?? null;
 
+  const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
-    onSuccess: () => {
+    onSuccess: (data, body) => {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['deployment-latest', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['deploy-logs', projectId] });
+      // `skip` always advances; `proceed` only when the deploy actually landed — a rejected/failed
+      // attempt (still an HTTP 200, see `to_status`) leaves you here to see why and retry, rather
+      // than bouncing forward to a Validate stage whose hard-prereq isn't even met yet.
+      if (body.action === 'skip' || (body.action === 'proceed' && data.to_status === 'complete')) {
+        const next = nextStage('deploy');
+        if (next) setActiveStage(next);
+      }
     },
     onError: (err) => {
       const description = err instanceof ApiError ? err.message : 'Deploy failed';

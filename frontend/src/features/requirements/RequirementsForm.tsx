@@ -4,6 +4,7 @@ import { Button, Spinner } from '../../components/ui';
 import type {
   CriterionKind,
   DraftedFeature,
+  DraftedSpec,
   RequirementSpecInput,
   SuggestedCriterion,
 } from '../../lib/types';
@@ -105,8 +106,9 @@ interface FormErrors {
   features: Record<string, FeatureErrors>;
 }
 
-function draftsToInput(features: DraftFeature[]): RequirementSpecInput {
+function draftsToInput(features: DraftFeature[], appName: string): RequirementSpecInput {
   return {
+    app_name: appName.trim(),
     features: features.map((f) => ({
       name: f.name.trim(),
       description: f.description.trim(),
@@ -177,10 +179,16 @@ export interface RequirementsFormProps {
   onCancel?: () => void;
   /** Optional Haiku assist — proposals are appended as editable rows, never overwriting input. */
   onSuggest?: (name: string, description: string) => Promise<SuggestedCriterion[]>;
-  onSuggestError?: (message: string) => void;
+  onSuggestError?: (message: string, cause?: unknown) => void;
   /** Optional Haiku assist — a freeform description → a whole draft feature list. */
-  onDraft?: (description: string) => Promise<DraftedFeature[]>;
-  onDraftError?: (message: string) => void;
+  onDraft?: (description: string) => Promise<DraftedSpec>;
+  /**
+   * `message` is this form's own fallback wording; `cause` is the rejection behind it (absent when
+   * the call merely came back empty). The host reports the server's message when there is one — a
+   * generic "could not draft" hides exactly the detail that says how to fix it, e.g. an
+   * unconfigured provider key.
+   */
+  onDraftError?: (message: string, cause?: unknown) => void;
 }
 
 /**
@@ -204,6 +212,7 @@ export function RequirementsForm({
   onDraftError,
 }: RequirementsFormProps): JSX.Element {
   const [features, setFeatures] = useState<DraftFeature[]>(() => seed(initialSpec));
+  const [appName, setAppName] = useState(() => initialSpec?.app_name ?? '');
   const [errors, setErrors] = useState<FormErrors>({ features: {} });
   const [suggesting, setSuggesting] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -224,7 +233,7 @@ export function RequirementsForm({
   const submit = (): void => {
     const result = validate(features);
     setErrors(result.errors);
-    if (result.ok) onSave(draftsToInput(features));
+    if (result.ok) onSave(draftsToInput(features, appName));
   };
 
   const runSuggest = async (f: DraftFeature): Promise<void> => {
@@ -244,8 +253,8 @@ export function RequirementsForm({
       } else {
         onSuggestError?.('No suggestions were returned. Add criteria manually.');
       }
-    } catch {
-      onSuggestError?.('Could not fetch suggestions. Add criteria manually.');
+    } catch (err) {
+      onSuggestError?.('Could not fetch suggestions. Add criteria manually.', err);
     } finally {
       setSuggesting(null);
     }
@@ -256,15 +265,20 @@ export function RequirementsForm({
     setDrafting(true);
     try {
       const drafted = await onDraft(description.trim());
-      if (drafted.length > 0) {
+      if (drafted.features.length > 0) {
         // Anything the user already filled in survives; only untouched starter rows give way.
-        setFeatures((prev) => [...prev.filter((f) => !isBlank(f)), ...drafted.map(fromDraft)]);
+        setFeatures((prev) => [
+          ...prev.filter((f) => !isBlank(f)),
+          ...drafted.features.map(fromDraft),
+        ]);
+        // A name the user has already typed is theirs — never overwrite it with a proposal.
+        setAppName((cur) => cur.trim() || drafted.app_name);
         setErrors({ features: {} });
       } else {
         onDraftError?.('No draft was returned. Add features manually, or try again.');
       }
-    } catch {
-      onDraftError?.('Could not draft requirements. Add features manually, or try again.');
+    } catch (err) {
+      onDraftError?.('Could not draft requirements. Add features manually, or try again.', err);
     } finally {
       setDrafting(false);
     }
@@ -312,6 +326,23 @@ export function RequirementsForm({
           </Button>
         </section>
       ) : null}
+
+      <section className="space-y-1 rounded-xl border border-edge bg-surface p-4">
+        <label className="block text-sm">
+          <span className="font-medium text-fg">App name</span>
+          <input
+            className={inputClass}
+            data-testid="app-name"
+            value={appName}
+            placeholder="e.g. Focus"
+            onChange={(e) => setAppName(e.target.value)}
+          />
+        </label>
+        <p className="text-xs text-fg-subtle">
+          Optional. Names the app in ForgeFlow and in the design tool, so each project is its own —
+          change it whenever you like. Nothing is tested against it.
+        </p>
+      </section>
 
       {errors.form ? (
         <p className="text-sm text-rose-400" role="alert" data-testid="form-error">

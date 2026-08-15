@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.core.errors import UserError
 from app.db.models import Artifact, Project
 from app.db.models.enums import ArtifactType, Stage
-from app.design.base import DesignImage, DesignResult, DesignScreen
+from app.design.base import DesignImage, DesignProvider, DesignResult, DesignScreen
 from app.design.resilient import DesignCapability, invoke_with_fallback, provider_for_refine
 from app.orchestrator.artifacts import ArtifactService
 
@@ -30,6 +30,9 @@ META_PREVIEW_IMAGE = "preview_image"
 META_SOURCE = "source"
 META_REFINED_FROM = "refined_from_version"
 META_PROVIDER_META = "provider_meta"
+#: The provider-side container this project designs into (Stitch: its project id). Read back by
+#: :meth:`DesignService.workspace_for` so the next generate lands in the *same* place.
+META_WORKSPACE = "workspace"
 
 
 class DesignPayload(BaseModel):
@@ -51,6 +54,7 @@ def design_artifact_fields(
     payload = DesignPayload(html=result.html, css=result.css, screens=result.screens)
     meta: dict[str, object] = {
         META_PROVIDER: result.provider,
+        META_WORKSPACE: result.workspace,
         META_EXTERNAL_REF: result.external_ref,
         META_PREVIEW_IMAGE: result.preview_image,
         META_SOURCE: source,
@@ -99,26 +103,86 @@ class DesignService:
     async def list_versions(self, project_id: PydanticObjectId) -> list[Artifact]:
         return await self._artifacts.list_versions(project_id, Stage.design, ArtifactType.design)
 
+    async def workspace_title_for(self, project: Project) -> str:
+        """What this project's provider-side container should be called.
+
+        The requirements draft proposes a product name for the app and the user can edit it, so it
+        is the best label available — a Stitch project reads "Focus" instead of one of a stack of
+        identical "ForgeFlow" entries. Falls back to the ForgeFlow project's own name when
+        requirements were skipped or the draft offered nothing usable.
+        """
+        from app.orchestrator.requirements import RequirementsService
+
+        if project.id is not None:
+            spec = await RequirementsService().latest(project.id)
+            if spec is not None and spec.app_name.strip():
+                return spec.app_name.strip()
+        return project.name
+
+    async def workspace_for(self, project_id: PydanticObjectId, provider_key: str) -> str | None:
+        """This project's container inside ``provider_key``, or ``None`` if it has none yet.
+
+        Read from the project's own latest design, which is what keeps each ForgeFlow project
+        designing into its own provider project. ``None`` is the correct answer for a project that
+        has never generated — the provider then makes a fresh container instead of inheriting one,
+        and a screen listing returns nothing instead of another project's screens.
+
+        Only a design from the **same** provider counts: a workspace handle is meaningless to a
+        different backend, exactly as ``external_ref`` is (see ``provider_for_refine``).
+        """
+        latest = await self.latest(project_id)
+        if latest is None:
+            return None
+        if latest.meta.get(META_PROVIDER) != provider_key:
+            return None
+
+        workspace = latest.meta.get(META_WORKSPACE)
+        if isinstance(workspace, str) and workspace:
+            return workspace
+        # Back-compat: artifacts written before `workspace` existed only carry the compound
+        # `{container}/{resource}` external ref.
+        external_ref = latest.meta.get(META_EXTERNAL_REF)
+        if isinstance(external_ref, str) and "/" in external_ref:
+            return external_ref.rsplit("/", 1)[0]
+        return None
+
     # -- provider-driven flows ------------------------------------------------------------
 
     async def generate_from_text(self, project: Project, prompt: str) -> Artifact:
         prompt = prompt.strip()
         if not prompt:
             raise UserError("A prompt is required")
-        outcome = await invoke_with_fallback(
-            project, DesignCapability.from_text, lambda p: p.generate_from_text(prompt)
-        )
-        return await self.save_result(_project_id(project), outcome.result, source="text")
+        project_id = _project_id(project)
+
+        async def call(provider: DesignProvider) -> DesignResult:
+            # Resolved per candidate: a workspace handle only means something to the provider that
+            # issued it, so a fallback to figma/fake must not inherit Stitch's project id.
+            workspace = await self.workspace_for(project_id, provider.key)
+            return await provider.generate_from_text(
+                prompt, workspace=workspace, workspace_title=await self.workspace_title_for(project)
+            )
+
+        outcome = await invoke_with_fallback(project, DesignCapability.from_text, call)
+        return await self.save_result(project_id, outcome.result, source="text")
 
     async def generate_from_images(
         self, project: Project, images: list[DesignImage], prompt: str | None = None
     ) -> Artifact:
         if not images:
             raise UserError("At least one image is required")
-        outcome = await invoke_with_fallback(
-            project, DesignCapability.from_image, lambda p: p.generate_from_image(images, prompt)
-        )
-        return await self.save_result(_project_id(project), outcome.result, source="image")
+        project_id = _project_id(project)
+
+        async def call(provider: DesignProvider) -> DesignResult:
+            workspace = await self.workspace_for(project_id, provider.key)
+            return await provider.generate_from_image(
+                images,
+                prompt,
+                workspace=workspace,
+                workspace_title=await self.workspace_title_for(project),
+            )
+
+        outcome = await invoke_with_fallback(project, DesignCapability.from_image, call)
+        return await self.save_result(project_id, outcome.result, source="image")
 
     async def refine(self, project: Project, instruction: str) -> Artifact:
         """Refine the latest design into a **new version** that references the prior one."""

@@ -103,9 +103,19 @@ class McpServer:
         self.strict = strict
         #: Override the whole ``get_screen`` tool result, to script an unusual response shape.
         self.screen_result: dict[str, Any] | None = None
+        #: Override the whole ``generate_screen_from_text`` result — a conversational, non-design
+        #: reply (Stitch asking a clarifying question) rather than the usual screen_doc/session_doc.
+        self.generate_result: dict[str, Any] | None = None
         #: How many ``get_screen`` reads answer without code before one carries it (async gen).
         self.screen_ready_after = 0
         self._screen_reads = 0
+        #: When set, the generate/edit call never answers — the real 76s-generation timeout.
+        self.generate_times_out = False
+        #: Screens the project reports *after* a generation was attempted (recovery source).
+        self.screens_after_generate: list[dict[str, Any]] | None = None
+        #: tool name → how many times it answers INVALID_ARGUMENT before working (server flake).
+        self.flaky_tools: dict[str, int] = {}
+        self._generate_seen = False
 
     # -- wiring ---------------------------------------------------------------------------
 
@@ -149,6 +159,22 @@ class McpServer:
                             ],
                         },
                     )
+            if self.flaky_tools.get(name, 0) > 0:
+                # Exactly what the live endpoint intermittently does to a perfectly valid call.
+                self.flaky_tools[name] -= 1
+                return self._rpc(
+                    body["id"],
+                    {
+                        "isError": True,
+                        "content": [
+                            {"type": "text", "text": "Request contains an invalid argument."}
+                        ],
+                    },
+                )
+            if name in ("generate_screen_from_text", "edit_screens"):
+                self._generate_seen = True
+                if self.generate_times_out:
+                    raise httpx.ReadTimeout("generation outlived the request")
             if name == "get_screen" and self.screen_result is not None:
                 return self._rpc(body["id"], self.screen_result)
             return self._rpc(body["id"], {"content": [self._tool(name, args)]})
@@ -159,11 +185,15 @@ class McpServer:
             # The real response is the project resource, keyed by `name`.
             return self._text({"name": "projects/proj-9", "title": "ForgeFlow"})
         if name in ("generate_screen_from_text", "generateScreenFromText"):
+            if self.generate_result is not None:
+                return self._text(self.generate_result)
             primary = screen_doc(with_code=not self.generate_without_code)
             return self._text(session_doc(primary, self.extra_screens))
         if name == "edit_screens":
             return self._text(session_doc(screen_doc(), self.extra_screens))
         if name == "list_screens":
+            if self._generate_seen and self.screens_after_generate is not None:
+                return self._text({"screens": self.screens_after_generate})
             return self._text({"screens": self.project_screens})
         if name == "get_screen":
             self._screen_reads += 1
@@ -239,8 +269,9 @@ async def test_a_generation_performs_the_handshake_then_calls_the_tool(patched_h
 
     methods = [r["method"] for r in server.requests]
     assert methods[:3] == ["initialize", "notifications/initialized", "tools/list"]
-    # The generate response already carries the screen's files, so no extra read is needed.
-    assert server.tool_calls() == ["create_project", "generate_screen_from_text"]
+    # The project's screens are snapshotted first so a generation whose response is lost can
+    # still be recovered; the generate response then carries the files, so no extra read follows.
+    assert server.tool_calls() == ["create_project", "list_screens", "generate_screen_from_text"]
 
     body = server.requests[0]
     assert body["jsonrpc"] == "2.0" and "id" in body  # a real JSON-RPC envelope, not a bare call
@@ -285,7 +316,10 @@ async def test_the_handshake_runs_once_per_client(patched_httpx: Any) -> None:
     assert [r["method"] for r in server.requests].count("initialize") == 1
     assert [r["method"] for r in server.requests].count("tools/list") == 1
     # ...and the project is created once, then reused.
-    assert server.tool_calls().count("create_project") == 1
+    # …but each generate makes its own Stitch project: with no workspace passed, every call is a
+    # different ForgeFlow project's first design, and reusing one container across them is exactly
+    # the leak that showed a new project someone else's screens.
+    assert server.tool_calls().count("create_project") == 2
 
 
 # ---------------------------------------------------------------- schema discovery
@@ -342,7 +376,8 @@ async def test_a_renamed_tool_is_still_found(patched_httpx: Any) -> None:
 
     payload = await HttpStitchClient().text_to_ui("x", headers=await _headers())
 
-    assert server.tool_calls()[:2] == ["createProject", "generateScreenFromText"]
+    assert server.tool_calls()[0] == "createProject"
+    assert "generateScreenFromText" in server.tool_calls()
     assert payload.external_ref == "proj-9/screen-1"
 
 
@@ -507,7 +542,7 @@ async def test_list_screens_enumerates_the_whole_project(patched_httpx: Any) -> 
     client = HttpStitchClient(sleeper=_no_sleep)
     await client.text_to_ui("x", headers=await _headers())  # establishes the project
 
-    refs = await client.list_screens(headers=await _headers())
+    refs = await client.list_screens(headers=await _headers(), workspace="proj-9")
 
     assert [r.ref for r in refs] == ["proj-9/landing", "proj-9/login"]
     assert [r.title for r in refs] == ["Landing", "Login"]
@@ -515,13 +550,20 @@ async def test_list_screens_enumerates_the_whole_project(patched_httpx: Any) -> 
     assert server.arguments_for("list_screens") == {"projectId": "proj-9"}
 
 
-async def test_list_screens_is_empty_before_anything_is_generated(patched_httpx: Any) -> None:
-    """No project yet → nothing to enumerate, and definitely not an error."""
+async def test_list_screens_is_empty_without_a_workspace(patched_httpx: Any) -> None:
+    """No container yet → nothing to enumerate, and definitely not an error.
+
+    This is also the guard against cross-project leakage: a shared client that fell back to "the
+    last project I made" is what showed a brand-new ForgeFlow project another project's screens.
+    """
     server = McpServer()
     patched_httpx(server)
+    client = HttpStitchClient(sleeper=_no_sleep)
+    await client.text_to_ui("x", headers=await _headers())  # this client HAS made a project
+    before = len(server.tool_calls())
 
-    assert await HttpStitchClient().list_screens(headers=await _headers()) == []
-    assert server.tool_calls() == []  # not even a call is made
+    assert await client.list_screens(headers=await _headers()) == []
+    assert server.tool_calls()[before:] == []  # not even a call is made
 
 
 async def test_a_screen_that_never_produces_html_fails_loudly(
@@ -543,6 +585,29 @@ async def test_a_screen_that_never_produces_html_fails_loudly(
     assert exc.value.detail == {"kind": "contract"}  # recoverable → the stage falls back
     assert "no HTML" in exc.value.message
     assert "PENDING" in exc.value.message  # the raw payload is quoted, so the shape is diagnosable
+
+
+async def test_a_clarifying_question_gets_its_own_actionable_message(patched_httpx: Any) -> None:
+    """An under-specified prompt can make Stitch ask a question instead of designing — that is a
+    distinct, actionable case (not a broken/unrecognised response shape) and must say so plainly,
+    not dump raw JSON on the user."""
+    server = McpServer()
+    server.generate_result = {
+        "projectId": "proj-9",
+        "sessionId": "sess-1",
+        "outputComponents": [
+            {"text": "I'd love to help you design your ToDo app. Who is it for?"},
+        ],
+    }
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError) as exc:
+        await HttpStitchClient(sleeper=_no_sleep).text_to_ui("todo app", headers=await _headers())
+
+    assert exc.value.detail == {"kind": "contract"}  # still recoverable → the stage falls back
+    assert "asked for more detail" in exc.value.message
+    assert "Who is it for?" in exc.value.message  # Stitch's own question survives, not just a dump
+    assert "no HTML" not in exc.value.message  # the specific message wins over the generic one
 
 
 # ---------------------------------------------------------------- auth
@@ -677,3 +742,112 @@ async def test_http_status_maps_to_the_error_taxonomy(status: int, kind: str) ->
             await HttpStitchClient().text_to_ui("x", headers={"X-Goog-Api-Key": "k"})
 
     assert exc.value.detail == {"kind": kind}
+
+
+# ---------------------------------------------------------------- surviving a lost generation
+
+
+async def test_a_generation_whose_response_is_lost_is_recovered_from_the_project(
+    patched_httpx: Any,
+) -> None:
+    """The bug this guards: Stitch generates, the HTTP call dies, the design is served anyway.
+
+    A multi-screen prompt takes minutes against the live endpoint, so the response can be lost to a
+    timeout long after Stitch has produced the screens and billed the generation. Falling back to
+    another provider there makes the user watch Stitch build their design and then get a fake one.
+    """
+    server = McpServer()
+    server.generate_times_out = True
+    server.screens_after_generate = [screen_doc()]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient().text_to_ui("a todo app", headers=await _headers())
+
+    assert payload.html == "<main>generated</main>"
+    assert payload.external_ref == "proj-9/screen-1"
+    # It was recovered by re-reading the project, not by generating a second time.
+    assert server.tool_calls().count("generate_screen_from_text") == 1
+
+
+async def test_only_screens_the_lost_generation_created_are_recovered(
+    patched_httpx: Any,
+) -> None:
+    """Pre-existing screens must not be mistaken for this generation's output."""
+    stale = {"id": "old-1", "name": "projects/proj-9/screens/old-1"}
+    server = McpServer()
+    server.project_screens = [stale]  # snapshotted before the generate
+    server.generate_times_out = True
+    server.screens_after_generate = [stale, screen_doc()]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert payload.external_ref == "proj-9/screen-1"  # the new screen, not `old-1`
+
+
+async def test_a_lost_generation_that_produced_nothing_still_fails(
+    patched_httpx: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recovery must not invent a design: no new screen → the original error stands."""
+    monkeypatch.setenv("STITCH_READY_TIMEOUT_S", "0")
+    reset_config()
+    server = McpServer()
+    server.generate_times_out = True
+    server.screens_after_generate = []
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError) as exc:
+        await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert exc.value.detail == {"kind": "transient"}
+
+
+async def test_a_spurious_invalid_argument_on_a_read_is_retried(patched_httpx: Any) -> None:
+    """The live endpoint rejects ~1 in 4 valid reads; one flake must not sink the design."""
+    server = McpServer()
+    server.flaky_tools = {"get_screen": 2}
+    patched_httpx(server)
+
+    payload = await HttpStitchClient().fetch_code("proj-9/screen-1", headers=await _headers())
+
+    assert payload.html == "<main>generated</main>"
+    assert server.tool_calls().count("get_screen") == 3  # two flakes, then the real answer
+
+
+async def test_a_generation_rejected_as_invalid_is_not_retried(patched_httpx: Any) -> None:
+    """A retry of a generate would spend a second generation from the monthly quota."""
+    server = McpServer()
+    server.flaky_tools = {"generate_screen_from_text": 1}
+    server.screens_after_generate = []
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError):
+        await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    assert server.tool_calls().count("generate_screen_from_text") == 1
+
+
+async def test_generation_gets_a_longer_timeout_than_a_metadata_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """60s is a fine read budget and far too short for a generation — they must differ."""
+    monkeypatch.setenv("STITCH_TIMEOUT_S", "60")
+    monkeypatch.setenv("STITCH_GENERATE_TIMEOUT_S", "300")
+    reset_config()
+
+    server = McpServer()
+    seen: list[tuple[str, Any]] = []
+    original = httpx.AsyncClient
+
+    def build(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = server.transport()
+        client = original(*args, **kwargs)
+        seen.append((str(kwargs.get("timeout")), client))
+        return client
+
+    monkeypatch.setattr(httpx, "AsyncClient", build)
+    await HttpStitchClient().text_to_ui("x", headers=await _headers())
+
+    timeouts = [t for t, _ in seen]
+    assert "300.0" in timeouts  # the generate call
+    assert "60.0" in timeouts  # the handshake/reads

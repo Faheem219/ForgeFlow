@@ -432,9 +432,19 @@ _KEYS: tuple[ConfigKey, ...] = (
         "stitch_timeout_s",
         Cat.providers,
         "float",
-        "Per-call wall clock for Stitch (seconds).",
+        "Per-call wall clock for the Stitch handshake and metadata reads (seconds).",
         minimum=1,
         maximum=600,
+    ),
+    ConfigKey(
+        "stitch_generate_timeout_s",
+        Cat.providers,
+        "float",
+        "Per-call wall clock for Stitch generate/edit (seconds). Generation is far slower than a "
+        "read — a multi-screen prompt takes 1-3 minutes — and a timeout here throws away a "
+        "generation Stitch has already charged for.",
+        minimum=1,
+        maximum=900,
     ),
     ConfigKey(
         "stitch_max_retries",

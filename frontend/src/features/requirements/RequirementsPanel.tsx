@@ -4,11 +4,12 @@ import { useCallback, useState } from 'react';
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, Skeleton } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentAction, RequirementSpecInput, StageStatus } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
-import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   draftRequirements,
   getRequirements,
@@ -24,12 +25,21 @@ import { ReviewSummary } from './ReviewSummary';
 const REOPENABLE: ReadonlySet<StageStatus> = new Set(['complete', 'skipped', 'stale']);
 
 /**
+ * What to show when an AI-assist call fails: the server's own message when it sent one, else the
+ * form's fallback wording. A provider error carries the fix ("no API key is configured — set it in
+ * the admin panel"), which the generic "add features manually" text would otherwise bury.
+ */
+const assistMessage = (fallback: string, cause?: unknown): string =>
+  cause instanceof ApiError ? cause.message : fallback;
+
+/**
  * Requirements stage panel (phase-26). Loads the latest spec; a review ⇄ edit toggle hosts the
  * guided form and the read-only summary. Proceed/Skip drive the conductor; on save, if a build
  * already exists, a refine intent marks test + downstream stale so they regenerate from the change.
  */
 export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Element {
   const queryClient = useQueryClient();
+  const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const [mode, setMode] = useState<'review' | 'edit' | null>(null);
 
   const specQuery = useQuery({
@@ -75,10 +85,18 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
   const intent = useMutation({
     mutationFn: (action: IntentAction) =>
       submitIntent(projectId, { stage: 'requirements', action }),
-    onSuccess: () => {
+    onSuccess: (_data, action) => {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
+      // Proceed/skip both mean "I'm done here for now" — release any explicit edit-mode toggle
+      // (so a stale form doesn't linger once the stage has moved on) and jump the shared workspace
+      // view to the next stage, instead of leaving the user staring at the same completed panel.
+      if (action === 'proceed' || action === 'skip') {
+        setMode(null);
+        const next = nextStage('requirements');
+        if (next) setActiveStage(next);
+      }
     },
     onError: (err) => {
       const description = err instanceof ApiError ? err.message : 'Stage action rejected';
@@ -91,7 +109,8 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
     [projectId],
   );
   const handleSuggestError = useCallback(
-    (message: string) => toast({ title: 'AI-suggest', description: message, variant: 'error' }),
+    (message: string, cause?: unknown) =>
+      toast({ title: 'AI-suggest', description: assistMessage(message, cause), variant: 'error' }),
     [],
   );
   const handleDraft = useCallback(
@@ -99,7 +118,8 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
     [projectId],
   );
   const handleDraftError = useCallback(
-    (message: string) => toast({ title: 'AI-draft', description: message, variant: 'error' }),
+    (message: string, cause?: unknown) =>
+      toast({ title: 'AI-draft', description: assistMessage(message, cause), variant: 'error' }),
     [],
   );
 

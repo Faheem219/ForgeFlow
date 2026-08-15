@@ -70,6 +70,21 @@ describe('deriveTaskStream', () => {
     expect(state.error).toBeNull();
   });
 
+  it('clears the streamed turn text on run.finished, not just the streaming flag', () => {
+    // A client that reconnects and replays a completed run's buffered history (or one that just
+    // stays mounted past the terminal event) must not keep showing the in-flight bubble forever —
+    // it duplicates content the server already persisted into `messages`.
+    const events = [
+      event('agent.stream.start'),
+      event('agent.token', { text: 'building the app' }),
+      event('run.finished', { ok: true, run_id: 'r1' }),
+    ];
+
+    const state = deriveTaskStream(events, 'p1', 0);
+    expect(state.streamed).toBe('');
+    expect(state.finished).toBe(true);
+  });
+
   it('surfaces the failure message when a run ends badly', () => {
     const state = deriveTaskStream(
       [event('run.finished', { ok: false, error: 'budget exhausted' })],

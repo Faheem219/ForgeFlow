@@ -53,7 +53,13 @@ class ScriptedDesignProvider:
     def _boom(self, kind: str) -> ProviderError:
         return provider_error(self.key, f"{self.key} {kind} failure", detail={"kind": kind})
 
-    async def generate_from_text(self, prompt: str) -> DesignResult:
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult:
         self.text_calls += 1
         if self._fail_text is not None:
             raise self._boom(self._fail_text)
@@ -62,7 +68,12 @@ class ScriptedDesignProvider:
         )
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult:
         self.image_calls += 1
         if self._fail_image is not None:

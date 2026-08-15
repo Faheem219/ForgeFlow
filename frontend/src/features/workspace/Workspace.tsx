@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { Button, ConfirmDialog, EmptyState, Panel, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { advanceCursor } from '../../lib/eventCursor';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
 import { useUiStore } from '../../lib/stores/uiStore';
@@ -109,8 +110,11 @@ export default function Workspace(): JSX.Element {
   // `project.deleted` means the project was removed from another tab or session — leave, rather
   // than sit on a workspace whose every subsequent request will 404.
   useEffect(() => {
-    const fresh = events.slice(processed.current);
-    processed.current = events.length;
+    // `seq`-cursored, not index-cursored: the event ring is bounded, so a build's traffic saturates
+    // it and an index cursor would stop advancing — stage transitions arriving after that point
+    // would never refresh the navigator. See lib/eventCursor.ts.
+    const { fresh, nextSeq } = advanceCursor(events, processed.current);
+    processed.current = nextSeq;
     const mine = fresh.filter((e) => e.project_id === projectId);
     if (mine.some((e) => e.event === 'stage.transition')) {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });

@@ -7,6 +7,7 @@ import { ReviewSummary } from './ReviewSummary';
 const SPEC: RequirementSpecDto = {
   project_id: 'p1',
   version: 3,
+  app_name: 'Focus',
   created_at: '2026-01-01T00:00:00Z',
   features: [
     {

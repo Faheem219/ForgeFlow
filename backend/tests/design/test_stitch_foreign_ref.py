@@ -139,7 +139,8 @@ async def test_a_real_stitch_ref_is_not_mistaken_for_a_foreign_one(route_to: Any
             headers=await _headers(),
         )
 
-    assert server.tool_calls == ["edit_screens"]  # it *was* sent — this ref is ours
+    # …preceded only by the pre-edit screen snapshot. The edit *was* sent — this ref is ours.
+    assert server.tool_calls == ["list_screens", "edit_screens"]
 
 
 @pytest.mark.parametrize(

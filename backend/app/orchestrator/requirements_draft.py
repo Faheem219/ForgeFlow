@@ -39,15 +39,23 @@ MAX_LIST_ITEMS = 6
 MAX_DESCRIPTION_CHARS = 8000
 
 _KINDS = {"unit", "e2e", "either"}
+#: Names that are worse than none — the user would only have to clear them.
+_PLACEHOLDER_NAMES = {"my app", "web app", "app", "my web app", "untitled", "the app"}
+
+#: Cap on the proposed product name — a label for a UI header and a provider project, not a tagline.
+MAX_APP_NAME_CHARS = 40
 
 _SYSTEM = (
     "You help a semi-technical user turn a plain-language description of a web app into a "
     "structured requirements spec. Propose the distinct features the app needs, and for each one a "
     "few concise, independently testable acceptance criteria. Prefer a focused set of real "
     "features over an exhaustive list, and never invent a feature the description does not imply. "
-    "Reply with ONLY a JSON array of objects "
+    "Also propose a short, memorable product name for the app (1-3 words, title case, no quotes, "
+    "no generic placeholders like 'My App' or 'Web App'). "
+    'Reply with ONLY a JSON object {"app_name": string, "features": [...]} and nothing else, where '
+    "each feature is "
     '{"name": string, "description": string, "inputs": string[], "expected_behaviors": string[], '
-    '"acceptance_criteria": [{"text": string, "kind": "unit"|"e2e"|"either"}]} and nothing else. '
+    '"acceptance_criteria": [{"text": string, "kind": "unit"|"e2e"|"either"}]}. '
     '"inputs" is data the user provides; "expected_behaviors" is what the user should observe. '
     'Use "unit" for logic a unit test covers, "e2e" for user-visible flows, "either" if unsure.'
 )
@@ -62,6 +70,19 @@ class DraftedFeature:
     inputs: list[str]
     expected_behaviors: list[str]
     acceptance_criteria: list[SuggestedCriterion]
+
+
+@dataclass(frozen=True)
+class DraftedSpec:
+    """A whole proposed spec: the feature list plus a name for the app itself.
+
+    The name is carried separately rather than as a feature because it has nothing testable about
+    it — modelling it as a criterion-less ``Feature`` would put a fake row in the spec and, worse,
+    in the test suite generated from it.
+    """
+
+    app_name: str
+    features: list[DraftedFeature]
 
 
 def _user_prompt(description: str) -> str:
@@ -102,21 +123,57 @@ def _criteria(raw: Any) -> list[SuggestedCriterion]:
     return out
 
 
-def _parse(text: str) -> list[DraftedFeature]:
-    """Best-effort: pull the JSON array out of the reply, keeping only usable features.
+def _app_name(raw: Any) -> str:
+    """A usable product name, or blank — never a placeholder the user would just have to delete."""
+    name = " ".join(str(raw or "").split())
+    if not name or name.lower() in _PLACEHOLDER_NAMES:
+        return ""
+    return name[:MAX_APP_NAME_CHARS]
+
+
+def _payload(text: str) -> tuple[str, Any]:
+    """``(app name, raw feature list)`` from the reply.
+
+    The documented shape is an object, but a model that answers with the bare feature array (the
+    older contract, and a common drift) still yields a perfectly good draft — so that is read too
+    rather than discarded for missing a name.
+
+    Which of the two it is, is decided by whichever bracket opens **first**: a feature array is
+    full of ``{`` too, so scanning for an object first would slice one element out of the middle of
+    an otherwise perfectly good array and read it as the whole reply.
+    """
+    obj_at, arr_at = text.find("{"), text.find("[")
+    array_first = arr_at != -1 and (obj_at == -1 or arr_at < obj_at)
+
+    parsed = _loads(text, "[", "]") if array_first else _loads(text, "{", "}")
+    if parsed is None:  # the preferred shape did not parse — try the other one
+        parsed = _loads(text, "{", "}") if array_first else _loads(text, "[", "]")
+
+    if isinstance(parsed, dict):
+        return _app_name(parsed.get("app_name")), parsed.get("features")
+    return "", parsed
+
+
+def _loads(text: str, opener: str, closer: str) -> Any:
+    """The outermost ``opener…closer`` slice of ``text``, parsed, or ``None``."""
+    start, end = text.find(opener), text.rfind(closer)
+    if start == -1 or end <= start:
+        return None
+    try:
+        return json.loads(text[start : end + 1])
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse(text: str) -> DraftedSpec:
+    """Best-effort: pull the draft out of the reply, keeping only usable features.
 
     A feature with no name, or none the save endpoint would accept (it requires ≥1 acceptance
     criterion), is dropped rather than handed to the form as a row the user cannot save.
     """
-    start, end = text.find("["), text.rfind("]")
-    if start == -1 or end <= start:
-        return []
-    try:
-        raw = json.loads(text[start : end + 1])
-    except (ValueError, TypeError):
-        return []
+    app_name, raw = _payload(text)
     if not isinstance(raw, list):
-        return []
+        return DraftedSpec(app_name=app_name, features=[])
 
     out: list[DraftedFeature] = []
     seen: set[str] = set()
@@ -141,16 +198,16 @@ def _parse(text: str) -> list[DraftedFeature]:
         )
         if len(out) >= MAX_FEATURES:
             break
-    return out
+    return DraftedSpec(app_name=app_name, features=out)
 
 
-async def draft_features(
+async def draft_spec(
     project: Project, description: str, *, client: AnthropicClient | None = None
-) -> list[DraftedFeature]:
+) -> DraftedSpec:
     """Ask Haiku for an editable, unsaved draft spec (cost-tracked on a ``Run``)."""
     description = description.strip()
     if not description:
-        return []
+        return DraftedSpec(app_name="", features=[])
     prompt = _user_prompt(description[:MAX_DESCRIPTION_CHARS])
     agent = client or AnthropicClient()
     run = await Run(project_id=project.id, kind="requirements:draft").insert()

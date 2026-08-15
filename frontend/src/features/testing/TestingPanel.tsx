@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest, TestRunDto } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
-import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import { Escalation } from './Escalation';
 import { RepairView } from './RepairView';
 import { ResultsPanel } from './ResultsPanel';
@@ -57,11 +58,16 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
 
   const cancel = useMutation({ mutationFn: () => cancelRepair(projectId) });
 
+  const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
-    onSuccess: () => {
+    onSuccess: (_data, body) => {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
+      if (body.action === 'proceed' || body.action === 'skip') {
+        const next = nextStage('test');
+        if (next) setActiveStage(next);
+      }
     },
     onError: (err) => {
       const description = err instanceof ApiError ? err.message : 'Action failed';

@@ -15,6 +15,7 @@ from beanie import PydanticObjectId
 from app.core.config import reset_config
 from app.core.errors import ProviderError, UserError
 from app.db.blobs import get_blob_store
+from app.db.models import Project
 from app.db.models.enums import Stage, StageStatus
 from app.design.base import (
     DesignCapabilities,
@@ -88,6 +89,13 @@ async def _save_requirements(pid: PydanticObjectId) -> None:
             ]
         ),
     )
+
+
+async def _set_original_prompt(pid: PydanticObjectId, text: str) -> None:
+    project = await Project.get(pid)
+    assert project is not None
+    project.original_prompt = text
+    await project.save()
 
 
 def _prompt_sent(resp: IntentResponse) -> str | None:
@@ -370,6 +378,81 @@ async def test_a_skipped_requirements_stage_leaves_the_design_prompt_alone(
     assert _prompt_sent(resp) == "a todo app"
 
 
+# -- generating with nothing typed: fall back to what ForgeFlow already knows ---------------------
+
+
+async def test_no_intake_falls_back_to_the_original_prompt_and_requirements(
+    design_env: None,
+) -> None:
+    """The user should never have to repeat an idea they already gave ForgeFlow once.
+
+    A bare `refine` (no text, no images, no message) with no design yet must generate directly
+    from the description that first seeded requirements, folded together with the requirements
+    themselves — not demand the user type something into an empty box.
+    """
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _set_original_prompt(pid, "A clean personal todo app")
+    await _save_requirements(pid)
+
+    resp = await Conductor().handle_intent(user, _intent(pid, IntentAction.refine))
+
+    assert resp.to_status is StageStatus.awaiting_user
+    prompt = _prompt_sent(resp)
+    assert isinstance(prompt, str)
+    assert prompt.startswith("A clean personal todo app")  # the original idea still leads
+    assert "Todos" in prompt and "manage a todo list" in prompt  # …with requirements folded in
+    assert "your requirements" in resp.messages[-1].content  # the summary says where it came from
+
+
+async def test_no_intake_uses_requirements_alone_when_there_is_no_original_prompt(
+    design_env: None,
+) -> None:
+    """A manually-authored spec (never drafted from a description) is still enough on its own."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _save_requirements(pid)
+
+    resp = await Conductor().handle_intent(user, _intent(pid, IntentAction.refine))
+
+    assert "Todos" in str(_prompt_sent(resp))
+
+
+async def test_no_intake_and_nothing_on_file_still_generates_something(design_env: None) -> None:
+    """With truly nothing to go on — no prompt ever given, no requirements, no design — generation
+    must still succeed rather than dead-end on an error: a UI always gets created, using the
+    project's own name as the only guaranteed real content, refinable afterward either way."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    project = await Project.get(pid)
+    assert project is not None
+
+    resp = await Conductor().handle_intent(user, _intent(pid, IntentAction.refine))
+
+    assert resp.to_status is StageStatus.awaiting_user
+    prompt = _prompt_sent(resp)
+    assert isinstance(prompt, str) and project.name in prompt
+    assert "starting design" in resp.messages[-1].content  # says it was a generic starting point
+
+
+async def test_no_intake_with_an_existing_design_still_requires_an_instruction(
+    design_env: None,
+) -> None:
+    """The auto-generate fallback only applies before any design exists. Once one does, a bare
+    `refine` with no instruction is ambiguous (refine? approve? nothing?) and must still ask —
+    even with an original prompt and requirements on file that COULD be used to regenerate."""
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _set_original_prompt(pid, "A clean personal todo app")
+    await _save_requirements(pid)
+    await Conductor().handle_intent(
+        user, _intent(pid, IntentAction.refine, payload={"text": "a todo app"})
+    )
+
+    with pytest.raises(UserError):
+        await Conductor().handle_intent(user, _intent(pid, IntentAction.refine))
+
+
 async def test_provider_error_propagates_with_a_fallback_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -383,11 +466,22 @@ async def test_provider_error_propagates_with_a_fallback_hint(
     class FailingProvider:
         key = "failing"
 
-        async def generate_from_text(self, prompt: str) -> DesignResult:
+        async def generate_from_text(
+            self,
+            prompt: str,
+            *,
+            workspace: str | None = None,
+            workspace_title: str | None = None,
+        ) -> DesignResult:
             raise provider_error("failing", "quota exhausted", hint="switch to figma")
 
         async def generate_from_image(
-            self, images: list[DesignImage], prompt: str | None = None
+            self,
+            images: list[DesignImage],
+            prompt: str | None = None,
+            *,
+            workspace: str | None = None,
+            workspace_title: str | None = None,
         ) -> DesignResult:
             raise provider_error("failing", "quota exhausted", hint="switch to figma")
 

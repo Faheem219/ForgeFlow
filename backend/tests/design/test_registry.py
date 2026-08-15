@@ -36,11 +36,22 @@ class StubProvider:
     def __init__(self, key: str) -> None:
         self.key = key
 
-    async def generate_from_text(self, prompt: str) -> DesignResult:
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult:
         return DesignResult(provider=self.key, external_ref="x", html="<h1/>", css="")
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult:
         return DesignResult(provider=self.key, external_ref="x", html="<h1/>", css="")
 

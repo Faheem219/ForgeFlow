@@ -309,3 +309,22 @@ async def test_missing_anthropic_key_is_a_provider_error_not_a_crash(
     with pytest.raises(ProviderError, match="No Anthropic API key"):
         async for _ in SdkTransport().stream(request):
             pass
+
+
+async def test_missing_openai_key_is_a_provider_error_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same guarantee on the OpenAI-compatible path.
+
+    A key set from the admin panel is Fernet-encrypted; rotating ``FERNET_KEY`` makes it
+    undecryptable and ``config_db`` then fails soft to the (blank) env value. Without this check
+    the SDK's bare ``OpenAIError`` escaped as a 500, hiding the one thing worth saying: re-enter
+    the key.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    reset_config()
+
+    request = MessageRequest(model="gpt-4o-mini", system=None, messages=[], tools=[], max_tokens=16)
+    with pytest.raises(ProviderError, match="No OpenAI-compatible API key"):
+        async for _ in OpenAITransport().stream(request):
+            pass

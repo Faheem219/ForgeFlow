@@ -63,6 +63,17 @@ SESSION_HEADER = "Mcp-Session-Id"
 #: Gap between re-reads while waiting for an asynchronously generated screen to carry its code.
 SCREEN_POLL_INTERVAL_S = 3.0
 
+#: Free, side-effect-free reads: repeating one costs nothing and spends no generation quota.
+_IDEMPOTENT_TOOLS: frozenset[str] = frozenset({"get_screen", "list_screens"})
+#: Extra attempts for an idempotent read that came back with the flake below.
+_FLAKE_RETRIES = 3
+#: Stitch intermittently answers a byte-identical, schema-valid read with INVALID_ARGUMENT —
+#: measured at roughly 1 call in 4 against the live endpoint, with the *same* arguments succeeding
+#: on either side of it. It is a server-side flake, not a real contract violation, so idempotent
+#: reads retry instead of collapsing the whole design onto the fallback provider. A genuinely
+#: malformed request simply fails the same way a few hundred milliseconds later.
+_FLAKY_ERROR_MARKER = "invalid argument"
+
 #: Stitch tool names. The server is the authority: :meth:`HttpStitchClient._discover` reads
 #: ``tools/list`` and each of these resolves to whichever alias the endpoint actually exposes.
 TOOL_CREATE_PROJECT = "create_project"
@@ -105,6 +116,9 @@ _ARG_ALIASES: dict[str, tuple[str, ...]] = {
 class StitchDesignPayload(BaseModel):
     """Normalized Stitch response (what the transport hands back)."""
 
+    #: The Stitch project the screen lives in — carried up so the ForgeFlow project can record it
+    #: and keep designing into the same one.
+    workspace: str = ""
     external_ref: str = ""
     html: str = ""
     css: str = ""
@@ -118,7 +132,14 @@ class StitchDesignPayload(BaseModel):
 class StitchClient(Protocol):
     """The Stitch MCP transport. ``headers`` carry the credential; never store or log them."""
 
-    async def text_to_ui(self, prompt: str, *, headers: Headers) -> StitchDesignPayload: ...
+    async def text_to_ui(
+        self,
+        prompt: str,
+        *,
+        headers: Headers,
+        workspace: str | None = None,
+        title: str | None = None,
+    ) -> StitchDesignPayload: ...
 
     async def refine(
         self, external_ref: str, instruction: str, *, headers: Headers
@@ -126,7 +147,9 @@ class StitchClient(Protocol):
 
     async def fetch_code(self, external_ref: str, *, headers: Headers) -> StitchDesignPayload: ...
 
-    async def list_screens(self, *, headers: Headers) -> list[DesignScreenRef]: ...
+    async def list_screens(
+        self, *, headers: Headers, workspace: str | None = None
+    ) -> list[DesignScreenRef]: ...
 
 
 # --------------------------------------------------------------------------- response parsing
@@ -243,6 +266,15 @@ def _is_not_found(message: str) -> bool:
     return any(marker in lowered for marker in _NOT_FOUND_MARKERS)
 
 
+def _is_flaky(error: ProviderError) -> bool:
+    """Whether a failure is the intermittent INVALID_ARGUMENT (see ``_FLAKY_ERROR_MARKER``)."""
+    detail = error.detail
+    kind = detail.get("kind") if isinstance(detail, dict) else None
+    if str(kind) != StitchErrorKind.contract:
+        return False
+    return _FLAKY_ERROR_MARKER in error.message.lower()
+
+
 def _pluck(data: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
     """First present value for ``keys``, looking one level into nested objects too."""
     for key in keys:
@@ -270,6 +302,27 @@ def _looks_like_stitch_id(value: str) -> bool:
     """
     text = value.strip()
     return len(text) >= 8 and all(char in "0123456789abcdefABCDEF" for char in text)
+
+
+def _clarifying_question(payload: Mapping[str, Any]) -> str | None:
+    """The text of a clarifying question, if Stitch answered conversationally instead of designing.
+
+    Given an under-specified prompt, Stitch's model sometimes replies with plain text (e.g. "Who
+    is this app for?") rather than generating a screen — every ``outputComponents`` entry carries
+    a ``text`` and no ``design`` at all. That is a distinct, actionable case from a genuinely
+    broken or unrecognised response shape, so it gets its own message instead of a raw JSON dump.
+    """
+    components = payload.get("outputComponents")
+    if not isinstance(components, list) or not components:
+        return None
+    texts: list[str] = []
+    for component in components:
+        if not isinstance(component, Mapping) or "design" in component:
+            return None  # not this pattern — a real (or differently-shaped) design is present
+        text = component.get("text")
+        if isinstance(text, str) and text.strip():
+            texts.append(text.strip())
+    return " ".join(texts) or None
 
 
 def _summarize(payload: Mapping[str, Any]) -> str:
@@ -389,7 +442,7 @@ class HttpStitchClient:
         return self._rpc_id
 
     async def _post(
-        self, body: dict[str, Any], headers: Headers
+        self, body: dict[str, Any], headers: Headers, *, timeout: float | None = None
     ) -> tuple[dict[str, Any] | None, httpx.Response]:
         request_headers = {
             **headers,
@@ -399,7 +452,8 @@ class HttpStitchClient:
         if self._session_id:
             request_headers[SESSION_HEADER] = self._session_id
 
-        timeout = float(get_config().get("stitch_timeout_s"))
+        if timeout is None:
+            timeout = float(get_config().get("stitch_timeout_s"))
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(self._url(), json=body, headers=request_headers)
@@ -428,9 +482,16 @@ class HttpStitchClient:
             StitchErrorKind.contract, f"Stitch rejected the request ({code}, {method})"
         )
 
-    async def _rpc(self, method: str, params: dict[str, Any], headers: Headers) -> dict[str, Any]:
+    async def _rpc(
+        self,
+        method: str,
+        params: dict[str, Any],
+        headers: Headers,
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         body = {"jsonrpc": "2.0", "id": self._next_id(), "method": method, "params": params}
-        message, response = await self._post(body, headers)
+        message, response = await self._post(body, headers, timeout=timeout)
         if self._session_id is None and response.headers.get(SESSION_HEADER):
             self._session_id = response.headers[SESSION_HEADER]
         if message is None:
@@ -527,14 +588,49 @@ class HttpStitchClient:
         return f" [{tool_name} accepts {accepted}; requires {required}]"
 
     async def _call_tool(
-        self, canonical: str, arguments: dict[str, Any], headers: Headers
+        self,
+        canonical: str,
+        arguments: dict[str, Any],
+        headers: Headers,
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Invoke one MCP tool, retrying an idempotent read the server spuriously rejected.
+
+        Only reads are retried: repeating a generate/edit would spend another generation from the
+        monthly quota and add duplicate screens to the Stitch project, which is a far worse outcome
+        than surfacing the error.
+        """
+        retries = _FLAKE_RETRIES if canonical in _IDEMPOTENT_TOOLS else 0
+        for attempt in range(retries + 1):
+            try:
+                return await self._call_tool_once(canonical, arguments, headers, timeout=timeout)
+            except ProviderError as exc:
+                if attempt >= retries or not _is_flaky(exc):
+                    raise
+                logger.info(
+                    "stitch: %s came back with a spurious INVALID_ARGUMENT; retrying (%d/%d)",
+                    canonical,
+                    attempt + 1,
+                    retries,
+                )
+                await self._sleep(0.5 * 2**attempt)
+        raise AssertionError("unreachable")  # pragma: no cover - the loop always returns or raises
+
+    async def _call_tool_once(
+        self,
+        canonical: str,
+        arguments: dict[str, Any],
+        headers: Headers,
+        *,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         """Invoke one MCP tool, re-handshaking once if the session was dropped server-side."""
         await self._ensure_session(headers)
         name = self._tool_name(canonical)
         params = {"name": name, "arguments": self._adapt(name, arguments)}
         try:
-            result = await self._rpc("tools/call", params, headers)
+            result = await self._rpc("tools/call", params, headers, timeout=timeout)
         except ProviderError as exc:
             if _kind_of(exc) != StitchErrorKind.contract or not self._session_id:
                 raise
@@ -544,7 +640,7 @@ class HttpStitchClient:
             await self._ensure_session(headers)
             name = self._tool_name(canonical)
             params = {"name": name, "arguments": self._adapt(name, arguments)}
-            result = await self._rpc("tools/call", params, headers)
+            result = await self._rpc("tools/call", params, headers, timeout=timeout)
 
         if result.get("isError"):
             # Name the tool and what it wanted — an argument mismatch should be one read away.
@@ -562,15 +658,35 @@ class HttpStitchClient:
 
     # -- Stitch domain -----------------------------------------------------------------------
 
-    async def _ensure_project(self, headers: Headers) -> str:
+    async def _ensure_project(
+        self,
+        headers: Headers,
+        workspace: str | None = None,
+        title: str | None = None,
+    ) -> str:
+        """The Stitch project this call designs into.
+
+        ``workspace`` is the caller's own Stitch project, carried forward from its previous design,
+        so successive generates build up one coherent app. When it is absent this is that caller's
+        **first** Stitch design and a fresh project is created.
+
+        There is deliberately no per-instance reuse here. The registry holds a single
+        :class:`StitchDesignProvider` for the whole process, so caching "the last project I made"
+        on the client handed every ForgeFlow project the same Stitch project — a brand-new project
+        opened showing the *previous* one's screens, before its owner had designed anything.
+        ``STITCH_PROJECT_ID`` still pins one project globally, but that is now an explicit operator
+        choice rather than the default behaviour.
+        """
+        if workspace:
+            return _resource_id(workspace)
         configured = str(get_config().get("stitch_project_id")).strip()
         if configured:
             return _resource_id(configured)
-        if self._project_id:
-            return self._project_id
 
         # `create_project` takes a `title` and answers with the project's resource `name`.
-        payload = await self._call_tool(TOOL_CREATE_PROJECT, {"title": "ForgeFlow"}, headers)
+        payload = await self._call_tool(
+            TOOL_CREATE_PROJECT, {"title": (title or "").strip() or "ForgeFlow"}, headers
+        )
         project_id = _resource_id(_pluck(payload, _PROJECT_KEYS))
         if not project_id:
             raise stitch_error(StitchErrorKind.contract, "Stitch did not return a project id")
@@ -660,7 +776,21 @@ class HttpStitchClient:
         html = _decode_inline(inline) if inline else await self._resolve_html(html_url, headers)
         if not html.strip():
             # Never save a blank design: the stage would show "nothing to preview" and the build
-            # would have no context. Fail as `contract` so the fallback chain serves something.
+            # would have no context. Fail as `contract` (not `fatal` — that kind skips the fallback
+            # chain entirely, see resilient.py's `_NON_RECOVERABLE`, and another provider deserves a
+            # chance here same as any other unreadable response) so figma/fake still get a shot —
+            # but say something the user can actually act on when we can tell why.
+            question = _clarifying_question(last)
+            if question:
+                raise stitch_error(
+                    StitchErrorKind.contract,
+                    f"Stitch asked for more detail instead of generating a design: "
+                    f'"{question[:300]}"',
+                    hint=(
+                        "Try a more detailed prompt — what the app is for, who uses it, and its "
+                        "key screens or actions. Meanwhile the design falls back to 'figma'/'fake'."
+                    ),
+                )
             raise stitch_error(
                 StitchErrorKind.contract,
                 f"Stitch returned no HTML for the generated screen{_summarize(last)}",
@@ -670,6 +800,7 @@ class HttpStitchClient:
             payload, headers, primary=(screen_id, html, image_url)
         )
         return StitchDesignPayload(
+            workspace=project_id,
             external_ref=f"{project_id}/{screen_id}" if screen_id else "",
             html=html,
             # Stitch emits a single self-contained HTML document (utility classes inline), so
@@ -756,39 +887,141 @@ class HttpStitchClient:
             )
         return response.text
 
+    # -- surviving a lost generation -----------------------------------------------------------
+
+    @staticmethod
+    def _generate_timeout() -> float:
+        return float(get_config().get("stitch_generate_timeout_s"))
+
+    async def _known_screen_ids(self, project_id: str, headers: Headers) -> set[str] | None:
+        """The project's screen ids before a generation, or ``None`` if they can't be read.
+
+        Snapshotting is what makes :meth:`_recover_generation` able to tell a screen this call
+        produced from one that was already there. Best effort — a project we cannot enumerate
+        simply forfeits recovery rather than failing the generation that has not happened yet.
+        """
+        try:
+            payload = await self._call_tool(TOOL_LIST_SCREENS, {"projectId": project_id}, headers)
+        except ProviderError:
+            logger.warning("stitch: could not snapshot project %s before generating", project_id)
+            return None
+        ids: set[str] = set()
+        for entry in payload.get("screens") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            screen_id = str(entry.get("id") or "") or _resource_id(entry.get("name"))
+            if screen_id:
+                ids.add(screen_id)
+        return ids
+
+    async def _recover_generation(
+        self,
+        project_id: str,
+        known: set[str] | None,
+        headers: Headers,
+        error: ProviderError,
+    ) -> dict[str, Any]:
+        """Find screens a *seemingly* failed generation actually produced, or re-raise.
+
+        Generation regularly outlives the HTTP call: a multi-screen prompt takes minutes, and a
+        timeout (or a dropped connection) leaves us with no response even though Stitch has
+        finished the work and already billed a generation against the monthly quota. Throwing that
+        away means the user watches Stitch build their design and then sees ForgeFlow serve a fake
+        one — so poll the project for screens that were not there beforehand and carry on with
+        those. The result is re-shaped as a normal generate response so the usual parsing applies.
+
+        Only a **lost response** is recovered — ``transient`` covers exactly that (timeout, dropped
+        connection, 5xx), and it is the case where Stitch keeps working after we stop listening.
+        Every other kind means the call never ran: a tool rejection, a bad credential, or a request
+        we refused locally generated nothing, so waiting for screens that will never appear would
+        just stall the stage before it falls back. Those re-raise untouched.
+        """
+        if known is None or _kind_of(error) != StitchErrorKind.transient:
+            raise error
+
+        deadline = time.monotonic() + float(get_config().get("stitch_ready_timeout_s"))
+        while True:
+            try:
+                payload = await self._call_tool(
+                    TOOL_LIST_SCREENS, {"projectId": project_id}, headers
+                )
+            except ProviderError:
+                payload = {}
+            fresh = [
+                entry
+                for entry in (payload.get("screens") or [])
+                if isinstance(entry, Mapping)
+                and (str(entry.get("id") or "") or _resource_id(entry.get("name"))) not in known
+            ]
+            if fresh:
+                logger.info(
+                    "stitch: recovered %d screen(s) from a generation that lost its response",
+                    len(fresh),
+                )
+                return {"outputComponents": [{"design": {"screens": fresh}}]}
+            if time.monotonic() >= deadline:
+                raise error
+            await self._sleep(SCREEN_POLL_INTERVAL_S)
+
     # -- the StitchClient Protocol -------------------------------------------------------------
 
-    async def text_to_ui(self, prompt: str, *, headers: Headers) -> StitchDesignPayload:
-        project_id = await self._ensure_project(headers)
+    async def text_to_ui(
+        self,
+        prompt: str,
+        *,
+        headers: Headers,
+        workspace: str | None = None,
+        title: str | None = None,
+    ) -> StitchDesignPayload:
+        project_id = await self._ensure_project(headers, workspace, title)
         arguments: dict[str, Any] = {"projectId": project_id, "prompt": prompt}
         model_id = str(get_config().get("stitch_model_id")).strip()
         if model_id:
             arguments["modelId"] = model_id
-        payload = await self._call_tool(TOOL_GENERATE_FROM_TEXT, arguments, headers)
+        known = await self._known_screen_ids(project_id, headers)
+        try:
+            payload = await self._call_tool(
+                TOOL_GENERATE_FROM_TEXT, arguments, headers, timeout=self._generate_timeout()
+            )
+        except ProviderError as exc:
+            payload = await self._recover_generation(project_id, known, headers, exc)
         return await self._hydrate(project_id, payload, headers)
 
     async def refine(
         self, external_ref: str, instruction: str, *, headers: Headers
     ) -> StitchDesignPayload:
         project_id, screen_id = self._split_ref(external_ref, self._project_id)
-        payload = await self._call_tool(
-            TOOL_EDIT_SCREENS,
-            {
-                "projectId": project_id,
-                "selectedScreenIds": [screen_id],
-                "prompt": instruction,
-            },
-            headers,
-        )
+        known = await self._known_screen_ids(project_id, headers)
+        try:
+            payload = await self._call_tool(
+                TOOL_EDIT_SCREENS,
+                {
+                    "projectId": project_id,
+                    "selectedScreenIds": [screen_id],
+                    "prompt": instruction,
+                },
+                headers,
+                timeout=self._generate_timeout(),
+            )
+        except ProviderError as exc:
+            # An edit is as slow as a generate and likewise adds screens to the project, so the
+            # same recovery applies when its response is lost.
+            payload = await self._recover_generation(project_id, known, headers, exc)
         # An edit may answer with the edited screen, or with nothing but a status; either way the
         # screen id is the one we edited unless the server names a new one.
         if not _pluck(_screen_object(payload), _SCREEN_KEYS):
             payload = {**payload, "screenId": screen_id}
         return await self._hydrate(project_id, payload, headers)
 
-    async def list_screens(self, *, headers: Headers) -> list[DesignScreenRef]:
-        """Every screen in the Stitch project — the whole app, not just this turn's output."""
-        project_id = str(get_config().get("stitch_project_id")).strip() or self._project_id
+    async def list_screens(
+        self, *, headers: Headers, workspace: str | None = None
+    ) -> list[DesignScreenRef]:
+        """Every screen in ``workspace`` — the whole app, not just this turn's output.
+
+        Without a workspace there is nothing safe to list: falling back to the client's last
+        project (or the global pin) is what showed one ForgeFlow project the screens of another.
+        """
+        project_id = workspace or str(get_config().get("stitch_project_id")).strip()
         if not project_id:
             return []  # nothing generated yet, so there is no project to enumerate
         project_id = _resource_id(project_id)
@@ -871,15 +1104,31 @@ class StitchDesignProvider:
 
     # -- generation flows -----------------------------------------------------------------
 
-    async def generate_from_text(self, prompt: str) -> DesignResult:
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult:
         await self._require_credentials()
         await self._quota.check_available()
-        payload = await self._invoke(lambda h: self._client.text_to_ui(prompt, headers=h))
+        payload = await self._invoke(
+            lambda h: self._client.text_to_ui(
+                prompt, headers=h, workspace=workspace, title=workspace_title
+            ),
+            spends_quota=True,
+        )
         await self._quota.record_usage()
         return self._to_result(payload, {"source": "text"})
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult:
         # Unsupported capability — degrade clearly, never fake a result.
         raise stitch_error(
@@ -892,7 +1141,7 @@ class StitchDesignProvider:
         await self._require_credentials()
         await self._quota.check_available()
         payload = await self._invoke(
-            lambda h: self._client.refine(design_ref, instruction, headers=h)
+            lambda h: self._client.refine(design_ref, instruction, headers=h), spends_quota=True
         )
         await self._quota.record_usage()
         return self._to_result(payload, {"source": "refine", "refined_from": design_ref})
@@ -903,10 +1152,12 @@ class StitchDesignProvider:
         payload = await self._invoke(lambda h: self._client.fetch_code(design_ref, headers=h))
         return DesignCode(html=payload.html, css=payload.css, assets=payload.assets)
 
-    async def list_screens(self) -> list[DesignScreenRef]:
-        """Every screen in the project (free — a metadata read, no generation spent)."""
+    async def list_screens(self, workspace: str | None = None) -> list[DesignScreenRef]:
+        """Every screen in ``workspace`` (free — a metadata read, no generation spent)."""
         await self._require_credentials()
-        return await self._invoke(lambda h: self._client.list_screens(headers=h))
+        return await self._invoke(
+            lambda h: self._client.list_screens(headers=h, workspace=workspace)
+        )
 
     # -- internals ------------------------------------------------------------------------
 
@@ -917,6 +1168,7 @@ class StitchDesignProvider:
     def _to_result(self, payload: StitchDesignPayload, extra_meta: dict[str, Any]) -> DesignResult:
         return DesignResult(
             provider=self.key,
+            workspace=payload.workspace,
             external_ref=payload.external_ref,
             html=payload.html,
             css=payload.css,
@@ -926,9 +1178,18 @@ class StitchDesignProvider:
             meta={**payload.meta, **extra_meta},
         )
 
-    async def _invoke(self, make_call: Callable[[Headers], Awaitable[T]]) -> T:
-        """Run a transport call with transparent credential refresh + transient backoff/retry."""
-        max_retries = int(get_config().get("stitch_max_retries"))
+    async def _invoke(
+        self, make_call: Callable[[Headers], Awaitable[T]], *, spends_quota: bool = False
+    ) -> T:
+        """Run a transport call with transparent credential refresh + transient backoff/retry.
+
+        ``spends_quota`` disables the transient retry. Re-running a generate/edit that timed out
+        does not re-do the *same* work: Stitch has very likely already produced the screens, so a
+        retry spends a second generation from the monthly quota and leaves duplicate screens in the
+        project. Those calls recover in the transport instead (``_recover_generation``), which
+        reuses the work already paid for rather than ordering it twice.
+        """
+        max_retries = 0 if spends_quota else int(get_config().get("stitch_max_retries"))
         refreshed = False
         attempt = 0
         while True:

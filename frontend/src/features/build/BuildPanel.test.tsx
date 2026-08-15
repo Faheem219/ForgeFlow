@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { BuildPanel } from './BuildPanel';
 
 // The IDE + preview are Monaco/xterm-backed — stub them so the panel logic tests stay light.
@@ -92,7 +93,7 @@ function renderPanel() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  return render(<BuildPanel projectId={PROJECT} />, { wrapper });
+  return { ...render(<BuildPanel projectId={PROJECT} />, { wrapper }), client };
 }
 
 let state: MockState;
@@ -105,6 +106,7 @@ beforeEach(() => {
     reportDetail: { ...reportArtifact(), content: JSON.stringify(REPORT) },
     intentCalls: [],
   };
+  useWorkspaceStore.getState().reset();
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -147,6 +149,47 @@ describe('BuildPanel', () => {
     await waitFor(() =>
       expect(state.intentCalls.at(-1)).toMatchObject({ stage: 'build', action: 'skip' }),
     );
+  });
+
+  it('does not bounce to the next stage on mount, even when the build is already complete', async () => {
+    // beforeEach seeds buildStatus: 'complete' — a project reopened for review, not a live finish.
+    installFetch(state);
+    renderPanel();
+
+    await screen.findByTestId('mock-ide');
+    expect(useWorkspaceStore.getState().activeStage).not.toBe('test');
+  });
+
+  it('advances to the next stage once an in-flight build genuinely finishes', async () => {
+    state.buildStatus = 'in_progress';
+    installFetch(state);
+    const { client } = renderPanel();
+    await screen.findByTestId('mock-ide');
+    expect(useWorkspaceStore.getState().activeStage).not.toBe('test'); // not yet — still running
+
+    // The build finishes server-side; the panel's own realtime listener re-fetches stages on this
+    // event (see the existing "lists generated files" test for the same pattern). That listener
+    // also invalidates `activity`/`build-reports` alongside `stages` — wait for all three to settle,
+    // not just the one this test cares about, so no fetch is still in flight past teardown.
+    state.buildStatus = 'complete';
+    act(() => {
+      useRealtimeStore.setState((s) => ({
+        events: [
+          ...s.events,
+          {
+            event: 'stage.transition',
+            project_id: PROJECT,
+            stage: 'build',
+            payload: { stage: 'build' },
+            seq: 1,
+            ts: '',
+          },
+        ],
+      }));
+    });
+
+    await waitFor(() => expect(useWorkspaceStore.getState().activeStage).toBe('test'));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
   });
 
   it('lists generated files as their writes stream in', async () => {

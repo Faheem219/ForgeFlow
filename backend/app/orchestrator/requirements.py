@@ -38,6 +38,9 @@ class FeatureInput(BaseModel):
 
 
 class RequirementSpecInput(BaseModel):
+    #: Editable product name for the app. Optional: a spec saved without one is unchanged from
+    #: before this existed, and consumers fall back to the ForgeFlow project name.
+    app_name: str = ""
     features: list[FeatureInput] = Field(default_factory=list)
 
 
@@ -78,6 +81,8 @@ class DraftResponse(BaseModel):
     """An editable draft. Empty ``features`` means "no usable draft" — the UI falls back to the
     manual form rather than treating it as a failure."""
 
+    #: A proposed product name for the app. Blank when the model offered nothing usable.
+    app_name: str = ""
     features: list[DraftedFeaturePublic] = Field(default_factory=list)
 
 
@@ -115,6 +120,7 @@ class FeaturePublic(BaseModel):
 class RequirementSpecPublic(BaseModel):
     project_id: str
     version: int
+    app_name: str
     features: list[FeaturePublic]
     # True when the test-gen agent inferred this spec (requirements skipped) — labeled for the UI.
     inferred: bool
@@ -125,6 +131,7 @@ class RequirementSpecPublic(BaseModel):
         return cls(
             project_id=str(spec.project_id),
             version=spec.version,
+            app_name=spec.app_name,
             features=[FeaturePublic.of(f) for f in spec.features],
             inferred=spec.inferred,
             created_at=spec.created_at.isoformat(),
@@ -165,10 +172,15 @@ class RequirementsService:
         """
         previous = await self._repo.latest(project_id)
         features = _resolve(spec, previous)  # validates + assigns stable ids
+        # An omitted name keeps the one already on file, so saving an edit to the features from a
+        # client that predates this field cannot silently wipe it.
+        app_name = spec.app_name.strip() or (previous.app_name if previous is not None else "")
 
-        if previous is not None and previous.features == features:
+        if previous is not None and previous.features == features and previous.app_name == app_name:
             return previous  # no change → no new version
-        return await self._repo.create_version(project_id, features, inferred=inferred)
+        return await self._repo.create_version(
+            project_id, features, inferred=inferred, app_name=app_name
+        )
 
 
 def validate_features(spec: RequirementSpecInput) -> list[Feature]:

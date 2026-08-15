@@ -82,6 +82,14 @@ class DesignResult(BaseModel):
     css: str
     preview_image: str | None = None
     screens: list[DesignScreen] = Field(default_factory=list)
+    #: The provider-side container this design was created in (for Stitch, its project id). Recorded
+    #: so a ForgeFlow project keeps designing into its **own** provider project instead of whichever
+    #: one the shared provider instance last touched. Blank when the provider has no such notion.
+    #:
+    #: ``workspace=None`` on a generate means "this ForgeFlow project has no container yet — make
+    #: one"; ``workspace_title`` names it, so the user can tell their projects apart provider-side
+    #: instead of finding a stack of identically-named ones.
+    workspace: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -97,10 +105,21 @@ class DesignProvider(Protocol):
     key: str
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult: ...
 
-    async def generate_from_text(self, prompt: str) -> DesignResult: ...
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult: ...
 
     async def fetch_code(self, design_ref: str) -> DesignCode: ...
 
@@ -118,9 +137,14 @@ class ScreenLister(Protocol):
     Deliberately separate from :class:`DesignProvider` so a provider that has no such notion
     (an imported design, the `fake` provider) is not forced to fake one. Callers check with
     ``isinstance(provider, ScreenLister)`` and simply offer no screen picker otherwise.
+
+    ``workspace`` scopes the listing to one ForgeFlow project's provider container. It is not
+    optional in spirit: without it a shared provider instance would happily list *another*
+    project's screens, which is precisely the leak this parameter exists to prevent — so a
+    provider that is given ``None`` must return nothing rather than guessing.
     """
 
-    async def list_screens(self) -> list[DesignScreenRef]: ...
+    async def list_screens(self, workspace: str | None = None) -> list[DesignScreenRef]: ...
 
 
 def provider_error(

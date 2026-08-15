@@ -6,7 +6,9 @@ import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, Spinner } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
+import { advanceCursor } from '../../lib/eventCursor';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
+import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest } from '../../lib/types';
@@ -14,7 +16,7 @@ import type { IntentRequest } from '../../lib/types';
 import { readFile } from '../ide/api';
 import { useIdeStore } from '../ide/ideStore';
 import { listStages, submitIntent } from '../workspace/api';
-import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   BUILD_REPORT_KIND,
   getActivity,
@@ -85,6 +87,29 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
 
   const persistedStatus = stagesQuery.data?.find((s) => s.stage === 'build')?.status ?? 'empty';
 
+  // A `proceed` here just kicks off a detached codegen run — its HTTP response says nothing about
+  // whether the build actually finished, so (unlike the other stages) we can't advance on the
+  // mutation's onSuccess. Instead, watch the polled/realtime-driven status itself and advance the
+  // moment it genuinely transitions to `complete`.
+  //
+  // Never on mount, so reopening an already-finished build to review it doesn't immediately bounce
+  // you away again — `persistedStatus` defaults to `'empty'` before `stagesQuery` resolves, so a
+  // naive prev/current comparison would misread an already-complete project's first real data
+  // arrival ('empty' -> 'complete') as a live transition. `hasLoadedRef` gates the very first
+  // successful load out of the comparison; only changes observed *after* that count.
+  const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
+  const prevStatusRef = useRef(persistedStatus);
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (stagesQuery.data === undefined) return; // still loading — nothing real to compare yet
+    if (hasLoadedRef.current && prevStatusRef.current !== 'complete' && persistedStatus === 'complete') {
+      const next = nextStage('build');
+      if (next) setActiveStage(next);
+    }
+    hasLoadedRef.current = true;
+    prevStatusRef.current = persistedStatus;
+  }, [persistedStatus, setActiveStage, stagesQuery.data]);
+
   // Newest build_report artifact (the codegen agent versions these; others may be plain diffs).
   const latestReportId = useMemo(() => {
     const reports = (reportsQuery.data ?? []).filter((a) => a.meta.kind === BUILD_REPORT_KIND);
@@ -102,11 +127,17 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
     // A new run starts a fresh file list rather than appending to the previous build's.
     onMutate: () => setRunKey((k) => k + 1),
-    onSuccess: () => {
+    onSuccess: (_data, body) => {
       void queryClient.invalidateQueries({ queryKey: ['build-reports', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
+      // Unlike `proceed` (a detached run — see the status-watching effect below), `skip` resolves
+      // synchronously, so it's safe to advance right here.
+      if (body.action === 'skip') {
+        const next = nextStage('build');
+        if (next) setActiveStage(next);
+      }
     },
     onError: (err) => {
       const description = err instanceof ApiError ? err.message : 'Build action failed';
@@ -140,11 +171,13 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
 
   // A finished build announces itself over the channel; refresh at once rather than waiting for
   // the next poll, so the spinner clears the moment the report lands.
+  // Cursored by `seq`, not by array index — the ring evicts once a build fills it, at which point
+  // an index cursor stops advancing and this never fires again. See lib/eventCursor.ts.
   const events = useRealtimeStore((s) => s.events);
   const seen = useRef(0);
   useEffect(() => {
-    const fresh = events.slice(seen.current);
-    seen.current = events.length;
+    const { fresh, nextSeq } = advanceCursor(events, seen.current);
+    seen.current = nextSeq;
     const done = fresh.some(
       (e) =>
         e.project_id === projectId &&

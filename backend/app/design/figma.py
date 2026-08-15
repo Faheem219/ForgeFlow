@@ -152,13 +152,24 @@ class FigmaDesignProvider:
 
     # -- flows ----------------------------------------------------------------------------
 
-    async def generate_from_text(self, prompt: str) -> DesignResult:
+    async def generate_from_text(
+        self,
+        prompt: str,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
+    ) -> DesignResult:
         token = await get_figma_token()
         payload = await self._invoke(lambda t: self._client.text_to_ui(prompt, token=t), token)
         return self._to_result(payload, {"source": "text"})
 
     async def generate_from_image(
-        self, images: list[DesignImage], prompt: str | None = None
+        self,
+        images: list[DesignImage],
+        prompt: str | None = None,
+        *,
+        workspace: str | None = None,
+        workspace_title: str | None = None,
     ) -> DesignResult:
         # Unsupported capability — degrade clearly, never fake a result.
         raise figma_error(

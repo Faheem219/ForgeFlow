@@ -162,6 +162,38 @@ describe('DesignPanel', () => {
     });
   });
 
+  it('generates with an empty box when no design exists yet — never a dead end', async () => {
+    // state.versions starts empty (beforeEach) → hasDesign is false → the button must be usable.
+    installFetch(state);
+    renderPanel();
+    await screen.findByTestId('provider-health');
+
+    const button = screen.getByRole('button', { name: 'Generate from text' });
+    expect(button).toBeEnabled(); // not gated on typing anything, unlike before this fix
+
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      const call = state.intentCalls.at(-1);
+      expect(call).toMatchObject({ stage: 'design', action: 'refine' });
+      // No `payload.text` at all — the backend's own fallback (original prompt / requirements /
+      // a generic starting design) decides what to generate from, not an empty string here.
+      expect((call as { payload?: { text?: string } }).payload?.text).toBeUndefined();
+    });
+  });
+
+  it('still requires typed text to regenerate once a design already exists', async () => {
+    state.versions = [version('a1', 1)];
+    state.artifact = { ...version('a1', 1), content: JSON.stringify({ html: '<h1/>', css: '' }) };
+    installFetch(state);
+    renderPanel();
+
+    await screen.findByTestId('design-version-1');
+    // Empty here is ambiguous (refine? approve? nothing?) — the "Refine" field further up is the
+    // correct place for a no-text action once a design exists, not this one.
+    expect(screen.getByRole('button', { name: 'Generate from text' })).toBeDisabled();
+  });
+
   it('renders the selected version in a sandboxed preview', async () => {
     state.versions = [version('a1', 1)];
     state.artifact = {
@@ -283,9 +315,29 @@ describe('DesignPanel', () => {
     await screen.findByTestId('design-version-1'); // wait until the design has loaded (enables approve)
     fireEvent.click(screen.getByTestId('design-approve'));
     await waitFor(() => expect(state.intentCalls.at(-1)).toMatchObject({ action: 'proceed' }));
+    // Approve means "done here" — the workspace should move on to the next stage on its own,
+    // rather than leaving the user stuck looking at the now-approved design.
+    await waitFor(() => expect(useWorkspaceStore.getState().activeStage).toBe('build'));
 
     fireEvent.click(screen.getByTestId('design-skip'));
     await waitFor(() => expect(state.intentCalls.at(-1)).toMatchObject({ action: 'skip' }));
+    expect(useWorkspaceStore.getState().activeStage).toBe('build');
+  });
+
+  it('does not advance the stage on a refine — only on approve/skip', async () => {
+    state.versions = [version('a1', 1)];
+    state.artifact = { ...version('a1', 1), content: JSON.stringify({ html: '<h1/>', css: '' }) };
+    installFetch(state);
+    renderPanel();
+
+    await screen.findByTestId('design-version-1');
+    fireEvent.change(screen.getByTestId('design-refine-input'), {
+      target: { value: 'make the header violet' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }));
+    await waitFor(() => expect(state.intentCalls.at(-1)).toMatchObject({ action: 'refine' }));
+    // A refine keeps you here to review what came back — it must not bounce you to Build.
+    expect(useWorkspaceStore.getState().activeStage).not.toBe('build');
   });
 
   it('imports a bring-your-own design without a provider call', async () => {

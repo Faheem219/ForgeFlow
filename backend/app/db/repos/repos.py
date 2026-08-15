@@ -185,11 +185,16 @@ class RequirementSpecRepo(BaseRepo[RequirementSpec]):
         features: list[Feature],
         *,
         inferred: bool = False,
+        app_name: str = "",
     ) -> RequirementSpec:
         latest = await self.latest(project_id)
         version = (latest.version + 1) if latest is not None else 1
         spec = RequirementSpec(
-            project_id=project_id, features=features, version=version, inferred=inferred
+            project_id=project_id,
+            app_name=app_name,
+            features=features,
+            version=version,
+            inferred=inferred,
         )
         return await spec.insert()
 

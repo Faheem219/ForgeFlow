@@ -235,6 +235,8 @@ export interface FeatureDto {
 export interface RequirementSpecDto {
   project_id: string;
   version: number;
+  /** Editable product name for the app; blank falls back to the project's own name. */
+  app_name: string;
   features: FeatureDto[];
   /** True when the test-gen agent inferred the spec because requirements were skipped (phase-27). */
   inferred?: boolean;
@@ -257,7 +259,15 @@ export interface FeatureInput {
 }
 
 export interface RequirementSpecInput {
+  /** Omit or leave blank to keep whatever name is already saved. */
+  app_name?: string;
   features: FeatureInput[];
+}
+
+/** A whole drafted spec: the proposed features plus a name for the app itself. */
+export interface DraftedSpec {
+  app_name: string;
+  features: DraftedFeature[];
 }
 
 /** An editable AI proposal from the optional Haiku assist (never auto-applied). */

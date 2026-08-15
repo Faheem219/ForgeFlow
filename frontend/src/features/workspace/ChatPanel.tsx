@@ -51,6 +51,11 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     () => deriveTaskStream(events, projectId, 0).streamed,
     [events, projectId],
   );
+  // A turn that goes straight to tool use still emits a newline or two of text before it. Keying
+  // the bubble off `streamed` alone rendered a "streaming" header over an empty paragraph for the
+  // whole of a tool-heavy stage (build), which reads as a stream that broke rather than one that
+  // has nothing to say yet.
+  const hasStream = streamed.trim().length > 0;
 
   const send = useMutation({
     mutationFn: (message: string) =>
@@ -121,7 +126,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         data-testid="chat-messages"
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-4"
       >
-        {messages.length === 0 && !streamed ? (
+        {messages.length === 0 && !hasStream ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/10 text-brand-text ring-1 ring-inset ring-brand/20">
               <SendHorizontal aria-hidden className="h-5 w-5" strokeWidth={1.5} />
@@ -146,7 +151,7 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
 
         {/* The agent's in-flight answer lives in the transcript (not a cramped strip below it), so
             a long build plan simply scrolls like any other message. */}
-        {streamed ? (
+        {hasStream ? (
           <div className="max-w-[85%] self-start rounded-2xl rounded-bl-md bg-surface-raised px-3.5 py-2">
             <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-fg-subtle">
               <Spinner size="sm" />

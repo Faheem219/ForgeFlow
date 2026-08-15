@@ -59,47 +59,68 @@ export function Terminal({ projectId }: { projectId: string }): JSX.Element {
     const host = hostRef.current;
     if (!host || !token) return;
 
-    const term = new XTerm({
-      convertEol: false,
-      fontSize: 13,
-      theme: THEMES[useThemeStore.getState().resolved],
-      cursorBlink: true,
-    });
-    termRef.current = term;
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.open(host);
-    fit.fit();
+    let cleanup: (() => void) | null = null;
 
-    const client = new TerminalClient(projectId, token);
-    const decoder = new TextDecoder();
-
-    const offData = client.onData((bytes) => term.write(decoder.decode(bytes)));
-    const offStatus = client.onStatus(setStatus);
-    // Keystrokes go straight through as bytes — the sandbox PTY interprets them.
-    const keyed = term.onData((data) => client.send(data));
-
-    client.connect(term.cols, term.rows);
-
-    // Keep the PTY's window size in step with the rendered element.
-    const observer = new ResizeObserver(() => {
+    // Deferring construction to the next animation frame guarantees a layout pass has run, so
+    // xterm's renderer never measures the host mid-transition (tab switch, drawer open). Without
+    // this, xterm can schedule its own internal viewport sync against a zero-size box; that sync
+    // runs on a later frame outside our control, so wrapping just fit.fit() below can't catch it
+    // — it surfaces as an uncaught "Cannot read properties of undefined (reading 'dimensions')"
+    // the next time the terminal panel is reopened.
+    const rafId = requestAnimationFrame(() => {
+      const term = new XTerm({
+        convertEol: false,
+        fontSize: 13,
+        theme: THEMES[useThemeStore.getState().resolved],
+        cursorBlink: true,
+      });
+      termRef.current = term;
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(host);
       try {
         fit.fit();
-        client.resize(term.cols, term.rows);
       } catch {
-        // fit throws if the element is momentarily unmeasurable (hidden/unmounting).
+        // The host can still have a zero/unmeasurable box on the very first paint (drawer
+        // transition, Suspense boundary just resolved) — the ResizeObserver below re-fits once
+        // layout settles, so a failure here is harmless.
       }
+
+      const client = new TerminalClient(projectId, token);
+      const decoder = new TextDecoder();
+
+      const offData = client.onData((bytes) => term.write(decoder.decode(bytes)));
+      const offStatus = client.onStatus(setStatus);
+      // Keystrokes go straight through as bytes — the sandbox PTY interprets them.
+      const keyed = term.onData((data) => client.send(data));
+
+      client.connect(term.cols, term.rows);
+
+      // Keep the PTY's window size in step with the rendered element.
+      const observer = new ResizeObserver(() => {
+        try {
+          fit.fit();
+          client.resize(term.cols, term.rows);
+        } catch {
+          // fit throws if the element is momentarily unmeasurable (hidden/unmounting).
+        }
+      });
+      observer.observe(host);
+
+      cleanup = () => {
+        observer.disconnect();
+        keyed.dispose();
+        offData();
+        offStatus();
+        client.close();
+        term.dispose();
+        termRef.current = null;
+      };
     });
-    observer.observe(host);
 
     return () => {
-      observer.disconnect();
-      keyed.dispose();
-      offData();
-      offStatus();
-      client.close();
-      term.dispose();
-      termRef.current = null;
+      cancelAnimationFrame(rafId);
+      cleanup?.();
     };
   }, [projectId, token]);
 

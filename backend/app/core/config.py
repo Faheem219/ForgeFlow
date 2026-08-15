@@ -244,7 +244,11 @@ class Settings(BaseSettings):
     # code does. How long to keep re-reading the screen for its HTML before giving up (and falling
     # back) rather than saving a blank design.
     stitch_ready_timeout_s: float = 90.0
-    stitch_timeout_s: float = 60.0  # per-call wall clock
+    stitch_timeout_s: float = 60.0  # per-call wall clock for handshake + metadata reads
+    # Generation is far slower than a read: a multi-screen prompt measured ~76s against the live
+    # endpoint, so the 60s read timeout cut the connection *after* Stitch had already generated
+    # (and charged for) the screens. Generation/edit calls get their own, much longer budget.
+    stitch_generate_timeout_s: float = 300.0
     stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
     stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry
     stitch_quota_soft_ratio: float = 0.9  # used/limit >= this → health() degraded

@@ -27,7 +27,7 @@ from app.orchestrator.requirements import (
     SuggestRequest,
     SuggestResponse,
 )
-from app.orchestrator.requirements_draft import draft_features
+from app.orchestrator.requirements_draft import draft_spec
 from app.orchestrator.requirements_suggest import suggest_criteria
 from app.orchestrator.schemas import (
     ActivityPublic,
@@ -197,13 +197,20 @@ async def draft_requirements(
 ) -> DraftResponse:
     """Whole-spec AI-assist: a freeform description → an editable draft feature list (Haiku).
 
-    Nothing is persisted — the draft seeds the guided form, and only an explicit save creates a
-    ``RequirementSpec`` version.
+    The draft itself is never persisted — it seeds the guided form, and only an explicit save
+    creates a ``RequirementSpec`` version. The *description* is, the first time one is given
+    (``Project.original_prompt``, set once and never overwritten): later stages — Design, most
+    directly — reuse it so the user is never made to re-explain an idea they already gave once.
     """
     pid = await _owned_project_id(project_id, user_id)
     project = await ProjectService().get_owned(pid, user_id)
-    features = await draft_features(project, body.description)
+    description = body.description.strip()
+    if description and not project.original_prompt:
+        project.original_prompt = description
+        await project.save()
+    draft = await draft_spec(project, body.description)
     return DraftResponse(
+        app_name=draft.app_name,
         features=[
             DraftedFeaturePublic(
                 name=f.name,
@@ -215,6 +222,6 @@ async def draft_requirements(
                     for c in f.acceptance_criteria
                 ],
             )
-            for f in features
-        ]
+            for f in draft.features
+        ],
     )

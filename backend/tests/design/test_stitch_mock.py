@@ -26,11 +26,24 @@ class FakeStitchClient:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.headers: list[dict[str, str]] = []
+        #: Which container each generate was pointed at (None = "make a fresh one").
+        self.workspaces: list[str | None] = []
+        self.titles: list[str | None] = []
 
-    async def text_to_ui(self, prompt: str, *, headers: Mapping[str, str]) -> StitchDesignPayload:
+    async def text_to_ui(
+        self,
+        prompt: str,
+        *,
+        headers: Mapping[str, str],
+        workspace: str | None = None,
+        title: str | None = None,
+    ) -> StitchDesignPayload:
         self.calls.append("text_to_ui")
         self.headers.append(dict(headers))
+        self.workspaces.append(workspace)
+        self.titles.append(title)
         return StitchDesignPayload(
+            workspace=workspace or "proj-1",
             external_ref="proj-1/stitch-abc",
             html=f"<main>{prompt}</main>",
             css="main{color:red}",

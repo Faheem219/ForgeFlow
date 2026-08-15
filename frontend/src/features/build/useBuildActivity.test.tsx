@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { useRealtimeStore } from '../../lib/stores/realtimeStore';
+import { EVENT_BUFFER, appendEvent, useRealtimeStore } from '../../lib/stores/realtimeStore';
 import type { RealtimeEvent } from '../../lib/wsClient';
 import { useBuildActivity } from './useBuildActivity';
 
@@ -100,6 +100,43 @@ describe('useBuildActivity', () => {
     emit(write('a.ts'));
     emit(write('a.ts'));
     expect(result.current.files).toEqual(['a.ts']);
+  });
+
+  it('keeps tracking the build after terminal output saturates the event ring', () => {
+    // A build runs `pnpm install` and leaves `pnpm dev` pumping, each chunk its own event. The
+    // ring is bounded, so it saturates within seconds — and an index-based cursor stops advancing
+    // the moment it does, which is what silently killed live build telemetry part-way through a
+    // build (and only ever in the build stage, the only one loud enough to fill the ring).
+    const { result } = renderHook(() => useBuildActivity(PROJECT));
+
+    emit(write('early.ts'));
+    expect(result.current.files).toEqual(['early.ts']);
+
+    act(() => {
+      useRealtimeStore.setState((s) => {
+        let events = s.events;
+        for (let i = 0; i < EVENT_BUFFER * 2; i += 1) {
+          seq += 1;
+          events = appendEvent(events, {
+            event: 'terminal.output',
+            project_id: PROJECT,
+            stage: 'build',
+            payload: {
+              chunk: `line ${i}
+`,
+            },
+            seq,
+            ts: '',
+          });
+        }
+        return { events };
+      });
+    });
+
+    emit(progress('implement'), write('late.ts'));
+
+    expect(result.current.step).toBe('implement');
+    expect(result.current.files).toContain('late.ts');
   });
 
   it('starts a fresh list when a new run begins', () => {

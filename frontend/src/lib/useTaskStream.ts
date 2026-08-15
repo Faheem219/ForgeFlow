@@ -36,7 +36,7 @@ export interface TaskStreamState {
   streaming: boolean;
   /** Latest `progress` step for the watched stage, e.g. "implement". */
   step: string;
-  /** Text streamed by the CURRENT model turn. Reset on each `agent.stream.start`. */
+  /** Text streamed by the CURRENT model turn. Reset on each `agent.stream.start` and cleared on `run.finished`. */
   streamed: string;
   /** Set when the run reported failure; `null` on success or while still running. */
   error: string | null;
@@ -107,6 +107,11 @@ export function deriveTaskStream(
             ...out,
             finished: true,
             streaming: false,
+            // The turn's ephemeral text gives way to the durable message the server persisted —
+            // without this, a client that reconnects and replays a completed run's buffered
+            // history (or one that simply stays mounted past `run.finished`) keeps showing the
+            // in-flight bubble forever, duplicating content that already landed in `messages`.
+            streamed: '',
             error: event.payload.ok === false ? String(event.payload.error ?? 'Task failed') : null,
           };
         }

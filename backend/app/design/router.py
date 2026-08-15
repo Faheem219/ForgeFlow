@@ -31,6 +31,7 @@ from app.design.schemas import (
     ScreenCodeResponse,
     ScreenListResponse,
 )
+from app.design.service import DesignService
 from app.projects.service import ProjectService, parse_object_id
 
 logger = logging.getLogger(__name__)
@@ -94,8 +95,12 @@ async def list_design_screens(
     provider = get_active(project)
     if not isinstance(provider, ScreenLister):
         return ScreenListResponse()
+    # Scoped to this project's own container. Without it the shared provider instance lists
+    # whichever project it last designed into, which showed a brand-new project another one's
+    # screens; `None` (nothing generated yet) correctly yields an empty picker.
+    workspace = await DesignService().workspace_for(pid, provider.key)
     try:
-        return ScreenListResponse(screens=await provider.list_screens())
+        return ScreenListResponse(screens=await provider.list_screens(workspace))
     except ProviderError:
         # A picker is a convenience — never fail the design stage because it could not be filled.
         logger.warning("design: could not list screens", exc_info=True)

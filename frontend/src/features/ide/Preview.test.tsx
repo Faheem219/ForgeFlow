@@ -79,9 +79,13 @@ describe('Preview', () => {
 
     const frame = screen.getByTestId('preview-frame');
     expect(frame).toHaveAttribute('src', 'http://p1.preview.localhost');
-    // Untrusted generated code must never run same-origin with the control plane.
+    // Sandboxed, but `allow-same-origin` must be present: the frame is served from its own
+    // `*.preview.*` subdomain (never the control plane's origin), and without this flag every
+    // subresource request the framed dev server makes carries an opaque `Origin: null`, which
+    // Vite (and CORS-checking backends) reject outright — the iframe would render blank no
+    // matter how healthy the generated app is.
     expect(frame).toHaveAttribute('sandbox');
-    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(frame.getAttribute('sandbox')).toContain('allow-same-origin');
   });
 
   it('starts the preview and reflects the returned status', async () => {

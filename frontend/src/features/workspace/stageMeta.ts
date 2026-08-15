@@ -35,6 +35,11 @@ export const STAGE_ICONS: Record<Stage, LucideIcon> = {
   validate: Radar,
 };
 
+/** The stage right after `stage` in the nav order, or `null` if `stage` is the last one. */
+export function nextStage(stage: Stage): Stage | null {
+  return STAGE_ORDER[STAGE_ORDER.indexOf(stage) + 1] ?? null;
+}
+
 /** The only mandatory ordering: deploy needs a completed build, validate a completed deploy. */
 export const HARD_PREREQ: Partial<Record<Stage, Stage>> = {
   deploy: 'build',

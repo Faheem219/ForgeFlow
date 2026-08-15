@@ -158,9 +158,18 @@ export function Preview({ projectId }: { projectId: string }): JSX.Element {
             title="App preview"
             data-testid="preview-frame"
             className="h-full w-full border-0 bg-white"
-            // The preview runs untrusted generated code: sandbox it, and never same-origin
-            // with the control plane.
-            sandbox="allow-scripts allow-forms allow-popups allow-modals"
+            // The preview runs untrusted generated code, served from its own `*.preview.*`
+            // subdomain — a different origin from the control plane, so `allow-same-origin` here
+            // grants the frame only ITS OWN origin, never the control plane's; normal
+            // cross-origin same-origin-policy still keeps it out of `window.parent` and this
+            // app's cookies/storage. Omitting the flag was tried first, but it leaves every
+            // subresource request from the frame carrying `Origin: null` (an opaque origin),
+            // which the generated app's own dev server (Vite) — and any CORS-checking backend —
+            // rejects; the iframe then renders permanently blank regardless of whether the
+            // generated app is healthy. `allow-same-origin` would only be unsafe if the preview
+            // could ever resolve to the *same* origin as the control plane, which the dedicated
+            // subdomain rules out.
+            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6">

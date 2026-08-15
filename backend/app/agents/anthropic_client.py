@@ -673,7 +673,17 @@ class OpenAITransport:
         openai = _import_openai()
         config = get_config()
         base_url = str(config.get("openai_base_url")) or None
-        client = openai.AsyncOpenAI(api_key=str(config.get("openai_api_key")), base_url=base_url)
+        api_key = str(config.get("openai_api_key")).strip()
+        # Same explicit check as SdkTransport's: unconfigured (or undecryptable — see
+        # config_db._decrypt) credentials are a *provider* problem (502, actionable), not an opaque
+        # 500 from the SDK's bare OpenAIError.
+        if not api_key:
+            raise ProviderError(
+                "No OpenAI-compatible API key is configured. Set it in the admin panel under "
+                "Models, or switch LLM_PROVIDER to Anthropic.",
+                fallback_hint="configure_provider",
+            )
+        client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
         endpoint = base_url or "default"
         params = build_openai_params(request, stream_usage=endpoint not in _NO_STREAM_USAGE)

@@ -7,7 +7,7 @@ import { toastError } from '../../lib/errors';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
-import { STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   fileToBase64,
   getDesignArtifact,
@@ -31,8 +31,12 @@ interface DesignContent {
   screens: DesignScreen[];
 }
 
+// A single shared empty array — `DesignPreview` keys a `useEffect` off this reference (via props),
+// so handing it a fresh `[]` literal on every call site would re-fire that effect on every render.
+const EMPTY_SCREENS: DesignScreen[] = [];
+
 function parsePayload(content: string | null | undefined): DesignContent {
-  if (!content) return { html: '', css: '', screens: [] };
+  if (!content) return { html: '', css: '', screens: EMPTY_SCREENS };
   try {
     const parsed = JSON.parse(content) as {
       html?: string;
@@ -43,10 +47,10 @@ function parsePayload(content: string | null | undefined): DesignContent {
       html: parsed.html ?? '',
       css: parsed.css ?? '',
       // Only present when the provider returned a multi-screen design.
-      screens: Array.isArray(parsed.screens) ? parsed.screens : [],
+      screens: Array.isArray(parsed.screens) ? parsed.screens : EMPTY_SCREENS,
     };
   } catch {
-    return { html: content, css: '', screens: [] };
+    return { html: content, css: '', screens: EMPTY_SCREENS };
   }
 }
 
@@ -105,7 +109,15 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
     queryFn: () => getDesignArtifact(selectedId as string),
     enabled: Boolean(selectedId),
   });
-  const version = parsePayload(contentQuery.data?.content);
+  // Memoized on the raw content string — `parsePayload` builds a fresh object (and a fresh empty
+  // `screens` array when the payload carries none) on every call, and an unmemoized inline call
+  // here handed DesignPreview a new array reference on every DesignPanel render. DesignPreview
+  // resets its active-screen state off that reference in a `useEffect`, so it was re-firing far
+  // more often than the actual data ever changed.
+  const version = useMemo(
+    () => parsePayload(contentQuery.data?.content),
+    [contentQuery.data?.content],
+  );
 
   // -- screen picker ---------------------------------------------------------------------------
   // A design *version* holds the one screen that turn produced, but a real app is a set of screens
@@ -143,9 +155,15 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
     // Only fetch when looking at a screen other than the one already in the artifact.
     enabled: viewingOther,
   });
-  const design = viewingOther
-    ? { html: screenQuery.data?.html ?? '', css: screenQuery.data?.css ?? '', screens: [] }
-    : version;
+  // Same reasoning as `version` above — a stable `screens` reference (not a fresh `[]` per render)
+  // for whichever branch is active.
+  const design = useMemo(
+    () =>
+      viewingOther
+        ? { html: screenQuery.data?.html ?? '', css: screenQuery.data?.css ?? '', screens: EMPTY_SCREENS }
+        : version,
+    [viewingOther, screenQuery.data?.html, screenQuery.data?.css, version],
+  );
   /** What a refine targets: the screen on show, falling back to this version's own. */
   const refineRef = shownRef;
 
@@ -163,7 +181,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
-    onSuccess: () => {
+    onSuccess: (_data, body) => {
       setPrompt('');
       setInstruction('');
       setOwnHtml('');
@@ -173,6 +191,12 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['design-provider', projectId] });
+      // Approve/skip both mean "I'm done here for now" — a refine keeps you on the stage to
+      // review what came back, but jump forward once the stage itself has moved on.
+      if (body.action === 'proceed' || body.action === 'skip') {
+        const next = nextStage('design');
+        if (next) setActiveStage(next);
+      }
     },
     onError: (err) => toastError(err, 'Design action failed'),
   });
@@ -363,12 +387,16 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
               className="space-y-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (prompt.trim())
-                  intent.mutate({
-                    stage: 'design',
-                    action: 'refine',
-                    payload: { text: prompt.trim() },
-                  });
+                // An empty box is a legitimate submit, not a no-op: the backend falls back to the
+                // description that seeded requirements, then the requirements themselves, then (as
+                // a true last resort) a generic starting design — a UI always gets generated,
+                // never a dead end asking the user to type something they may not have yet.
+                const trimmed = prompt.trim();
+                intent.mutate({
+                  stage: 'design',
+                  action: 'refine',
+                  ...(trimmed ? { payload: { text: trimmed } } : {}),
+                });
               }}
             >
               <Input
@@ -376,10 +404,17 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                 data-testid="design-prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the UI…"
+                placeholder={
+                  hasDesign ? 'Describe the UI…' : 'Describe the UI… or just click Generate'
+                }
                 disabled={busy}
               />
-              <Button type="submit" size="sm" disabled={busy || !prompt.trim()} className="w-full">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={busy || (hasDesign && !prompt.trim())}
+                className="w-full"
+              >
                 Generate from text
               </Button>
             </form>

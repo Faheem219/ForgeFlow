@@ -37,6 +37,11 @@ class Feature(BaseModel):
 
 class RequirementSpec(Document):
     project_id: PydanticObjectId
+    #: A short product name for the app, proposed by the requirements draft and freely editable.
+    #: Deliberately *not* a :class:`Feature`: it has nothing testable about it, so it would only
+    #: pollute the spec (and the generated test suite) as a criterion-less feature. Blank is fine —
+    #: consumers fall back to the ForgeFlow project's own name.
+    app_name: str = ""
     features: list[Feature] = Field(default_factory=list)
     version: int = 1
     # True when the test-gen agent inferred this spec from design/build artifacts because the

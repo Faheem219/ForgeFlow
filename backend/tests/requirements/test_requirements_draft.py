@@ -15,11 +15,17 @@ from app.agents.cost import Usage
 from app.api.app import create_app
 from app.db.models import Project, Run
 from app.db.models.enums import CriterionKind
-from app.orchestrator.requirements import RequirementsService
+from app.orchestrator.requirements import (
+    CriterionInput,
+    FeatureInput,
+    RequirementSpecInput,
+    RequirementsService,
+)
 from app.orchestrator.requirements_draft import (
+    MAX_APP_NAME_CHARS,
     MAX_CRITERIA_PER_FEATURE,
     MAX_FEATURES,
-    draft_features,
+    draft_spec,
 )
 from tests.agents.test_client_tool_loop import FakeTransport, ScriptedTurn
 
@@ -59,7 +65,7 @@ async def test_drafts_a_whole_spec_from_a_freeform_description() -> None:
         '{"name": "Auth", "acceptance_criteria": [{"text": "a user can log in", "kind": "e2e"}]}]'
     )
 
-    out = await draft_features(project, "a todo app with login", client=_client(text))
+    out = (await draft_spec(project, "a todo app with login", client=_client(text))).features
 
     assert [f.name for f in out] == ["Todos", "Auth"]
     assert out[0].description == "manage todos"
@@ -78,7 +84,7 @@ async def test_tolerates_prose_wrapped_json_and_bad_kinds() -> None:
         '[{"name": "Todos", "acceptance_criteria": [{"text": "x", "kind": "banana"}]}]\n'
         "Edit as you like."
     )
-    out = await draft_features(project, "a todo app", client=_client(text))
+    out = (await draft_spec(project, "a todo app", client=_client(text))).features
 
     assert len(out) == 1
     assert out[0].acceptance_criteria[0].kind is CriterionKind.either  # unknown kind → either
@@ -93,7 +99,7 @@ async def test_drops_features_the_save_endpoint_would_reject() -> None:
         ' {"name": "Auth", "acceptance_criteria": [{"text": "logs in"}, {"text": "  "}]},'
         ' {"name": "auth", "acceptance_criteria": [{"text": "dupe"}]}]'
     )
-    out = await draft_features(project, "an app", client=_client(text))
+    out = (await draft_spec(project, "an app", client=_client(text))).features
 
     assert [f.name for f in out] == ["Auth"]
     assert [c.text for c in out[0].acceptance_criteria] == ["logs in"]  # the blank one is dropped
@@ -104,7 +110,7 @@ async def test_caps_the_draft_size() -> None:
     crit = [{"text": f"c{i}"} for i in range(MAX_CRITERIA_PER_FEATURE + 5)]
     features = [_feature(f"F{i}", acceptance_criteria=crit) for i in range(MAX_FEATURES + 4)]
 
-    out = await draft_features(project, "an app", client=_client(json.dumps(features)))
+    out = (await draft_spec(project, "an app", client=_client(json.dumps(features)))).features
 
     assert len(out) == MAX_FEATURES
     assert len(out[0].acceptance_criteria) == MAX_CRITERIA_PER_FEATURE
@@ -112,20 +118,20 @@ async def test_caps_the_draft_size() -> None:
 
 async def test_unparseable_reply_yields_no_draft() -> None:
     project = await _project()
-    out = await draft_features(project, "an app", client=_client("I couldn't do that."))
+    out = (await draft_spec(project, "an app", client=_client("I couldn't do that."))).features
     assert out == []
 
 
-async def test_a_non_array_reply_yields_no_draft() -> None:
+async def test_an_object_without_features_yields_no_draft() -> None:
     project = await _project()
-    out = await draft_features(project, "an app", client=_client('{"name": "Todos"}'))
+    out = (await draft_spec(project, "an app", client=_client('{"name": "Todos"}'))).features
     assert out == []
 
 
 async def test_blank_description_short_circuits() -> None:
     project = await _project()
     # No model call needed; a fake that would explode proves we never reach it.
-    out = await draft_features(project, "   ", client=_client("[]"))
+    out = (await draft_spec(project, "   ", client=_client("[]"))).features
     assert out == []
 
 
@@ -138,7 +144,7 @@ async def test_a_draft_is_never_saved_as_a_requirement_spec() -> None:
     assert project.id is not None
     text = '[{"name": "Todos", "acceptance_criteria": [{"text": "can add a todo"}]}]'
 
-    out = await draft_features(project, "a todo app", client=_client(text))
+    out = (await draft_spec(project, "a todo app", client=_client(text))).features
 
     assert len(out) == 1
     assert await RequirementsService().latest(project.id) is None
@@ -146,7 +152,7 @@ async def test_a_draft_is_never_saved_as_a_requirement_spec() -> None:
 
 async def test_the_draft_call_is_recorded_as_a_closed_run() -> None:
     project = await _project()
-    await draft_features(project, "a todo app", client=_client("[]"))
+    await draft_spec(project, "a todo app", client=_client("[]"))
 
     runs = await Run.find(Run.project_id == project.id).to_list()
     assert [r.kind for r in runs] == ["requirements:draft"]
@@ -220,4 +226,142 @@ async def test_draft_endpoint_returns_an_empty_draft_for_a_blank_description(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
-    assert resp.json() == {"features": []}
+    assert resp.json() == {"app_name": "", "features": []}
+
+
+async def test_draft_endpoint_saves_the_original_prompt_even_when_the_model_is_unavailable(
+    http: AsyncClient,
+) -> None:
+    """The description is worth keeping regardless of whether the draft call itself succeeds —
+    Design (and anything else that wants it later) can use it even if this attempt 502s."""
+    token = await _register(http, "draft-owner4@example.com")
+    pid = await _create_project(http, token)
+
+    resp = await http.post(
+        f"/projects/{pid}/requirements/draft",
+        json={"description": "A clean personal todo app"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 502  # unchanged — no provider creds in the test env
+
+    project = await Project.get(pid)
+    assert project is not None
+    assert project.original_prompt == "A clean personal todo app"
+
+
+async def test_draft_endpoint_never_overwrites_the_original_prompt(http: AsyncClient) -> None:
+    """'Original' means original — a later, differently-worded draft call must not replace it."""
+    token = await _register(http, "draft-owner5@example.com")
+    pid = await _create_project(http, token)
+
+    await http.post(
+        f"/projects/{pid}/requirements/draft",
+        json={"description": "first idea"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    await http.post(
+        f"/projects/{pid}/requirements/draft",
+        json={"description": "a completely different idea"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    project = await Project.get(pid)
+    assert project is not None
+    assert project.original_prompt == "first idea"
+
+
+# ---------------------------------------------------------------- the proposed app name
+
+
+async def test_the_draft_proposes_a_name_for_the_app() -> None:
+    """A name the user can accept or edit — it is what a Stitch project ends up called."""
+    project = await _project()
+    text = json.dumps({"app_name": "Focus", "features": [_feature("Todos")]})
+
+    draft = await draft_spec(project, "a todo app", client=_client(text))
+
+    assert draft.app_name == "Focus"
+    assert [f.name for f in draft.features] == ["Todos"]
+
+
+async def test_a_bare_feature_array_still_drafts_without_a_name() -> None:
+    """The name is a bonus, never a reason to throw away a usable feature list."""
+    project = await _project()
+    text = json.dumps([_feature("Todos")])
+
+    draft = await draft_spec(project, "a todo app", client=_client(text))
+
+    assert draft.app_name == ""
+    assert [f.name for f in draft.features] == ["Todos"]
+
+
+@pytest.mark.parametrize("proposed", ["My App", "  web app  ", "", "Untitled"])
+async def test_placeholder_names_are_refused(proposed: str) -> None:
+    """A name the user would only have to delete is worse than none at all."""
+    project = await _project()
+    text = json.dumps({"app_name": proposed, "features": [_feature("Todos")]})
+
+    draft = await draft_spec(project, "an app", client=_client(text))
+
+    assert draft.app_name == ""
+
+
+async def test_a_long_name_is_capped() -> None:
+    project = await _project()
+    text = json.dumps({"app_name": "N" * 200, "features": [_feature("Todos")]})
+
+    draft = await draft_spec(project, "an app", client=_client(text))
+
+    assert len(draft.app_name) == MAX_APP_NAME_CHARS
+
+
+async def test_the_name_survives_a_save_and_is_editable() -> None:
+    """It is stored on the spec, not as a criterion-less feature, and the user's edit wins."""
+    project = await _project()
+    assert project.id is not None
+    service = RequirementsService()
+
+    saved = await service.save(
+        project.id,
+        RequirementSpecInput(
+            app_name="Focus",
+            features=[
+                FeatureInput(
+                    name="Todos",
+                    acceptance_criteria=[CriterionInput(text="can add a todo")],
+                )
+            ],
+        ),
+    )
+    assert saved.app_name == "Focus"
+    assert [f.name for f in saved.features] == ["Todos"]  # the name is NOT a feature
+
+    renamed = await service.save(
+        project.id,
+        RequirementSpecInput(
+            app_name="Momentum",
+            features=[
+                FeatureInput(
+                    name="Todos",
+                    acceptance_criteria=[CriterionInput(text="can add a todo")],
+                )
+            ],
+        ),
+    )
+    assert renamed.app_name == "Momentum"
+    assert renamed.version == saved.version + 1  # a rename is a real change
+
+
+async def test_omitting_the_name_on_save_keeps_the_stored_one() -> None:
+    """An older client saving a feature edit must not silently wipe the name."""
+    project = await _project()
+    assert project.id is not None
+    service = RequirementsService()
+    features = [
+        FeatureInput(name="Todos", acceptance_criteria=[CriterionInput(text="can add a todo")])
+    ]
+    await service.save(project.id, RequirementSpecInput(app_name="Focus", features=features))
+
+    again = await service.save(project.id, RequirementSpecInput(features=features))
+
+    assert again.app_name == "Focus"

@@ -24,6 +24,7 @@ failures (quota/auth) propagate as :class:`ProviderError` with a ``fallback_hint
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from beanie import PydanticObjectId
@@ -31,7 +32,7 @@ from beanie import PydanticObjectId
 from app.core.errors import UserError
 from app.db.blobs import get_blob_store
 from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
-from app.design.base import DesignImage, DesignResult
+from app.design.base import DesignImage, DesignProvider, DesignResult
 from app.design.resilient import DesignCapability, invoke_with_fallback, provider_for_refine
 from app.design.schemas import DesignImageRef, DesignIntake
 from app.design.service import (
@@ -50,7 +51,7 @@ from app.orchestrator.schemas import (
 )
 
 if TYPE_CHECKING:  # avoid an import cycle: stages/__init__ imports this module
-    from app.db.models import RequirementSpec
+    from app.db.models import Project, RequirementSpec
     from app.orchestrator.stages.base import StageContext
 
 OWN_PROVIDER = "own"  # sentinel provider key for bring-your-own designs (no MCP call)
@@ -59,6 +60,15 @@ OWN_PROVIDER = "own"  # sentinel provider key for bring-your-own designs (no MCP
 #: dump: design providers take a prompt, and a spec pasted in full buries the design intent.
 REQ_CONTEXT_MAX_FEATURES = 8
 REQ_CONTEXT_MAX_CRITERIA = 3
+
+
+def _default_prompt(project_name: str) -> str:
+    """The true last resort for a first-ever generate: no typed prompt, no original_prompt, no
+    requirements. Rather than dead-ending on an error, still produce a real starting design — the
+    project's own name is the only thing guaranteed to exist, so it at least isn't generic filler.
+    Refining or regenerating from a real description afterward is one click away either way.
+    """
+    return f'A clean, modern website homepage for "{project_name}".'
 
 
 class DesignStageHandler:
@@ -114,7 +124,12 @@ class DesignStageHandler:
             outcome = await invoke_with_fallback(
                 project,
                 DesignCapability.from_image,
-                lambda p: p.generate_from_image(images, image_prompt),
+                _into_workspace(
+                    project,
+                    lambda p, ws, title: p.generate_from_image(
+                        images, image_prompt, workspace=ws, workspace_title=title
+                    ),
+                ),
             )
             result = outcome.result
             text, meta = design_artifact_fields(result, source="image")
@@ -128,7 +143,12 @@ class DesignStageHandler:
             outcome = await invoke_with_fallback(
                 project,
                 DesignCapability.from_text,
-                lambda p: p.generate_from_text(prompt),
+                _into_workspace(
+                    project,
+                    lambda p, ws, title: p.generate_from_text(
+                        prompt, workspace=ws, workspace_title=title
+                    ),
+                ),
             )
             result = outcome.result
             text, meta = design_artifact_fields(result, source="text")
@@ -136,37 +156,71 @@ class DesignStageHandler:
                 f"Generated a design from your prompt via {result.provider}.", outcome.note()
             )
         else:
-            # No new intake → refine the latest design via the provider, using the chat instruction.
-            instruction = (intent.message or "").strip()
-            if not instruction:
+            latest = await DesignService().latest(project_id)
+            if latest is None:
+                # Nothing to refine yet, and nothing was typed — rather than making the user repeat
+                # an idea they already gave ForgeFlow, fall back to what it already knows: the
+                # description that first seeded requirements, plus the requirements themselves. And
+                # if there is truly nothing on file, still generate something real rather than
+                # dead-ending on an error — a first design is one click away either way, and
+                # blocking here is a worse experience than a generic starting point to refine.
+                context = await _requirements_context(project_id)
+                informed = _with_requirements(project.original_prompt, context)
+                fallback = informed or _default_prompt(project.name)
+                outcome = await invoke_with_fallback(
+                    project,
+                    DesignCapability.from_text,
+                    _into_workspace(
+                        project,
+                        lambda p, ws, title: p.generate_from_text(
+                            fallback, workspace=ws, workspace_title=title
+                        ),
+                    ),
+                )
+                result = outcome.result
+                text, meta = design_artifact_fields(result, source="text")
+                headline = (
+                    "Generated a design from your requirements"
+                    if informed
+                    else "Generated a starting design — describe your app for something tailored"
+                )
+                summary = _summary(f"{headline} via {result.provider}.", outcome.note())
+            elif not (intent.message or "").strip():
+                # A design already exists but nothing was typed and there's no refine instruction
+                # either — ambiguous (refine? approve? nothing?), so this still asks, unlike the
+                # no-design case above where auto-generating is the obviously right call.
                 raise UserError(
                     "Provide a prompt, screenshots, an imported design, or a refine instruction."
                 )
-            latest = await DesignService().latest(project_id)
-            if latest is None:
-                raise UserError("There's no design to refine yet — generate or import one first.")
-            # The UI's screen picker names the screen the user is *looking at*; without it a
-            # refine would always hit whichever screen was generated last, which is wrong as soon
-            # as an app has more than one.
-            external_ref = (intake.design_ref or "").strip() or latest.meta.get(META_EXTERNAL_REF)
-            if not isinstance(external_ref, str) or not external_ref:
-                raise UserError(
-                    "The current design was imported and has no provider reference; regenerate "
-                    "from a prompt or screenshots to change it."
+            else:
+                # No new intake and a design already exists → refine it via the provider, using
+                # the chat instruction (guaranteed non-empty by the `elif` above).
+                instruction = (intent.message or "").strip()
+                # The UI's screen picker names the screen the user is *looking at*; without it a
+                # refine would always hit whichever screen was generated last, which is wrong as
+                # soon as an app has more than one.
+                external_ref = (intake.design_ref or "").strip() or latest.meta.get(
+                    META_EXTERNAL_REF
                 )
-            # Refine follows the design's *provenance*, not the active provider: an external_ref
-            # only means something to the provider that issued it. After a generate fell back
-            # (e.g. Stitch down → `fake`), sending that ref to the still-active Stitch is what
-            # produced "Requested entity was not found". See provider_for_refine.
-            produced_by = latest.meta.get(META_PROVIDER)
-            target = provider_for_refine(
-                project, produced_by if isinstance(produced_by, str) else None
-            )
-            result = await target.provider.refine(external_ref, instruction)
-            text, meta = design_artifact_fields(
-                result, source="refine", refined_from=latest.version
-            )
-            summary = _summary(f"Refined the design: {instruction}", target.note)
+                if not isinstance(external_ref, str) or not external_ref:
+                    raise UserError(
+                        "The current design was imported and has no provider reference; "
+                        "regenerate from a prompt or screenshots to change it."
+                    )
+                # Refine follows the design's *provenance*, not the active provider: an
+                # external_ref only means something to the provider that issued it. After a
+                # generate fell back (e.g. Stitch down → `fake`), sending that ref to the
+                # still-active Stitch is what produced "Requested entity was not found". See
+                # provider_for_refine.
+                produced_by = latest.meta.get(META_PROVIDER)
+                target = provider_for_refine(
+                    project, produced_by if isinstance(produced_by, str) else None
+                )
+                result = await target.provider.refine(external_ref, instruction)
+                text, meta = design_artifact_fields(
+                    result, source="refine", refined_from=latest.version
+                )
+                summary = _summary(f"Refined the design: {instruction}", target.note)
 
         return StageResult(
             messages=[OutboundMessage(role=MessageRole.assistant, content=summary)],
@@ -190,6 +244,34 @@ class DesignStageHandler:
             data = await blobs.get(ref.ref)
             images.append(DesignImage(filename=ref.filename, media_type=ref.media_type, data=data))
         return images
+
+
+def _into_workspace(
+    project: Project,
+    call: Callable[[DesignProvider, str | None, str], Awaitable[DesignResult]],
+) -> Callable[[DesignProvider], Awaitable[DesignResult]]:
+    """Wrap a generate so it lands in *this* ForgeFlow project's own provider container.
+
+    The registry hands out one provider instance per process, so without this every project
+    generated into whichever container that instance last created — a new project opened showing
+    the previous one's screens. The lookup is per candidate provider because a workspace handle is
+    only meaningful to the provider that issued it, so a fallback starts its own container rather
+    than inheriting one.
+    """
+
+    async def run(provider: DesignProvider) -> DesignResult:
+        service = DesignService()
+        project_id = _project_id_of(project)
+        workspace = await service.workspace_for(project_id, provider.key)
+        return await call(provider, workspace, await service.workspace_title_for(project))
+
+    return run
+
+
+def _project_id_of(project: Project) -> PydanticObjectId:
+    if project.id is None:  # pragma: no cover - a persisted project always carries an id
+        raise UserError("Project is not persisted")
+    return project.id
 
 
 def _summary(base: str, note: str | None) -> str:

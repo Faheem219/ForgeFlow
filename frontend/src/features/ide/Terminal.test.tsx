@@ -69,6 +69,14 @@ beforeEach(() => {
       disconnect(): void {}
     },
   );
+  // The component defers xterm construction by one animation frame (so the renderer never
+  // measures a mid-transition zero-size host) — run it synchronously so existing assertions
+  // right after render() still see the terminal mounted.
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    cb(0);
+    return 0;
+  });
+  vi.stubGlobal('cancelAnimationFrame', () => {});
   useAuthStore.setState({
     token: 'tok',
     user: { id: 'u1', email: 'a@b.c', role: 'user', created_at: '2026-01-01T00:00:00Z' },
