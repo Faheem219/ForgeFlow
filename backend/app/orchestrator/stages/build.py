@@ -24,20 +24,27 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.agents.codegen import BuildReport, CodegenAgent
+from app.agents.tools.context import ToolContext
 from app.core.errors import UserError
 from app.db.models import Run
 from app.db.models.common import utcnow
 from app.db.models.enums import MessageRole, StageStatus
 from app.db.repos import RunRepo
 from app.orchestrator.schemas import Intent, IntentAction, OutboundMessage, StageResult
+from app.orchestrator.stages.build_verify import BuildVerificationController, BuildVerifyReport
 
 if TYPE_CHECKING:  # avoid an import cycle: stages/__init__ imports this module
     from app.orchestrator.stages.base import StageContext
 
 
 class BuildStageHandler:
-    def __init__(self, codegen: CodegenAgent | None = None) -> None:
+    def __init__(
+        self,
+        codegen: CodegenAgent | None = None,
+        verifier: BuildVerificationController | None = None,
+    ) -> None:
         self._codegen = codegen or CodegenAgent()
+        self._verifier = verifier or BuildVerificationController()
         self._runs = RunRepo()
 
     async def handle(self, intent: Intent, ctx: StageContext) -> StageResult:
@@ -62,26 +69,41 @@ class BuildStageHandler:
         # (the default, so a failed build resumes rather than starting over).
         fresh = bool(intent.payload.get("fresh"))
 
-        # Codegen is its own costed Run (kept distinct from the conductor's intent trace).
+        # Codegen + verification share ONE costed Run (kept distinct from the conductor's intent
+        # trace) and ONE ToolContext, so budget/cost accounting and the concurrent-build lock cover
+        # the whole build, not just generation.
+        channel = str(project_id)
         run = await self._runs.insert(Run(project_id=project_id, kind="codegen:build"))
+        tool_ctx = ToolContext.build(project, run, channel=channel)
         try:
             report = await self._codegen.run(
                 project,
                 run,
-                channel=str(project_id),
+                ctx=tool_ctx,
+                channel=channel,
                 instruction=instruction,
                 fresh=fresh,
+            )
+            # Verify for real (install → typecheck → boot → placeholder) and self-heal code-class
+            # failures through the bounded repair loop; env failures short-circuit, zero repairs.
+            verify = await self._verifier.run(
+                project,
+                run,
+                ctx=tool_ctx,
+                channel=channel,
+                written_files=report.files_changed,
             )
         finally:
             run.finished_at = utcnow()
             await run.save()
 
-        # A healthy boot is a real, deployable build → complete; otherwise hold for the user.
-        next_status = (
-            StageStatus.complete if report.boot_status == "healthy" else StageStatus.awaiting_user
-        )
+        # `complete` now requires a *working* app: typecheck clean, no placeholder, both dev servers
+        # healthy (the verification gate) — not merely a boot. Anything else holds for the user.
+        next_status = StageStatus.complete if verify.ok else StageStatus.awaiting_user
         return StageResult(
-            messages=[OutboundMessage(role=MessageRole.assistant, content=_summarize(report))],
+            messages=[
+                OutboundMessage(role=MessageRole.assistant, content=_summarize(report, verify))
+            ],
             next_status=next_status,
             events=[
                 {
@@ -90,6 +112,8 @@ class BuildStageHandler:
                         "stage": "build",
                         "status": str(next_status),
                         "boot": report.boot_status,
+                        "verified": verify.ok,
+                        "stop_reason": verify.stop_reason,
                         "files_changed": len(report.files_changed),
                         "run_id": str(run.id),
                     },
@@ -98,14 +122,22 @@ class BuildStageHandler:
         )
 
 
-def _summarize(report: BuildReport) -> str:
+def _summarize(report: BuildReport, verify: BuildVerifyReport) -> str:
     lines = [report.summary or "Build complete."]
     if report.features_built:
         lines.append("Features: " + ", ".join(report.features_built))
-    tail = f"Boot: {report.boot_status} · {len(report.files_changed)} file(s) changed"
+    if verify.ok:
+        lines.append(
+            "Verified: typecheck clean, both dev servers healthy, no template placeholder left."
+            + (" (self-healed during the build)" if verify.repaired else "")
+        )
+    else:
+        # One precise sentence per stop_reason (from the verification report), plus its fix hint.
+        lines.append(verify.message)
+        if verify.hint:
+            lines.append(verify.hint)
+    tail = f"{len(report.files_changed)} file(s) changed"
     if report.commit:
         tail += f" · commit {report.commit[:8]}"
     lines.append(tail)
-    if report.follow_ups:
-        lines.append("Follow-ups: " + "; ".join(report.follow_ups))
     return "\n".join(lines)

@@ -29,9 +29,23 @@ from app.orchestrator.conductor import (
 from app.orchestrator.schemas import Intent, IntentAction
 from app.orchestrator.stages import register_handler
 from app.orchestrator.stages.build import BuildStageHandler
+from app.orchestrator.stages.build_verify import BuildVerifyReport
 from app.projects.service import ProjectService
 
 pytestmark = pytest.mark.usefixtures("mongo_db")
+
+
+class _OkVerifier:
+    """A no-op verifier: these tests exercise the run lifecycle, not verification (phase-55)."""
+
+    async def run(self, project: object, run: object, **kwargs: object) -> BuildVerifyReport:
+        return BuildVerifyReport(
+            ok=True, message="Verified.", fe_status="running", be_status="running"
+        )
+
+
+def _handler(codegen: object) -> BuildStageHandler:
+    return BuildStageHandler(codegen, _OkVerifier())  # type: ignore[arg-type]
 
 
 def _report(boot: str = "healthy") -> BuildReport:
@@ -85,7 +99,7 @@ async def _project() -> tuple[PydanticObjectId, PydanticObjectId]:
 async def test_intent_returns_before_the_build_finishes(restore_registry: None) -> None:
     user, pid = await _project()
     codegen = SlowCodegen()
-    register_handler(Stage.build, BuildStageHandler(codegen))  # type: ignore[arg-type]
+    register_handler(Stage.build, _handler(codegen))
 
     resp = await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
@@ -110,7 +124,7 @@ async def test_intent_returns_before_the_build_finishes(restore_registry: None) 
 async def test_a_running_build_is_discoverable_after_a_refresh(restore_registry: None) -> None:
     user, pid = await _project()
     codegen = SlowCodegen()
-    register_handler(Stage.build, BuildStageHandler(codegen))  # type: ignore[arg-type]
+    register_handler(Stage.build, _handler(codegen))
 
     await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
@@ -138,7 +152,7 @@ async def test_a_running_build_is_discoverable_after_a_refresh(restore_registry:
 async def test_a_second_build_is_refused_while_one_runs(restore_registry: None) -> None:
     user, pid = await _project()
     codegen = SlowCodegen()
-    register_handler(Stage.build, BuildStageHandler(codegen))  # type: ignore[arg-type]
+    register_handler(Stage.build, _handler(codegen))
 
     await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
@@ -181,7 +195,7 @@ async def test_orphaned_runs_are_reaped_at_startup(restore_registry: None) -> No
     assert reloaded.progress.step == "failed"
 
     # And a new build is accepted again.
-    register_handler(Stage.build, BuildStageHandler(SlowCodegen()))  # type: ignore[arg-type]
+    register_handler(Stage.build, _handler(SlowCodegen()))
     resp = await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)
     )
@@ -195,7 +209,7 @@ class ExplodingCodegen:
 
 async def test_a_failed_detached_build_releases_the_stage(restore_registry: None) -> None:
     user, pid = await _project()
-    register_handler(Stage.build, BuildStageHandler(ExplodingCodegen()))  # type: ignore[arg-type]
+    register_handler(Stage.build, _handler(ExplodingCodegen()))
 
     await Conductor().handle_intent(
         user, Intent(project_id=pid, stage=Stage.build, action=IntentAction.proceed)

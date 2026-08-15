@@ -23,6 +23,7 @@ from app.orchestrator.schemas import Intent, IntentAction
 from app.orchestrator.stages import register_handler
 from app.orchestrator.stages.base import StageContext
 from app.orchestrator.stages.build import BuildStageHandler
+from app.orchestrator.stages.build_verify import STOP_BOOT, BuildVerifyReport
 from app.projects.service import ProjectService
 from app.projects.state_machine import Action
 from app.realtime.hub import emit
@@ -80,6 +81,34 @@ class FakeCodegen:
         return self._report
 
 
+class FakeVerifier:
+    """Stands in for BuildVerificationController: returns a canned verify report (phase-55)."""
+
+    def __init__(self, report: BuildVerifyReport | None = None) -> None:
+        self._report = report or BuildVerifyReport(
+            ok=True,
+            message="Verified.",
+            typecheck_ok=True,
+            placeholder_ok=True,
+            fe_status="running",
+            be_status="running",
+        )
+        self.calls: list[dict[str, Any]] = []
+
+    async def run(
+        self,
+        project: Project,
+        run: Run,
+        *,
+        ctx: object | None = None,
+        channel: str | None = None,
+        written_files: list[str] | None = None,
+        cancel: object | None = None,
+    ) -> BuildVerifyReport:
+        self.calls.append({"written_files": written_files, "channel": channel})
+        return self._report
+
+
 async def _project() -> Project:
     return await Project(user_id=PydanticObjectId(), name="Todo App", app_db_name="db").insert()
 
@@ -97,35 +126,47 @@ async def _ctx(project: Project) -> StageContext:
     )
 
 
-async def test_proceed_runs_codegen_and_completes_on_healthy_boot() -> None:
+async def test_proceed_runs_codegen_and_completes_when_verified() -> None:
     project = await _project()
     assert project.id is not None
     codegen = FakeCodegen(_report(boot="healthy"))
+    verifier = FakeVerifier()  # ok=True
 
-    result = await BuildStageHandler(codegen).handle(  # type: ignore[arg-type]
+    result = await BuildStageHandler(codegen, verifier).handle(  # type: ignore[arg-type]
         Intent(project_id=project.id, stage=Stage.build, action=IntentAction.proceed),
         await _ctx(project),
     )
 
     assert len(codegen.calls) == 1
     assert codegen.calls[0]["instruction"] is None  # initial build, no change request
+    # Verification received the files codegen wrote.
+    assert verifier.calls[0]["written_files"] == ["backend/src/features/todo/todo.routes.ts"]
     assert result.next_status is StageStatus.complete
     assert result.messages[0].role is MessageRole.assistant
     assert "Built the Todos feature." in result.messages[0].content
+    assert "Verified" in result.messages[0].content
 
 
-async def test_broken_boot_holds_for_user() -> None:
+async def test_failed_verification_holds_for_user() -> None:
     project = await _project()
     assert project.id is not None
-    codegen = FakeCodegen(_report(boot="unhealthy", follow_ups=["Preview is not healthy…"]))
+    codegen = FakeCodegen(_report(boot="healthy"))  # codegen thinks it booted…
+    # …but verification found a dev server down: the gate, not the boot flag, decides.
+    verifier = FakeVerifier(
+        BuildVerifyReport(
+            ok=False,
+            stop_reason=STOP_BOOT,
+            message="The app did not boot cleanly — a dev server is not running.",
+        )
+    )
 
-    result = await BuildStageHandler(codegen).handle(  # type: ignore[arg-type]
+    result = await BuildStageHandler(codegen, verifier).handle(  # type: ignore[arg-type]
         Intent(project_id=project.id, stage=Stage.build, action=IntentAction.proceed),
         await _ctx(project),
     )
 
     assert result.next_status is StageStatus.awaiting_user  # not deployable
-    assert "Follow-ups" in result.messages[0].content
+    assert "did not boot cleanly" in result.messages[0].content
 
 
 async def test_refine_passes_change_request_and_emits_progress() -> None:
@@ -133,7 +174,7 @@ async def test_refine_passes_change_request_and_emits_progress() -> None:
     assert project.id is not None
     codegen = FakeCodegen()
 
-    result = await BuildStageHandler(codegen).handle(  # type: ignore[arg-type]
+    result = await BuildStageHandler(codegen, FakeVerifier()).handle(  # type: ignore[arg-type]
         Intent(
             project_id=project.id,
             stage=Stage.build,
@@ -188,7 +229,8 @@ async def test_refine_over_complete_build_marks_downstream_stale(restore_registr
     project = await ProjectService().create_project(user, "p")
     pid = project.id
     assert pid is not None
-    register_handler(Stage.build, BuildStageHandler(FakeCodegen(_report(boot="healthy"))))  # type: ignore[arg-type]
+    handler = BuildStageHandler(FakeCodegen(_report(boot="healthy")), FakeVerifier())  # type: ignore[arg-type]
+    register_handler(Stage.build, handler)
 
     # Build complete + a downstream stage complete so a refine can stale it.
     await ProjectService().transition_stage(pid, user, Stage.build, Action.complete)

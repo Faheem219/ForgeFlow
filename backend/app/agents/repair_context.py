@@ -193,8 +193,8 @@ class RepairContextAnalyzer:
 
         context.requirement_snippets = await self._requirement_snippets(project, context)
 
-        await self._add_files_within_budget(project, context, ranked)
-        return await self._finish(test_run, context, persist=persist)
+        await self.add_files(project, context, ranked)
+        return await self.persist(test_run, context, persist=persist)
 
     # -- pieces ---------------------------------------------------------------------------
 
@@ -241,10 +241,12 @@ class RepairContextAnalyzer:
             context.notes.append("No acceptance text for criteria: " + ", ".join(sorted(missing)))
         return snippets
 
-    async def _add_files_within_budget(
-        self, project: Project, context: RepairContext, ranked: list[str]
-    ) -> None:
-        """Read ranked files into the context until the whole-context cap is reached."""
+    async def add_files(self, project: Project, context: RepairContext, ranked: list[str]) -> None:
+        """Read ranked files into the context until the whole-context cap is reached.
+
+        Public (phase-55) so the build-repair widening analyzer can top up an empty editable set
+        through the same budget-respecting path — widening can never become "feed the whole repo".
+        """
         config = get_config()
         total_cap = int(config.get("repair_context_max_chars"))
         file_cap = int(config.get("repair_context_max_file_chars"))
@@ -272,9 +274,10 @@ class RepairContextAnalyzer:
             context.target_files.append(entry)
             used += entry.size()
 
-    async def _finish(
+    async def persist(
         self, test_run: TestRun, context: RepairContext, *, persist: bool
     ) -> RepairContext:
+        """Store the assembled context as a blob and pin it on the run (public since phase-55)."""
         if not persist:
             return context
         try:
