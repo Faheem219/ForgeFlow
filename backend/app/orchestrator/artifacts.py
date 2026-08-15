@@ -72,6 +72,26 @@ class ArtifactService:
     ) -> Artifact | None:
         return await self._artifacts.latest_version(project_id, stage, artifact_type)
 
+    async def get_latest_of_kind(
+        self,
+        project_id: PydanticObjectId,
+        stage: Stage,
+        artifact_type: ArtifactType,
+        kind: str,
+    ) -> Artifact | None:
+        """The newest version of ``(project, stage, type)`` whose ``meta['kind']`` matches ``kind``.
+
+        :meth:`get_latest` returns the newest artifact of a ``(stage, type)`` pair regardless of its
+        kind. That is wrong when two kinds share a pair — phase-56 stores a ``build_plan`` under the
+        same ``(build, code_change)`` pair as the ``build_report``, so "the newest report" must
+        filter by kind or a plan write silently hides the last report from incremental resume.
+        """
+        versions = await self.list_versions(project_id, stage, artifact_type)
+        for artifact in reversed(versions):  # list_versions is ascending; newest matching first
+            if artifact.meta.get("kind") == kind:
+                return artifact
+        return None
+
     async def get_version(
         self,
         project_id: PydanticObjectId,

@@ -76,17 +76,20 @@ async def ensure_dependencies(
     *,
     exec_service: _ExecRunner | None = None,
     force: bool = False,
-) -> bool:
-    """Install the workspace's dependencies when they are missing. True if an install actually ran.
+) -> ExecOutcome | None:
+    """Install the workspace's dependencies when they are missing.
 
-    Never raises for a failed install: it is reported (progress event + log) and the caller carries
-    on, so the dev server or test command that follows fails with the real, readable reason.
+    Returns the install's :class:`ExecOutcome` when one actually ran, or ``None`` when it was
+    skipped (no skeleton yet, or the deps are already present). Never raises for a *failed* install:
+    it is reported (progress event + log) and the outcome is handed back so the caller can classify
+    it — an install failure surfaced here is an *environment* problem (registry unreachable, disk
+    full), which must not later resurface as a *test* failure blamed on generated code (phase-55).
     """
     project_id = str(project.id)
     if not await _exists(runtime, _SENTINEL):
-        return False  # no skeleton yet — nothing to install
+        return None  # no skeleton yet — nothing to install
     if not force and await dependencies_installed(runtime):
-        return False
+        return None
 
     service = exec_service
     if service is None:
@@ -109,7 +112,7 @@ async def ensure_dependencies(
             outcome.timed_out,
         )
     await _progress(project_id, "done" if ok else "failed", exit_code=outcome.exit_code)
-    return True
+    return outcome
 
 
 async def _progress(project_id: str, status: str, **extra: object) -> None:

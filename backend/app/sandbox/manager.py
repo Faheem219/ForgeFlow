@@ -237,6 +237,19 @@ class SandboxManager:
         """The running container object for a project, or ``None`` (used by the FS layer)."""
         return await self._get_container(project_id)
 
+    async def container_state(self, project_id: str) -> str:
+        """A coarse, independent liveness signal: ``running`` | ``exited`` | ``missing``.
+
+        Read straight from docker's ``container.status``, so a failure classifier keyed on exit
+        codes has a second, orthogonal source of truth — an exit code can be stale or unknown
+        (a dead container reports ``ExitCode: null``), the container's own status cannot
+        (phase-55 task 5).
+        """
+        container = await self._get_container(project_id)
+        if container is None:
+            return "missing"
+        return "running" if container.status == "running" else "exited"
+
     async def _ensure_volumes(self, project_id: str) -> None:
         """Create the workspace + home volumes if absent (both outlive any single container)."""
         client = self._client()

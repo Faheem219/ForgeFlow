@@ -41,6 +41,11 @@ from app.core.errors import SystemError, UserError  # noqa: A004
 DOCKER_WORKSPACE = "/workspace"
 _PRUNE_DIRS = {"node_modules", ".git"}
 
+#: Returned by :meth:`ExecHandle.wait` when the exit code cannot be read — a container that died
+#: mid-exec reports ``ExitCode: null``, which must never be coerced to 0 (= success). Distinct and
+#: negative so consumers that check ``exit_code == 0`` correctly see a failure (phase-55 task 4).
+EXIT_UNKNOWN = -1
+
 #: The sandbox's non-root user (``sandbox/Dockerfile`` pins it to uid/gid 1000). The archive API
 #: extracts as root and honours the tar's ownership, so a tar built with the default uid 0 lands
 #: root-owned inside the container — read-only to everything the generated app actually runs as.
@@ -437,8 +442,12 @@ class DockerExecHandle:
                 yield ExecChunk("stderr", err)
 
     def wait(self) -> int:
-        # ExitCode is null until the exec finishes, hence: drain the stream first.
-        return int(self._api.exec_inspect(self._exec_id).get("ExitCode") or 0)
+        # ExitCode is null until the exec finishes (drain the stream first) *and* stays null when
+        # the container died mid-exec. Distinguish the two: a real 0 is success, but a null ExitCode
+        # is EXIT_UNKNOWN, never 0 — else every `exit_code == 0` caller reads a dead container as a
+        # passing command (phase-55 task 4).
+        code = self._api.exec_inspect(self._exec_id).get("ExitCode")
+        return EXIT_UNKNOWN if code is None else int(code)
 
     def kill(self) -> None:
         pid = self._api.exec_inspect(self._exec_id).get("Pid")

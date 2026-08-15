@@ -272,6 +272,45 @@ _KEYS: tuple[ConfigKey, ...] = (
         minimum=500,
         maximum=200_000,
     ),
+    ConfigKey(
+        "build_integration_max_iterations",
+        Cat.agents,
+        "int",
+        "Repair-loop iteration cap when self-healing a build (separate from the Test-stage cap). "
+        "Only code-class failures ever reach it; the loop is always bounded.",
+        minimum=1,
+        maximum=20,
+    ),
+    ConfigKey(
+        "build_max_wall_clock_s",
+        Cat.agents,
+        "int",
+        "Overall deadline for one build (codegen + verify + self-heal) — the outermost bound.",
+        minimum=60,
+        maximum=86_400,
+    ),
+    ConfigKey(
+        "build_typecheck_cmd",
+        Cat.agents,
+        "str",
+        "Command run as the build's typecheck gate (workspace root).",
+    ),
+    ConfigKey(
+        "build_typecheck_timeout_s",
+        Cat.agents,
+        "int",
+        "Wall clock for the build's typecheck gate.",
+        minimum=30,
+        maximum=7200,
+    ),
+    ConfigKey(
+        "build_typecheck_max_failures",
+        Cat.agents,
+        "int",
+        "Cap on synthetic repair targets emitted from one typecheck run (one per failing file).",
+        minimum=1,
+        maximum=200,
+    ),
     # ---------------------------------------------------------------- budget & pricing
     ConfigKey(
         "budget_cap_inr_per_project",
@@ -667,6 +706,14 @@ _KEYS: tuple[ConfigKey, ...] = (
         "str",
         "Wildcard domain for preview URLs in production. Blank = *.preview.localhost.",
     ),
+    ConfigKey(
+        "preview_log_tail_lines",
+        Cat.preview,
+        "int",
+        "How many recent output lines each preview process keeps as boot-failure evidence.",
+        minimum=10,
+        maximum=5000,
+    ),
     # ---------------------------------------------------------------- testing & live validation
     ConfigKey(
         "test_runner_timeout_s",
@@ -730,6 +777,14 @@ _KEYS: tuple[ConfigKey, ...] = (
         Cat.repair,
         "int",
         "No-progress iterations before the loop escalates to a human.",
+        minimum=1,
+        maximum=10,
+    ),
+    ConfigKey(
+        "repair_max_regressions",
+        Cat.repair,
+        "int",
+        "Escalate once patches have broken previously-passing tests this many times.",
         minimum=1,
         maximum=10,
     ),

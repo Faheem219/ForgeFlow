@@ -62,9 +62,10 @@ async def test_a_fresh_workspace_is_installed(tmp_path: Path) -> None:
     runtime = _skeleton(tmp_path, installed=False)
     exec_service = FakeExec()
 
-    ran = await ensure_dependencies(await _project(), runtime, exec_service=exec_service)
+    outcome = await ensure_dependencies(await _project(), runtime, exec_service=exec_service)
 
-    assert ran is True
+    # Returns the install's ExecOutcome so the caller can classify it (phase-55), not just a bool.
+    assert outcome is not None and outcome.exit_code == 0
     cmd, timeout = exec_service.calls[0]
     assert cmd == INSTALL_CMD
     # Installs get the longer wall clock; the default per-command one would kill a cold install.
@@ -76,7 +77,7 @@ async def test_an_installed_workspace_is_left_alone(tmp_path: Path) -> None:
     exec_service = FakeExec()
 
     assert await dependencies_installed(runtime) is True
-    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is False
+    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is None
     assert exec_service.calls == []
 
 
@@ -88,14 +89,15 @@ async def test_a_partial_install_is_completed(tmp_path: Path, missing: str) -> N
     target.unlink() if target.is_file() else target.rmdir()
 
     exec_service = FakeExec()
-    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is True
+    outcome = await ensure_dependencies(await _project(), runtime, exec_service=exec_service)
+    assert outcome is not None
 
 
 async def test_an_uninstantiated_workspace_is_not_an_install(tmp_path: Path) -> None:
     runtime = LocalRuntime(str(tmp_path))  # no skeleton at all
     exec_service = FakeExec()
 
-    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is False
+    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is None
     assert exec_service.calls == []
 
 
@@ -104,15 +106,17 @@ async def test_a_failed_install_is_reported_not_raised(tmp_path: Path) -> None:
     exec_service = FakeExec(exit_code=1)
 
     # The dev server that follows fails with the real reason; this must not mask it with its own.
-    assert await ensure_dependencies(await _project(), runtime, exec_service=exec_service) is True
+    # The failing outcome is returned (not raised) so the caller can classify it (phase-55).
+    outcome = await ensure_dependencies(await _project(), runtime, exec_service=exec_service)
+    assert outcome is not None and outcome.exit_code == 1
 
 
 async def test_force_reinstalls_an_installed_workspace(tmp_path: Path) -> None:
     runtime = _skeleton(tmp_path, installed=True)
     exec_service = FakeExec()
 
-    ran = await ensure_dependencies(
+    outcome = await ensure_dependencies(
         await _project(), runtime, exec_service=exec_service, force=True
     )
-    assert ran is True
+    assert outcome is not None
     assert len(exec_service.calls) == 1

@@ -73,6 +73,21 @@ async def test_diff_between_shas(workspace: tuple[LocalRuntime, WorkspaceGit]) -
     assert "+two" in scoped
 
 
+async def test_changed_paths_between_shas(workspace: tuple[LocalRuntime, WorkspaceGit]) -> None:
+    rt, git = workspace
+    await git.ensure_init()
+    rt.write_bytes("a.txt", b"one\n")
+    sha1, _ = await git.commit("first")
+
+    rt.write_bytes("a.txt", b"one\ntwo\n")
+    rt.write_bytes("b.txt", b"new\n")
+    sha2, _ = await git.commit("second")
+
+    assert sha1 is not None and sha2 is not None
+    changed = await git.changed_paths(sha1, sha2)
+    assert sorted(changed) == ["a.txt", "b.txt"]
+
+
 async def test_last_passing_ref_roundtrip(
     workspace: tuple[LocalRuntime, WorkspaceGit],
 ) -> None:

@@ -114,3 +114,8 @@ class WorkspaceService:
         """Unified diff between two refs, optionally scoped to ``paths`` (phase-29)."""
         _, git = await self._open(project)
         return await git.diff(sha_a, sha_b, paths)
+
+    async def changed_paths(self, project: Project, sha_a: str, sha_b: str) -> list[str]:
+        """Workspace-relative paths that differ between two refs (phase-55 build repair)."""
+        _, git = await self._open(project)
+        return await git.changed_paths(sha_a, sha_b)

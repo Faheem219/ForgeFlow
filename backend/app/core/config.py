@@ -292,12 +292,29 @@ class Settings(BaseSettings):
     # --- Repair loop (phase 29-31) ---
     repair_max_iterations: int = 5
     repair_stall_threshold: int = 2
+    # Regression guard: escalate once patches have broken previously-passing tests this many times
+    # (phase-55 promoted this from a hard-coded constant so the eval harness can sweep it).
+    repair_max_regressions: int = 2
     # Minimal-context budget (phase-29). The invariant is "never feed the whole repo when a diff
     # suffices" (§9), so the assembled context is hard-capped: oversized parts are trimmed by
     # priority (failure frequency) and what was dropped is recorded on the context.
     repair_context_max_chars: int = 24_000  # whole-context cap
     repair_context_max_file_chars: int = 8_000  # per-file cap before truncation
     repair_context_diff_max_chars: int = 8_000  # cap on the since-last-passing diff
+
+    # --- Build verification & self-heal (phase-55) ---
+    # After codegen, the build is verified (install → typecheck → boot → placeholder check) and
+    # code-class failures are self-healed through the existing bounded repair loop. Every bound here
+    # keeps that loop finite (D7 / Golden Rule 5).
+    build_integration_max_iterations: int = (
+        3  # repair cap for a build (separate from the test loop)
+    )
+    build_max_wall_clock_s: int = 3600  # overall build deadline — the outermost bound
+    build_typecheck_cmd: str = "pnpm typecheck"  # the typecheck gate command
+    build_typecheck_timeout_s: int = 600  # wall clock for the typecheck gate
+    build_typecheck_max_failures: int = 20  # cap on synthetic results emitted per typecheck run
+    # Bounded ring of a preview process's most recent output lines, kept as boot-failure evidence.
+    preview_log_tail_lines: int = 200
 
 
 @runtime_checkable

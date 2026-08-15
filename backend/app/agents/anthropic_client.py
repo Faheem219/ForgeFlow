@@ -152,11 +152,18 @@ class AnthropicClient:
         tools: list[dict[str, Any]] | None = None,
         tool_dispatch: ToolDispatch | None = None,
         channel: str | None = None,
+        max_turns: int | None = None,
     ) -> LoopResult:
-        """Drive a bounded tool-use loop and return the final assistant text + full transcript."""
+        """Drive a bounded tool-use loop and return the final assistant text + full transcript.
+
+        ``max_turns`` overrides the ``anthropic_max_tool_turns`` config default for this one loop —
+        so a caller that runs the loop N times (phase-56's per-phase codegen) can bound each phase
+        instead of granting N × the global ceiling.
+        """
         model = route(task_kind)
         max_tokens = self._config_int("anthropic_max_output_tokens")
-        max_turns = self._config_int("anthropic_max_tool_turns")
+        if max_turns is None:
+            max_turns = self._config_int("anthropic_max_tool_turns")
         channel = channel or str(project_id)
 
         convo = [dict(m) for m in messages]

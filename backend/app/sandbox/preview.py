@@ -22,6 +22,7 @@ import contextlib
 import logging
 import shlex
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -42,6 +43,11 @@ logger = logging.getLogger(__name__)
 _PROBE_TIMEOUT_S = 2
 
 
+def _new_log_tail() -> deque[str]:
+    """A bounded ring of the process's most recent output lines — boot-failure evidence."""
+    return deque(maxlen=int(get_config().get("preview_log_tail_lines")))
+
+
 @dataclass
 class _Proc:
     handle: ExecHandle
@@ -50,6 +56,8 @@ class _Proc:
     task: asyncio.Task[None] | None = None
     exited: bool = False
     exit_code: int | None = None
+    # The recent stdout/stderr, so a crashed dev server leaves something to diagnose from (ph-55).
+    log_tail: deque[str] = field(default_factory=_new_log_tail)
 
 
 #: Shown when the dev servers are up but nothing serves the proxied hostnames. Without this the
@@ -166,6 +174,10 @@ class PreviewService:
         """Stream a dev server's output until it exits (it normally never does)."""
         try:
             async for chunk in aiter_chunks(proc.handle):
+                text = chunk.data.decode("utf-8", errors="replace")
+                # Buffer a bounded tail so a crash leaves diagnosable evidence (phase-55 task 3).
+                for line in text.splitlines():
+                    proc.log_tail.append(line)
                 await emit(
                     project_id,
                     EventType.terminal_output,
@@ -173,7 +185,7 @@ class PreviewService:
                         "source": "preview",
                         "process": str(kind),
                         "stream": chunk.stream,
-                        "chunk": chunk.data.decode("utf-8", errors="replace"),
+                        "chunk": text,
                     },
                 )
         finally:
@@ -332,6 +344,18 @@ class PreviewService:
 
     async def restart(self, project: Project) -> PreviewInfo:
         return await self.start(project)
+
+    def log_tail(self, project: Project, process: PreviewProcess) -> str:
+        """The recent output of a preview process — evidence for a boot-failure diagnosis.
+
+        Bounded by ``preview_log_tail_lines``; empty when the process is not (or no longer)
+        tracked. Synchronous — it reads an in-memory ring, no sandbox round-trip (phase-55 task 3).
+        """
+        state = self._state.get(str(project.id))
+        if state is None:
+            return ""
+        proc = state.procs.get(process)
+        return "\n".join(proc.log_tail) if proc is not None else ""
 
     async def status(self, project: Project) -> PreviewInfo:
         project_id = str(project.id)

@@ -27,6 +27,9 @@ class EventType(StrEnum):
     exec_status = "exec.status"
     preview_status = "preview.status"
     test_result = "test.result"
+    # Build stage: the structured report (was an ad-hoc string) + the verify-step stream (phase-55).
+    build_report = "build.report"
+    build_verify = "build.verify"
     deploy_status = "deploy.status"
     validate_status = "validate.status"
     sandbox_status = "sandbox.status"

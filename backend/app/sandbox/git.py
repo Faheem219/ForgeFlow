@@ -72,6 +72,17 @@ class WorkspaceGit:
             raise SystemError(f"git diff failed: {err.strip()}")
         return out
 
+    async def changed_paths(self, sha_a: str, sha_b: str) -> list[str]:
+        """Workspace-relative paths that differ between two refs (``git diff --name-only``).
+
+        Mirrors :meth:`diff`; used by the build-repair widening analyzer (phase-55) to seed an
+        empty editable set from "what changed since it last worked".
+        """
+        code, out, err = await self._git("diff", "--name-only", sha_a, sha_b)
+        if code != 0:
+            raise SystemError(f"git diff --name-only failed: {err.strip()}")
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
     async def set_last_passing(self, sha: str) -> None:
         """Move the ``last-passing`` ref (called by the test runner in phase-28)."""
         code, _, err = await self._git("update-ref", LAST_PASSING_REF, sha)

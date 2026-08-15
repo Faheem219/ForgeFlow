@@ -337,7 +337,10 @@ class CodegenAgent:
             )
             await self._persist_report(project_id, partial, failed=True)
             await emit(
-                channel, "build.report", {"stage": "build", **partial.to_dict()}, stage=Stage.build
+                channel,
+                EventType.build_report,
+                {"stage": "build", **partial.to_dict()},
+                stage=Stage.build,
             )
             raise
 
@@ -372,7 +375,10 @@ class CodegenAgent:
         )
         await self._persist_report(project_id, report)
         await emit(
-            channel, "build.report", {"stage": "build", **report.to_dict()}, stage=Stage.build
+            channel,
+            EventType.build_report,
+            {"stage": "build", **report.to_dict()},
+            stage=Stage.build,
         )
         return report
 
@@ -542,9 +548,15 @@ class CodegenAgent:
         return "\n".join(lines), paths
 
     async def _previous_report(self, project_id: PydanticObjectId) -> BuildReport | None:
-        """The most recent build report, so a retry knows what the last attempt achieved."""
-        latest = await self._artifacts.get_latest(project_id, Stage.build, ArtifactType.code_change)
-        if latest is None or latest.meta.get("kind") != BUILD_REPORT_KIND:
+        """The most recent build report, so a retry knows what the last attempt achieved.
+
+        Filters by ``kind`` rather than taking the newest ``(build, code_change)`` artifact, so a
+        phase-56 ``build_plan`` written under the same pair cannot hide the last report (phase-55).
+        """
+        latest = await self._artifacts.get_latest_of_kind(
+            project_id, Stage.build, ArtifactType.code_change, BUILD_REPORT_KIND
+        )
+        if latest is None:
             return None
         try:
             text = await self._artifacts.get_content(latest)

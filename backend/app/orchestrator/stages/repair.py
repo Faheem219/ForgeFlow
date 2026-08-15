@@ -60,8 +60,8 @@ REASON_CANCELLED = "cancelled"
 
 REPAIR_REPORT_KIND = "repair_report"
 
-# Two regressions is the guard: one may be bad luck, twice is a pattern (§9).
-_MAX_REGRESSIONS = 2
+# The regression guard (default 2, config `repair_max_regressions`): one may be bad luck, twice is a
+# pattern (§9). Promoted from a constant to config in phase-55 so the eval harness can sweep it.
 
 # How the user resumes after an escalation — guidance re-enters Build (phase-24), which may
 # then re-run repair. The controller states the contract; the conductor already implements it.
@@ -190,12 +190,20 @@ class RepairLoopController:
         artifacts: ArtifactService | None = None,
         stages: StageStateRepo | None = None,
         runs: RunRepo | None = None,
+        *,
+        stage: Stage = Stage.test,
+        owns_stage_status: bool = True,
     ) -> None:
         self._agent = agent or RepairAgent()
         self._analyzer = analyzer or RepairContextAnalyzer()
         self._artifacts = artifacts or ArtifactService()
         self._stages = stages or StageStateRepo()
         self._runs = runs or RunRepo()
+        # Which stage this loop belongs to (phase-55). Test owns its own status; Build does not —
+        # the conductor owns build's status via `StageResult.next_status`, so the Build-reuse passes
+        # `owns_stage_status=False`. Events + persisted attempts key on `self._stage` either way.
+        self._stage = stage
+        self._owns_stage_status = owns_stage_status
 
     async def run(
         self,
@@ -206,6 +214,7 @@ class RepairLoopController:
         ctx: ToolContext | None = None,
         channel: str | None = None,
         cancel: asyncio.Event | None = None,
+        max_iterations: int | None = None,
     ) -> RepairLoopResult:
         project_id = project.id
         if project_id is None:  # pragma: no cover - a persisted project always carries an id
@@ -214,8 +223,10 @@ class RepairLoopController:
         started = time.monotonic()
 
         config = get_config()
-        max_iterations = int(config.get("repair_max_iterations"))
+        if max_iterations is None:
+            max_iterations = int(config.get("repair_max_iterations"))
         stall_threshold = int(config.get("repair_stall_threshold"))
+        max_regressions = int(config.get("repair_max_regressions"))
 
         run = run or await self._runs.insert(Run(project_id=project_id, kind="repair:loop"))
         ctx = ctx or ToolContext.build(project, run, channel=channel)
@@ -293,7 +304,7 @@ class RepairLoopController:
                     "outcome": str(result.attempt.outcome),
                     "files": result.attempt.target_files,
                 },
-                stage=Stage.test,
+                stage=self._stage,
             )
 
             current = after
@@ -308,7 +319,7 @@ class RepairLoopController:
 
             # Regression guard is checked first: repeatedly breaking working code is a worse
             # signal than simply not converging, and it names the problem more precisely.
-            if regressions >= _MAX_REGRESSIONS:
+            if regressions >= max_regressions:
                 escalation = self._escalate(REASON_REGRESSED, "", current, attempts, metrics)
                 break
 
@@ -346,15 +357,18 @@ class RepairLoopController:
 
         if result.escalation is not None:
             result.escalation.metrics = result.metrics
-            # Escalation is a normal terminal state: hand the stage back to the human.
-            await self._stages.set_status(project_id, Stage.test, StageStatus.awaiting_user)
-            await emit(channel, "repair.escalation", result.escalation.to_dict(), stage=Stage.test)
+            # Escalation is a normal terminal state: hand the stage back to the human — but only
+            # when this loop owns its stage status. In Build the conductor owns it (phase-55), so
+            # setting it here would race the handler's own `StageResult.next_status`.
+            if self._owns_stage_status:
+                await self._stages.set_status(project_id, self._stage, StageStatus.awaiting_user)
+            await emit(channel, "repair.escalation", result.escalation.to_dict(), stage=self._stage)
         else:
             await emit(
                 channel,
                 "repair.done",
                 {"outcome": result.outcome, "metrics": result.metrics.to_dict()},
-                stage=Stage.test,
+                stage=self._stage,
             )
 
         run.outcome = result.outcome
@@ -393,7 +407,7 @@ class RepairLoopController:
         """Store the loop report so the UI (phase-32) and eval (phase-44) can read it back."""
         await self._artifacts.create_version(
             project_id,
-            Stage.test,
+            self._stage,  # Build repairs persist under (build, repair_attempt) — a distinct trail.
             ArtifactType.repair_attempt,
             text=json.dumps(result.to_dict(), indent=2),
             meta={
