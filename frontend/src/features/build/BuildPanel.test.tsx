@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -281,5 +281,106 @@ describe('BuildPanel', () => {
     expect(screen.queryByTestId('mock-preview')).not.toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('toggle-preview'));
     expect(await screen.findByTestId('mock-preview')).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------- phase rail (phase-56)
+
+  it('renders a PRE-REWORK report exactly as before, with no phase rail', async () => {
+    // REPORT has no `phases` / `outcome` / `stop_reason` — the whole point of the defensive parse.
+    installFetch(state);
+    renderPanel();
+
+    expect(await screen.findByTestId('build-boot-status')).toHaveTextContent('healthy');
+    expect(screen.queryByTestId('build-phase-list')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('build-report-toggle'));
+    expect(screen.queryByTestId('build-stop-reason')).not.toBeInTheDocument();
+  });
+
+  it('renders the phase rail from a finished report, with per-row statuses', async () => {
+    const phased = {
+      ...REPORT,
+      phases: [
+        { id: 'be-core', title: 'Backend API', kind: 'backend', status: 'done' },
+        { id: 'fe-core', title: 'Frontend pages', kind: 'frontend', status: 'failed' },
+        { id: 'wiring', title: 'Routing', kind: 'wiring', status: 'pending' },
+      ],
+      outcome: 'partial',
+      stop_reason: 'phases_incomplete',
+    };
+    state.reportDetail = { ...reportArtifact(), content: JSON.stringify(phased) };
+    installFetch(state);
+    renderPanel();
+
+    const rail = await screen.findByTestId('build-phase-list');
+    const rows = within(rail).getAllByTestId('build-phase-row');
+    expect(rows.map((r) => r.getAttribute('data-status'))).toEqual(['done', 'failed', 'pending']);
+    expect(rail).toHaveTextContent('Backend API');
+    expect(rail).toHaveTextContent('Routing');
+  });
+
+  it('shows the stop reason in plain English when the build did not complete', async () => {
+    state.reportDetail = {
+      ...reportArtifact(),
+      content: JSON.stringify({ ...REPORT, outcome: 'partial', stop_reason: 'environment' }),
+    };
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-report-toggle'));
+    expect(screen.getByTestId('build-stop-reason')).toHaveTextContent(
+      /the sandbox environment, not the code/,
+    );
+  });
+
+  it('reattaches the phase rail to the right phase after a reload', async () => {
+    // Mid-build with no live events (the realtime ring is long since evicted): the durable
+    // Run.progress the server reports is the only thing that can place the rail.
+    state.activity = {
+      build: {
+        run_id: 'r1',
+        started_at: '2026-07-25T00:00:00Z',
+        step: 'phase',
+        label: 'Phase 2/3: Frontend pages',
+        target: '',
+        files: [],
+        phase_index: 2,
+        phase_total: 3,
+        phase_id: 'fe-core',
+      },
+    };
+    state.reportDetail = {
+      ...reportArtifact(),
+      content: JSON.stringify({
+        ...REPORT,
+        phases: [
+          { id: 'be-core', title: 'Backend API', kind: 'backend', status: 'done' },
+          { id: 'fe-core', title: 'Frontend pages', kind: 'frontend', status: 'pending' },
+          { id: 'wiring', title: 'Routing', kind: 'wiring', status: 'pending' },
+        ],
+      }),
+    };
+    installFetch(state);
+    renderPanel();
+
+    const rail = await screen.findByTestId('build-phase-list');
+    await waitFor(() =>
+      expect(
+        within(rail)
+          .getAllByTestId('build-phase-row')
+          .map((r) => r.getAttribute('data-status')),
+      ).toEqual(['done', 'running', 'pending']),
+    );
+  });
+
+  it('does not show a stop reason on a complete build', async () => {
+    state.reportDetail = {
+      ...reportArtifact(),
+      content: JSON.stringify({ ...REPORT, outcome: 'complete', stop_reason: null }),
+    };
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-report-toggle'));
+    expect(screen.queryByTestId('build-stop-reason')).not.toBeInTheDocument();
   });
 });

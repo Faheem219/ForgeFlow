@@ -52,6 +52,40 @@ const BOOT_TONES: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> =
   not_started: 'neutral',
 };
 
+/** One row of the phase rail (phase-56) — live events, durable Run progress, or a finished report. */
+interface PhaseRow {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  index: number;
+}
+
+/** The backend's fixed stop_reason vocabulary (build_verify.py + build.py), in plain English. */
+const STOP_REASON_LABELS: Record<string, string> = {
+  typecheck_failed: 'the generated code does not typecheck',
+  placeholder_left: 'a template placeholder is still in the app',
+  boot_unhealthy: 'a dev server is not running',
+  repair_escalated: 'the repair loop could not fix it',
+  no_repair_target: 'nothing editable could be identified to repair',
+  phases_incomplete: 'some planned phases did not finish',
+  environment: 'the sandbox environment, not the code',
+  provider: 'a provider error',
+  budget: 'the budget cap was reached',
+  cancelled: 'it was cancelled',
+  wall_clock: 'it ran past its time budget',
+  failed: 'the build failed part-way',
+};
+
+const PHASE_GLYPH: Record<string, string> = { done: '✓', failed: '✗', pending: '·' };
+
+const PHASE_TONE: Record<string, string> = {
+  done: 'text-success',
+  failed: 'text-danger',
+  running: 'text-brand',
+  pending: 'text-fg-subtle',
+};
+
 /**
  * Build stage: the streamed IDE + preview are the hero (full width), with a compact, collapsible
  * build-report strip above them. Proceed/skip live in the header; incremental change requests go
@@ -102,7 +136,11 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const hasLoadedRef = useRef(false);
   useEffect(() => {
     if (stagesQuery.data === undefined) return; // still loading — nothing real to compare yet
-    if (hasLoadedRef.current && prevStatusRef.current !== 'complete' && persistedStatus === 'complete') {
+    if (
+      hasLoadedRef.current &&
+      prevStatusRef.current !== 'complete' &&
+      persistedStatus === 'complete'
+    ) {
       const next = nextStage('build');
       if (next) setActiveStage(next);
     }
@@ -200,6 +238,41 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   // Prefer the fine-grained tool label ("Installing dependencies") over the coarse phase.
   const activityLabel = live.label || serverBuild?.label || STEP_LABELS[latestStep] || '';
   const activityTarget = live.target || serverBuild?.target || '';
+
+  // The phase rail (phase-56), in precedence order: live events → the server's durable Run
+  // progress (which survives a reload) → the finished report, so a completed build still shows
+  // what it did. Empty for a pre-phase-56 report, which is what keeps that panel byte-identical.
+  const phaseRows = useMemo((): PhaseRow[] => {
+    if (live.phases.length > 0) return live.phases;
+    const serverIndex = serverBuild?.phase_index ?? 0;
+    const reportPhases = report?.phases ?? [];
+    if (busy && serverIndex > 0 && reportPhases.length === 0) {
+      // Mid-build after a reload with no report yet: all we know is which phase is running.
+      return [
+        {
+          id: serverBuild?.phase_id ?? 'current',
+          title: serverBuild?.label || `Phase ${serverIndex}`,
+          kind: '',
+          status: 'running',
+          index: serverIndex,
+        },
+      ];
+    }
+    return reportPhases.map((p, i) => ({
+      id: p.id,
+      title: p.title,
+      kind: p.kind,
+      status: serverIndex === i + 1 && busy ? 'running' : p.status,
+      index: i + 1,
+    }));
+  }, [
+    live.phases,
+    serverBuild?.phase_index,
+    serverBuild?.phase_id,
+    serverBuild?.label,
+    report?.phases,
+    busy,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -338,6 +411,37 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               </span>
             ) : null}
           </div>
+          {/* The phase rail. Rendered only when there are phases, so a pre-phase-56 report leaves
+              this section exactly as it was. Height-capped like the file list below, so it can
+              never steal editor width. */}
+          {phaseRows.length > 0 ? (
+            <ul
+              className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
+              data-testid="build-phase-list"
+            >
+              {phaseRows.map((phase) => (
+                <li
+                  key={phase.id}
+                  className="flex items-center gap-2 text-[11px]"
+                  data-testid="build-phase-row"
+                  data-status={phase.status}
+                >
+                  <span
+                    className={cn('w-3 shrink-0 text-center', PHASE_TONE[phase.status])}
+                    aria-hidden
+                  >
+                    {phase.status === 'running' ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      (PHASE_GLYPH[phase.status] ?? '·')
+                    )}
+                  </span>
+                  <span className="truncate text-fg-muted">{phase.title}</span>
+                  {phase.kind ? <Badge tone="neutral">{phase.kind}</Badge> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {liveFiles.length > 0 ? (
             <ul
               className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
@@ -404,6 +508,13 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           {reportOpen ? (
             <div className="space-y-2 border-t border-edge px-4 py-3 text-sm">
               {report.summary ? <p className="text-fg-muted">{report.summary}</p> : null}
+              {/* Why the build stopped short, in the report's own words (phase-55's vocabulary,
+                  plus phase-56's `phases_incomplete`). Absent on pre-rework reports. */}
+              {report.outcome && report.outcome !== 'complete' && report.stop_reason ? (
+                <p className="text-xs text-warning" data-testid="build-stop-reason">
+                  Stopped: {STOP_REASON_LABELS[report.stop_reason] ?? report.stop_reason}
+                </p>
+              ) : null}
               {report.features_built.length > 0 ? (
                 <p className="text-fg-muted">
                   <span className="text-fg-subtle">Features:</span>{' '}

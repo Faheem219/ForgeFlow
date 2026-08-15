@@ -316,6 +316,16 @@ class Settings(BaseSettings):
     # Bounded ring of a preview process's most recent output lines, kept as boot-failure evidence.
     preview_log_tail_lines: int = 200
 
+    # --- Phased build plan (phase-56) ---
+    # The build is planned into small phases and implemented one at a time, each with its own small
+    # context, its own typecheck gate and its own commit. Every bound here caps cost as well as
+    # runtime: N phases × (implement + fixes) is the shape of a build's spend.
+    build_max_phases: int = 8  # caps plan size and therefore cost
+    build_phase_max_tool_turns: int = 60  # per-phase tool-loop bound
+    build_phase_max_fix_attempts: int = 2  # per-phase typecheck fix sub-loop
+    build_plan_dir: str = "phase-plan"  # workspace folder holding the plan (a FE/BE sibling)
+    build_plan_in_workspace: bool = True  # also write the plan into the workspace, not just Mongo
+
 
 @runtime_checkable
 class SettingProvider(Protocol):

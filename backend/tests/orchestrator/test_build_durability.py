@@ -80,6 +80,11 @@ class SlowCodegen:
         await self.release.wait()
         return _report()
 
+    async def finalize_report(
+        self, project_id: object, report: BuildReport, verification: object, **kwargs: object
+    ) -> BuildReport:
+        return report
+
 
 @pytest.fixture
 def restore_registry() -> Iterator[None]:

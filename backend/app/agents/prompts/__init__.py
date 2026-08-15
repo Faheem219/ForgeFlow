@@ -8,7 +8,7 @@ Concrete stage prompts (codegen/testgen/repair) extend these in their own phases
 from __future__ import annotations
 
 # Bump whenever the base prompts change so eval results stay attributable to a prompt version.
-PROMPT_VERSION = "2026-08-15.1"
+PROMPT_VERSION = "2026-08-15.2"
 
 BASE_SYSTEM = (
     "You are ForgeFlow, an AI software engineer working inside a locked, per-project sandbox. "

@@ -80,6 +80,21 @@ class FakeCodegen:
             raise self._error
         return self._report
 
+    async def finalize_report(
+        self,
+        project_id: object,
+        report: BuildReport,
+        verification: dict[str, Any],
+        *,
+        stop_reason: str | None,
+    ) -> BuildReport:
+        # phase-56: the handler folds the verification verdict into the report. Nothing here needs
+        # persistence — the test only cares that the gate reads the returned report.
+        report.verification = verification
+        report.stop_reason = report.stop_reason or stop_reason
+        report.outcome = "complete" if report.stop_reason is None else "partial"
+        return report
+
 
 class FakeVerifier:
     """Stands in for BuildVerificationController: returns a canned verify report (phase-55)."""

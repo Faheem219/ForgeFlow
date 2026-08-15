@@ -6,7 +6,7 @@
 - **Title:** Phased build plan & phase-by-phase codegen
 - **Epic:** Epic 13 — Build Reliability *(added per user directive)*
 - **Milestone:** M2 *(hardens M2's stated outcome — a generated **running app**)*
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-15)*
 
 ## Goal
 
@@ -188,3 +188,35 @@ Then press **Build** on a fresh project and watch:
 - **The report is authoritative for resume, not the filesystem.** A phase that wrote three of five files leaves those three on disk; treating file presence as "done" would skip the remaining two forever. The recorded status is the only signal that distinguishes "wrote some files" from "finished".
 - **Failed phases are carried, not fatal.** Aborting on the first failed phase would waste every phase after it, and some failures genuinely need the whole app in view to fix (a frontend page against a backend route written two phases later). Carrying them into integration repair is strictly more likely to converge.
 - **Known cost shape.** N phases × (implement + up to 2 fixes) is several times today's spend, bounded by `build_max_phases`, `build_phase_max_tool_turns`, `build_phase_max_fix_attempts` and `build_max_wall_clock_s`. Planning stays on Haiku. `Run.cost` per phase is the D13 eval unit for judging whether phasing pays for itself against one-shot.
+
+## Implementation status (as-built, 2026-08-15)
+
+**Done — every task 1–13 landed.**
+
+1. **`app/agents/build_plan.py`** — `BuildPhase` / `BuildPlan` (`validate` → unique ids, dangling deps dropped, Kahn topo-order tie-broken by `data → backend → frontend → wiring`, capped; `to_prose`; `to_json`), `parse_build_plan` (bare / fenced / prose-wrapped JSON, never raises), `fallback_plan` (`be-core → fe-core → wiring`), `render_markdown`. A dependency **cycle** does not drop phases — they are emitted after everything orderable, so a self-contradictory plan still runs.
+2. **Prompts** — `PHASE_PLAN_SYSTEM_EXTRA` (strict JSON, the ordering rule, `wiring` always last with the placeholder rules), `PHASE_IMPLEMENT_SYSTEM_EXTRA` (extends `CODEGEN_SYSTEM_EXTRA`: one phase only, no install/preview/tests), `phase_plan_user_prompt`, `phase_user_prompt`. `PROMPT_VERSION` → `2026-08-15.2`.
+3. **`BuildPlanner`** (in `build_phases.py`) — plans on `TaskKind.summarize` (Haiku), parses, validates, falls back; persists a versioned `build_plan` artifact (`meta.kind` + `phase_count` / `phase_ids` / `source`) **and** writes `<build_plan_dir>/plan.json` + `README.md` through `ctx.workspace.write`, rewritten after every phase. A workspace-write failure never takes the build down — the artifact is the durable record.
+4. **`PhaseRunner`** — per phase: `build.phase` event + `Run.progress` mirror → one `run_tool_loop` bounded by `build_phase_max_tool_turns` (narrowed tool surface for non-`wiring` phases) → package-scoped `pnpm --filter <pkg> typecheck` → up to `build_phase_max_fix_attempts` fixes in the *same* conversation, each **classified first** (an `environment` verdict raises `BuildPlanAborted` and stops the build) → `git_commit("build(<kind>): <title>")` → terminal `build.phase`. A phase that ran out of turns is recorded `failed` even if what it wrote typechecks — half a feature compiles fine.
+5. **`CodegenAgent.run`** is the orchestrator: skeleton → survey → plan → phases → report. Resume reads the newest `build_report` via `get_latest_of_kind` and restarts at the first phase not `done`, carrying the earlier outcomes; the **report is authoritative**, file presence is not. A `BuildBudget`-style deadline (`build_max_wall_clock_s`) is checked between phases. The dead prose `_plan` step was removed.
+6. **`BuildReport`** gained `phases` / `verification` / `outcome` / `stop_reason`, all defaulted so pre-phase-56 artifacts still parse; `_persist_report` badges `meta` with `phase_count` / `outcome` / `stop_reason`. New `CodegenAgent.finalize_report` folds the verification verdict in as a **second version** rather than overwriting (§7).
+7. **Completion gate** — `build.py` adds `report.phases_complete` to phase-55's conjunction and `phases_incomplete` (`STOP_PHASES`) to the vocabulary, with its own sentence in `_summarize` plus a `Phases: n/N complete.` line.
+8. **Progress plumbing** — `RunProgress.phase_index/phase_total/phase_id` (defaulted), `EventType.build_phase`, and the three fields carried onto `BuildActivityPublic` + the activity route.
+9. **Config** — `build_max_phases` (8), `build_phase_max_tool_turns` (60), `build_phase_max_fix_attempts` (2), `build_plan_dir` (`phase-plan`), `build_plan_in_workspace` (true); registered and in `.env.example`.
+10. **Frontend defensive parsing** — `parseBuildReport` rewritten field-by-field with `strArray` / `str` / `parsePhase` helpers; a phase with no title is dropped rather than rendered blank.
+11. **Phase rail** — `build-phase-list` inside `build-activity`, sourced live events → `serverBuild.phase_*` → `report.phases`, height-capped, absent when there are no phases. The report strip gained `build-stop-reason` (plain-English labels for the whole backend vocabulary) shown only when `outcome !== 'complete'`.
+12. **Step vocabulary** — `BUILD_STEPS` extended to the seven steps the backend emits; `failed` labelled but kept out of the dot list; the hook now parses `build.phase` (returning `phases` / `phaseIndex` / `phaseTotal`) and `build.verify`.
+13. **Repository awareness** — as in phase-55, satisfied by reusing the compact `_existing_code` inventory (paths + sizes, contents on demand), now carried into each phase prompt rather than into one growing conversation.
+
+**Tests.** New: `test_build_plan_parsing.py` (13), `test_codegen_phased.py` (7 — one loop/commit/event set per phase, the small-context assertion, artifact + workspace plan, `build_plan_in_workspace=False`, `build_plan_dir`, unparseable-plan fallback), `test_codegen_resume.py` (2), plus a `_previous_report`-through-a-later-plan case in `test_artifact_kind_lookup.py`. Frontend: `api.test.ts` (12) and phase-rail / step-vocabulary cases in `BuildPanel.test.tsx` and `useBuildActivity.test.tsx`. Shared fakes: `codegen_fakes.build_transport` now returns a single-phase JSON plan (so every pre-existing codegen test is unchanged in meaning), plus `phased_transport` / `phase_plan_json`; `FakeWorkspace` records commit messages.
+
+**Verification performed** (macOS, no Docker/Colima):
+
+- **Backend `pytest`: 1336 passed, 8 failed, 1 skipped** across two runs (`tests/agents` + `tests/orchestrator` + `tests/config` → 401 passed / 7 failed; everything else → 935 passed / 1 failed). **All 8 failures are pre-existing and Docker-dependent** — `test_repair_fixes_seeded_bug` (2), `test_repair_minimality` (3, one order-sensitive), `test_repair_regression_report` (1), `test_repair_audit_trail` (1), `test_sandbox_isolation` (1) — each dying inside the docker SDK on the missing socket, and each confirmed identically red on the clean tree at `f479679`.
+- **Backend `ruff` / `black` clean.** `mypy` is byte-identical to the pre-phase baseline (42 pre-existing errors in 14 files, **none** in any module this phase touched — measured by stashing the work and re-running).
+- **Frontend: 426 passed (55 files)**, `pnpm lint`, `pnpm typecheck` and `prettier --check` all clean on every touched file.
+
+**Remaining / follow-ups (not blockers):**
+
+- **Manual, docker-backed verification** (the steps above) has **not** been run — no Docker/Colima on this box. Run it before relying on the `phase-plan/` demo, the live rail, or the per-phase commits.
+- **`BuildVerifyReport` on the report.** `finalize_report` writes a second `build_report` version per build, so the artifact list shows two entries per build (versioned, never overwritten — as §7 requires, but worth knowing).
+- **Cancellation threading** remains the phase-55 follow-up: the wall-clock bound applies, but no explicit `cancel` event is constructed by the handler.

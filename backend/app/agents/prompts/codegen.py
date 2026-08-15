@@ -52,6 +52,44 @@ CODEGEN_SYSTEM_EXTRA = (
 )
 
 
+# System guidance for the phase-PLAN step (phase-56) — routed to MODEL_ROUTING (Haiku), like the
+# prose plan it supersedes. Strict JSON: the parser tolerates fences and prose, but asking for
+# anything else wastes a Haiku round-trip on text that then falls back.
+PHASE_PLAN_SYSTEM_EXTRA = (
+    "You are planning a build as a short, ORDERED list of implementation phases. You write no "
+    "code here.\n"
+    "Reply with STRICT JSON and nothing else — no prose, no commentary — in exactly this shape:\n"
+    '{"phases":[{"id":"be-todos","title":"Todo API","kind":"backend","goal":"…",'
+    '"files":["backend/src/features/todos/"],"depends_on":[],'
+    '"done_when":["backend typechecks","POST /api/todos creates a todo"]}],'
+    '"assumptions":["…"],"notes":["…"]}\n'
+    "Rules:\n"
+    "- `kind` is one of data | backend | frontend | wiring, and phases run in that order: the "
+    "data layer first, then the API, then the UI, then the wiring that ties them together.\n"
+    "- Each phase must be INDEPENDENTLY TYPECHECKABLE: never plan a frontend page against an API "
+    "client written in a later phase.\n"
+    "- `goal` is one or two concrete sentences naming what to build. `files` are the paths the "
+    "phase will create or edit. `done_when` are short CHECKABLE statements, not aspirations.\n"
+    "- `depends_on` holds ids of earlier phases only; never create a cycle.\n"
+    "- The FINAL phase is always `wiring`: the index route must render a real feature page, the "
+    "layout wordmark and the HTML title must be the app's name, and the placeholder tests must "
+    "be rewritten to assert real app content.\n"
+    "- Keep the plan small. Fewer, larger phases beat many trivial ones."
+)
+
+# System guidance for implementing ONE phase (phase-56) — routed to MODEL_CODEGEN (Sonnet). It
+# extends CODEGEN_SYSTEM_EXTRA rather than replacing it: the skeleton conventions still bind.
+PHASE_IMPLEMENT_SYSTEM_EXTRA = (
+    CODEGEN_SYSTEM_EXTRA
+    + "\n"
+    + "You are implementing ONE PHASE of a larger plan, not the whole app. Do exactly this "
+    "phase's goal and stop — a later phase covers the rest, and work done early is work done "
+    "without the context it needs. Do not install dependencies, start the preview or run tests: "
+    "the build verifies and boots the app itself once every phase is written. Finish with a "
+    "one-line summary of what you wrote."
+)
+
+
 def format_design(summary: str | None) -> str:
     if not summary:
         return "Design: none provided — build a clean, minimal Tailwind UI."
@@ -97,6 +135,79 @@ def plan_user_prompt(
         f"{format_existing(existing)}\n\n"
         "Produce the short build plan. If feature code already exists, plan only the remaining "
         "work — list what is already done separately from what is left."
+    )
+
+
+def phase_plan_user_prompt(
+    project_name: str,
+    design: str | None,
+    requirements: str | None,
+    existing: str | None = None,
+    *,
+    max_phases: int = 8,
+    instruction: str | None = None,
+) -> str:
+    """The phase-plan step's user turn (phase-56) — the JSON plan the build is then driven by."""
+    change = (
+        f"\n\nThe user requested this specific change — plan ONLY for it: {instruction}"
+        if instruction
+        else ""
+    )
+    return (
+        f"Project: {project_name}\n\n"
+        f"{format_requirements(requirements)}\n\n"
+        f"{format_design(design)}\n\n"
+        f"{format_existing(existing)}"
+        f"{change}\n\n"
+        f"Produce the phase plan as JSON: at least 3 and at most {max_phases} phases. If feature "
+        "code already exists, plan only the REMAINING work — do not plan a phase whose goal is "
+        "already met."
+    )
+
+
+def phase_user_prompt(
+    project_name: str,
+    phase_index: int,
+    phase_total: int,
+    title: str,
+    kind: str,
+    goal: str,
+    files: list[str],
+    done_when: list[str],
+    story_so_far: str,
+    design: str | None,
+    requirements: str | None,
+    existing: str | None = None,
+    notes: list[str] | None = None,
+) -> str:
+    """One phase's implement turn — a *small* context, which is the whole point of phasing.
+
+    Deliberately not the accumulated transcript of previous phases: those cost tokens on every
+    subsequent turn and drown the one goal that matters now. The previous phases appear only as the
+    short "story so far", and the design/requirements slice is whichever half this phase touches.
+    """
+    files_block = "\nFiles this phase owns:\n" + "\n".join(f"- {f}" for f in files) if files else ""
+    done_block = "\nDone when:\n" + "\n".join(f"- {d}" for d in done_when) if done_when else ""
+    story_block = f"\n\nStory so far: {story_so_far}" if story_so_far else ""
+    notes_block = ("\n\nNotes:\n" + "\n".join(f"- {n}" for n in (notes or []))) if notes else ""
+    # The requirements are the spec — every phase needs them. The design HTML/CSS is the largest
+    # block by far and means nothing to a backend phase, so it goes only to the phases that render.
+    # That slice is the cost lever.
+    context = format_requirements(requirements)
+    if kind in ("frontend", "wiring"):
+        context += "\n\n" + format_design(design)
+    return (
+        f"Project: {project_name}\n"
+        f"Phase {phase_index} of {phase_total}: {title} ({kind})\n\n"
+        f"Goal: {goal}"
+        f"{files_block}"
+        f"{done_block}"
+        f"{story_block}\n\n"
+        f"{context}\n\n"
+        f"{format_existing(existing)}"
+        f"{notes_block}\n\n"
+        "Implement THIS PHASE ONLY, then stop. Write the files, keep them typechecking, and do "
+        "not start work that belongs to a later phase."
     )
 
 

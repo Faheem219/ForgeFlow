@@ -43,6 +43,7 @@ class FakeWorkspace:
 
     def __init__(self) -> None:
         self.files: dict[str, str] = {}
+        self.commits: list[str] = []  # every commit message, in order (phase-56 asserts on these)
         self._committed: dict[str, str] = {}
         self._sha = 0
 
@@ -67,6 +68,7 @@ class FakeWorkspace:
         ]
 
     async def commit(self, project: Project, message: str) -> tuple[str | None, bool]:
+        self.commits.append(message)
         if self.files == self._committed:
             return (f"sha{self._sha}" if self._sha else None), False
         self._sha += 1

@@ -118,6 +118,9 @@ async def project_activity(
             label=detailed.progress.label,
             target=detailed.progress.target,
             files=list(detailed.progress.files),
+            phase_index=detailed.progress.phase_index,
+            phase_total=detailed.progress.phase_total,
+            phase_id=detailed.progress.phase_id,
         )
     )
 

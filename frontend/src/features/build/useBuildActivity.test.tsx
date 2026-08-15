@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { EVENT_BUFFER, appendEvent, useRealtimeStore } from '../../lib/stores/realtimeStore';
 import type { RealtimeEvent } from '../../lib/wsClient';
-import { useBuildActivity } from './useBuildActivity';
+import { BUILD_STEPS, STEP_LABELS, useBuildActivity } from './useBuildActivity';
 
 const PROJECT = 'p1';
 let seq = 0;
@@ -27,6 +27,25 @@ function progress(step: string): RealtimeEvent {
     project_id: PROJECT,
     stage: 'build',
     payload: { stage: 'build', step },
+    seq,
+    ts: '',
+  };
+}
+
+function phase(
+  id: string,
+  title: string,
+  kind: string,
+  status: string,
+  index: number,
+  total: number,
+): RealtimeEvent {
+  seq += 1;
+  return {
+    event: 'build.phase',
+    project_id: PROJECT,
+    stage: 'build',
+    payload: { stage: 'build', phase_id: id, title, kind, status, index, total },
     seq,
     ts: '',
   };
@@ -152,5 +171,83 @@ describe('useBuildActivity', () => {
 
     emit(write('run-two.ts'));
     expect(result.current.files).toEqual(['run-two.ts']);
+  });
+
+  // ---------------------------------------------------------------- phase rail (phase-56)
+
+  it('tracks phases, index and total from build.phase events', () => {
+    const { result } = renderHook(() => useBuildActivity(PROJECT));
+
+    emit(phase('be-core', 'Backend API', 'backend', 'running', 1, 3));
+    expect(result.current.phaseIndex).toBe(1);
+    expect(result.current.phaseTotal).toBe(3);
+    expect(result.current.phases).toEqual([
+      { id: 'be-core', title: 'Backend API', kind: 'backend', status: 'running', index: 1 },
+    ]);
+
+    // The terminal announcement replaces the running one rather than adding a second row.
+    emit(
+      phase('be-core', 'Backend API', 'backend', 'done', 1, 3),
+      phase('fe-core', 'Frontend', 'frontend', 'running', 2, 3),
+    );
+    expect(result.current.phases.map((p) => [p.id, p.status])).toEqual([
+      ['be-core', 'done'],
+      ['fe-core', 'running'],
+    ]);
+    expect(result.current.phaseIndex).toBe(2);
+  });
+
+  it('keeps the rail in plan order however the events arrive', () => {
+    const { result } = renderHook(() => useBuildActivity(PROJECT));
+
+    emit(
+      phase('wiring', 'Wiring', 'wiring', 'pending', 3, 3),
+      phase('be-core', 'Backend API', 'backend', 'done', 1, 3),
+    );
+    expect(result.current.phases.map((p) => p.id)).toEqual(['be-core', 'wiring']);
+  });
+
+  it('surfaces the verify stream so the panel does not sit on the last phase label', () => {
+    const { result } = renderHook(() => useBuildActivity(PROJECT));
+
+    seq += 1;
+    emit({
+      event: 'build.verify',
+      project_id: PROJECT,
+      stage: 'build',
+      payload: { stage: 'build', step: 'typecheck' },
+      seq,
+      ts: '',
+    });
+
+    expect(result.current.step).toBe('verify');
+    expect(result.current.label).toBe(STEP_LABELS.verify);
+    expect(result.current.target).toBe('typecheck');
+  });
+
+  it('clears the rail when a new run begins', () => {
+    const { result, rerender } = renderHook(({ key }) => useBuildActivity(PROJECT, key), {
+      initialProps: { key: 0 },
+    });
+
+    emit(phase('be-core', 'Backend API', 'backend', 'done', 1, 3));
+    expect(result.current.phases).toHaveLength(1);
+
+    rerender({ key: 1 });
+    expect(result.current.phases).toEqual([]);
+    expect(result.current.phaseIndex).toBe(0);
+  });
+
+  // The direct regression guard for the 3-vs-7 mismatch: a step with no label collapses the
+  // panel's sentence to a generic "Generating…", which is what it did for `survey` / `report`.
+  it('has a non-empty label for every step in BUILD_STEPS', () => {
+    for (const step of BUILD_STEPS) {
+      expect(STEP_LABELS[step], `no label for "${step}"`).toBeTruthy();
+    }
+  });
+
+  it('keeps `failed` labelled but out of the dot list (it is terminal, not a step)', () => {
+    expect(STEP_LABELS.failed).toBeTruthy();
+    expect([...BUILD_STEPS]).not.toContain('failed');
   });
 });

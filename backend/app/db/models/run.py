@@ -25,10 +25,19 @@ class RunProgress(BaseModel):
     and see the step it is on and everything it has written so far.
     """
 
-    step: str = ""  # the coarse phase: survey | plan | implement | report | failed
+    # The coarse step: instantiate_skeleton | survey | plan | phase | implement | verify | repair |
+    # report | failed. (`phase` is phase-56's per-phase implement step; `implement` remains for
+    # runs recorded before it, and for the unphased path.)
+    step: str = ""
     label: str = ""  # human sentence for the current action ("Installing dependencies")
     target: str = ""  # the file/command the action concerns, when meaningful
     files: list[str] = Field(default_factory=list)  # written this run, in order
+    # Which build phase is in flight (phase-56). All defaulted, so Run documents written before
+    # phasing deserialize unchanged; a reloaded page reattaches to the right phase from here rather
+    # than from the bounded realtime ring.
+    phase_index: int = 0  # 1-based; 0 means "no phase in flight"
+    phase_total: int = 0
+    phase_id: str = ""
     updated_at: datetime = Field(default_factory=utcnow)
 
 

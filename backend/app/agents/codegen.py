@@ -21,20 +21,21 @@ skeleton conventions), never the whole repo — mirroring the repair loop's disc
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from beanie import PydanticObjectId
 
-from app.agents.anthropic_client import STOP_MAX_TURNS, AnthropicClient
-from app.agents.models import TaskKind
-from app.agents.prompts import system_prompt
-from app.agents.prompts.codegen import (
-    CODEGEN_SYSTEM_EXTRA,
-    PLAN_SYSTEM_EXTRA,
-    implement_user_prompt,
-    plan_user_prompt,
+from app.agents.anthropic_client import AnthropicClient
+from app.agents.build_phases import (
+    BuildPlanAborted,
+    BuildPlanner,
+    PhaseOutcome,
+    PhaseRunner,
+    story_so_far,
 )
+from app.agents.build_plan import PHASE_DONE, PHASE_PENDING, BuildPlan
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.agents.tools.registry import ToolDispatch, ToolRegistry
@@ -115,9 +116,37 @@ STEP_LABELS: dict[str, str] = {
     "survey": "Surveying existing code",
     "plan": "Planning the build",
     "implement": "Writing feature code",
+    "phase": "Implementing a phase",  # phase-56 — the per-phase implement step
     "report": "Finishing up",
     "failed": "Build failed",
 }
+
+
+@dataclass
+class _PhaseLoopResult:
+    """What the phase loop achieved, and why it stopped early if it did."""
+
+    phases: list[PhaseOutcome]
+    stop_reason: str | None
+    summary: str
+    note: str = ""
+
+    @property
+    def complete(self) -> bool:
+        return all(p.status == PHASE_DONE for p in self.phases)
+
+    @property
+    def follow_up(self) -> str:
+        if self.stop_reason == "environment":
+            return (
+                f"The build stopped because {self.note} — this is a sandbox problem, not a code "
+                "problem. Fix it and run Build again."
+            )
+        return (
+            "The build did not finish — it ran past its wall-clock budget. Run Build again to "
+            "continue from the first unfinished phase."
+        )
+
 
 #: Human labels for the tool calls the build makes, surfaced as `progress` events. The long,
 #: silent-looking waits are install/preview/tests — naming them is the whole point.
@@ -148,6 +177,12 @@ class BuildReport:
     tests_passed: bool | None
     summary: str
     plan: str
+    # phase-56 additions — ALL defaulted, so a report artifact written before phasing still parses
+    # through `_previous_report` (and renders unchanged in the Build panel).
+    phases: list[PhaseOutcome] = field(default_factory=list)
+    verification: dict[str, Any] | None = None
+    outcome: str = ""
+    stop_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -160,7 +195,16 @@ class BuildReport:
             "tests_passed": self.tests_passed,
             "summary": self.summary,
             "plan": self.plan,
+            "phases": [p.to_dict() for p in self.phases],
+            "verification": self.verification,
+            "outcome": self.outcome,
+            "stop_reason": self.stop_reason,
         }
+
+    @property
+    def phases_complete(self) -> bool:
+        """Every planned phase reached ``done``. Vacuously true for an unphased report."""
+        return all(p.status == PHASE_DONE for p in self.phases)
 
 
 @dataclass
@@ -224,6 +268,9 @@ class CodegenAgent:
         self._artifacts = artifacts or ArtifactService()
         self._designs = DesignService(self._artifacts)
         self._stages = StageStateRepo()
+        # phase-56: the build is planned into phases and implemented one at a time.
+        self._planner = BuildPlanner(self._client, self._artifacts)
+        self._phases = PhaseRunner(self._client)
 
     async def run(
         self,
@@ -290,31 +337,43 @@ class CodegenAgent:
         if instruction:
             notes.insert(0, f"Change request: {instruction}")
 
-        # Step 1 — plan (Haiku).
+        # Step 1 — plan (Haiku). The phase plan lands in `phase-plan/` and as a versioned artifact.
         await self._emit(channel, "plan", run)
-        plan = await self._plan(
-            project_id, run, project.name, design, requirements, channel, instruction, existing
+        build_plan = await self._planner.plan(
+            project,
+            run,
+            ctx=ctx,
+            channel=channel,
+            design=design,
+            requirements=requirements,
+            features=features,
+            existing=existing,
+            instruction=instruction,
         )
+        plan = build_plan.to_prose()  # BuildReport.plan keeps its existing string shape
 
-        # Steps 2–3 — implement + verify boot (Sonnet, bounded tool-use loop).
-        await self._emit(channel, "implement", run)
+        # Step 2 — implement phase by phase (Sonnet, one *small* bounded loop each). Resume skips
+        # every phase the last report already recorded as `done`.
+        resume_from, carried = await self._resume_point(project_id, build_plan, fresh=fresh)
+        if resume_from:
+            notes.append(
+                f"Resuming at phase {resume_from + 1} of {len(build_plan.phases)} — "
+                f"{resume_from} phase(s) already done."
+            )
         try:
-            impl = await self._client.run_tool_loop(
-                task_kind=TaskKind.codegen,
-                project_id=project_id,
-                run=run,
-                system=system_prompt(CODEGEN_SYSTEM_EXTRA),
-                messages=[
-                    {
-                        "role": "user",
-                        "content": implement_user_prompt(
-                            project.name, plan, design, requirements, notes, existing
-                        ),
-                    }
-                ],
-                tools=self._model_tools(),
-                tool_dispatch=dispatch,
+            phased = await self._run_phases(
+                project,
+                run,
+                ctx=ctx,
                 channel=channel,
+                dispatch=dispatch,
+                plan=build_plan,
+                design=design,
+                requirements=requirements,
+                existing=existing,
+                notes=notes,
+                resume_from=resume_from,
+                carried=carried,
             )
         except Exception as exc:
             # Persist what the failed attempt DID achieve. Without this the files it wrote are
@@ -334,6 +393,9 @@ class CodegenAgent:
                 tests_passed=tracker.tests_passed,
                 summary=f"Build failed before completing: {exc}",
                 plan=plan,
+                phases=list(carried),
+                outcome="failed",
+                stop_reason="failed",
             )
             await self._persist_report(project_id, partial, failed=True)
             await emit(
@@ -344,24 +406,26 @@ class CodegenAgent:
             )
             raise
 
-        # Step 4 — build report.
+        # Step 3 — build report.
         await self._emit(channel, "report", run)
-        # The loop can stop at its safety bound (or on a model that repeats itself) with real work
-        # already committed. That is an *unfinished* build, not a failed one: say so, keep the
-        # files, and point at the resume path — the next run extends them rather than restarting.
+        # A phased build can stop short: the wall-clock deadline expires, or the sandbox breaks
+        # mid-plan. That is an *unfinished* build, not a failed one: say so, keep the files, and
+        # point at the resume path — the next run continues at the first phase that is not `done`.
         follow_ups = self._follow_ups(tracker)
-        summary = impl.text.strip()
-        if not impl.finished:
-            reason = (
-                f"stopped after {impl.turns} tool turns (its safety bound)"
-                if impl.stopped == STOP_MAX_TURNS
-                else "stopped because it began repeating the same action"
-            )
+        summary = phased.summary.strip()
+        if phased.stop_reason is not None:
+            follow_ups.insert(0, phased.follow_up)
+            notes = [*notes, f"Build unfinished: {phased.note}."]
+            summary = summary or f"Build unfinished — {phased.note}."
+        elif not phased.complete:
+            unfinished = [p for p in phased.phases if p.status != PHASE_DONE]
+            detail = "; ".join(f"{p.title} ({p.note or p.status})" for p in unfinished)
             follow_ups.insert(
-                0, f"The build did not finish — it {reason}. Run Build again to continue from here."
+                0,
+                f"The build did not finish — {len(unfinished)} phase(s) did not complete: "
+                f"{detail}. Run Build again to continue from the first unfinished phase.",
             )
-            notes = [*notes, f"Build unfinished: {reason}."]
-            summary = summary or f"Build unfinished — it {reason}."
+            notes = [*notes, f"Build unfinished: {detail}."]
         report = BuildReport(
             boot_status=tracker.boot_status(),
             files_changed=sorted(tracker.files_written),
@@ -372,6 +436,9 @@ class CodegenAgent:
             tests_passed=tracker.tests_passed,
             summary=summary,
             plan=plan,
+            phases=phased.phases,
+            outcome=("complete" if phased.complete and phased.stop_reason is None else "partial"),
+            stop_reason=phased.stop_reason,
         )
         await self._persist_report(project_id, report)
         await emit(
@@ -382,31 +449,155 @@ class CodegenAgent:
         )
         return report
 
-    # -- steps ---------------------------------------------------------------------------
+    # -- phases (phase-56) ---------------------------------------------------------------
 
-    async def _plan(
+    async def _run_phases(
         self,
-        project_id: PydanticObjectId,
+        project: Project,
         run: Run,
-        project_name: str,
+        *,
+        ctx: ToolContext,
+        channel: str,
+        dispatch: ToolDispatch,
+        plan: BuildPlan,
         design: str | None,
         requirements: str | None,
-        channel: str,
-        instruction: str | None = None,
-        existing: str | None = None,
-    ) -> str:
-        user = plan_user_prompt(project_name, design, requirements, existing)
-        if instruction:
-            user += f"\n\nThe user requested this specific change — plan for it: {instruction}"
-        result = await self._client.run_tool_loop(
-            task_kind=TaskKind.summarize,  # routes to MODEL_ROUTING (Haiku) — cheap planning
-            project_id=project_id,
-            run=run,
-            system=system_prompt(PLAN_SYSTEM_EXTRA),
-            messages=[{"role": "user", "content": user}],
-            channel=channel,
+        existing: str | None,
+        notes: list[str],
+        resume_from: int,
+        carried: list[PhaseOutcome],
+    ) -> _PhaseLoopResult:
+        """Implement the plan one phase at a time, rewriting ``phase-plan/`` as it goes.
+
+        A failed phase is **carried, not fatal** — aborting on the first one would waste every
+        phase after it, and some failures genuinely need the whole app in view to fix (a frontend
+        page against a backend route written two phases later). They are recorded and handed to
+        phase-55's integration repair. The two things that *do* stop the build are the wall-clock
+        deadline and an `environment` verdict, neither of which more phases can improve.
+        """
+        deadline = time.monotonic() + float(get_config().get("build_max_wall_clock_s"))
+        # `carried` is the accumulator, not a seed to copy: if this raises part-way, the caller's
+        # partial report must still record the phases that DID finish, or the next build re-runs
+        # them from scratch.
+        outcomes: list[PhaseOutcome] = carried
+        total = len(plan.phases)
+        tools = self._model_tools()
+        stop_reason: str | None = None
+        note = ""
+
+        for index, phase in enumerate(plan.phases[resume_from:], start=resume_from + 1):
+            if time.monotonic() > deadline:
+                stop_reason = "wall_clock"
+                note = "it ran past the build's wall-clock budget"
+                break
+            files_before = set(run.progress.files)
+            try:
+                outcome = await self._phases.run(
+                    project,
+                    run,
+                    phase,
+                    ctx=ctx,
+                    channel=channel,
+                    dispatch=dispatch,
+                    tools=tools,
+                    index=index,
+                    total=total,
+                    project_name=project.name,
+                    design=design,
+                    requirements=requirements,
+                    existing=existing,
+                    story_so_far=story_so_far(outcomes),
+                    notes=notes if index == resume_from + 1 else None,
+                    files_before=files_before,
+                )
+            except BuildPlanAborted as abort:
+                # The sandbox is broken, not the code — every further phase is wasted spend.
+                stop_reason = "environment"
+                note = abort.reason
+                notes.append(f"Build stopped — {abort.reason}. {abort.hint}".strip())
+                break
+            outcomes.append(outcome)
+            # Rewrite the workspace checklist after EVERY phase, so it visibly fills in.
+            await self._planner.write_workspace(
+                project, ctx, plan, {o.id: o.status for o in outcomes}
+            )
+
+        remaining = [p for p in plan.phases if p.id not in {o.id for o in outcomes}]
+        for phase in remaining:  # never silently drop a phase the build did not reach
+            outcomes.append(
+                PhaseOutcome(
+                    id=phase.id,
+                    title=phase.title,
+                    kind=phase.kind,
+                    status=PHASE_PENDING,
+                    note="not reached",
+                )
+            )
+        if remaining:
+            await self._planner.write_workspace(
+                project, ctx, plan, {o.id: o.status for o in outcomes}
+            )
+
+        done = [o.title for o in outcomes if o.status == PHASE_DONE]
+        # The last phase's own closing line is the truest summary of the build; the phase tally is
+        # the fallback for a build that never got a model to say anything useful.
+        summary = next(
+            (o.summary for o in reversed(outcomes) if o.summary),
+            (
+                f"Built {len(done)} of {len(plan.phases)} planned phase(s): " + ", ".join(done)
+                if done
+                else "No phase completed."
+            ),
         )
-        return result.text.strip() or "(no explicit plan produced)"
+        return _PhaseLoopResult(
+            phases=outcomes, stop_reason=stop_reason, summary=summary, note=note
+        )
+
+    async def _resume_point(
+        self, project_id: PydanticObjectId, plan: BuildPlan, *, fresh: bool
+    ) -> tuple[int, list[PhaseOutcome]]:
+        """Where to restart: the first phase the last report did **not** record as ``done``.
+
+        The **report is authoritative**; workspace file presence is corroborating evidence only. A
+        phase that wrote three of five files leaves those three on disk, and treating that as
+        "done" would skip the remaining two forever.
+        """
+        if fresh:
+            return 0, []
+        previous = await self._previous_report(project_id)
+        if previous is None or not previous.phases:
+            return 0, []
+        by_id = {p.id: p for p in previous.phases}
+        carried: list[PhaseOutcome] = []
+        for index, phase in enumerate(plan.phases):
+            recorded = by_id.get(phase.id)
+            if recorded is None or recorded.status != PHASE_DONE:
+                return index, carried
+            carried.append(recorded)
+        return len(plan.phases), carried
+
+    async def finalize_report(
+        self,
+        project_id: PydanticObjectId,
+        report: BuildReport,
+        verification: dict[str, Any],
+        *,
+        stop_reason: str | None,
+    ) -> BuildReport:
+        """Fold the verification outcome into the report and persist it as a new version.
+
+        Codegen persists its report *before* verification runs (so a build that dies during verify
+        still leaves a record of what it wrote). This adds the verdict afterwards as a second
+        version rather than overwriting the first — artifacts are versioned, never mutated (§7),
+        and the panel reads the newest one.
+        """
+        report.verification = verification
+        # A phase-level stop (wall_clock / environment) survives; verification's reason refines a
+        # build that got all the way through its phases.
+        report.stop_reason = report.stop_reason or stop_reason
+        report.outcome = "complete" if report.stop_reason is None else "partial"
+        await self._persist_report(project_id, report)
+        return report
 
     # -- context -------------------------------------------------------------------------
 
@@ -575,6 +766,17 @@ class CodegenAgent:
             tests_passed=data.get("tests_passed"),
             summary=str(data.get("summary", "")),
             plan=str(data.get("plan", "")),
+            # phase-56 fields; absent on every report written before phasing, hence the defaults.
+            phases=[
+                PhaseOutcome.from_dict(p) for p in data.get("phases", []) if isinstance(p, dict)
+            ],
+            verification=(
+                data.get("verification") if isinstance(data.get("verification"), dict) else None
+            ),
+            outcome=str(data.get("outcome", "")),
+            stop_reason=(
+                str(data["stop_reason"]) if isinstance(data.get("stop_reason"), str) else None
+            ),
         )
 
     def _follow_ups(self, tracker: _BuildTracker) -> list[str]:
@@ -608,6 +810,10 @@ class CodegenAgent:
                 "tests_passed": report.tests_passed,
                 "commit": report.commit,
                 "failed": failed,
+                # phase-56: badge the report so the UI can render a summary without fetching it.
+                "phase_count": len(report.phases),
+                "outcome": report.outcome,
+                "stop_reason": report.stop_reason,
             },
         )
 

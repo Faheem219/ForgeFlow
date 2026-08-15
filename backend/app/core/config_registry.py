@@ -311,6 +311,45 @@ _KEYS: tuple[ConfigKey, ...] = (
         minimum=1,
         maximum=200,
     ),
+    ConfigKey(
+        "build_max_phases",
+        Cat.agents,
+        "int",
+        "Maximum phases in a build plan. Caps plan size and therefore the cost of a build, since "
+        "each phase is its own model loop.",
+        minimum=1,
+        maximum=30,
+    ),
+    ConfigKey(
+        "build_phase_max_tool_turns",
+        Cat.agents,
+        "int",
+        "Tool-loop turn bound for ONE build phase (the per-phase equivalent of "
+        "anthropic_max_tool_turns).",
+        minimum=5,
+        maximum=250,
+    ),
+    ConfigKey(
+        "build_phase_max_fix_attempts",
+        Cat.agents,
+        "int",
+        "How many times a phase may be handed its own typecheck errors before it is recorded as "
+        "failed and carried into integration repair.",
+        minimum=0,
+        maximum=5,
+    ),
+    ConfigKey(
+        "build_plan_dir",
+        Cat.agents,
+        "str",
+        "Workspace folder the phase plan is written to (a sibling of frontend/ and backend/).",
+    ),
+    ConfigKey(
+        "build_plan_in_workspace",
+        Cat.agents,
+        "bool",
+        "Write the phase plan into the workspace as well as persisting it as an artifact.",
+    ),
     # ---------------------------------------------------------------- budget & pricing
     ConfigKey(
         "budget_cap_inr_per_project",

@@ -55,6 +55,34 @@ async def test_returns_newest_matching_kind_even_when_another_kind_is_newer() ->
     assert latest_any is not None and latest_any.meta.get("kind") == "build_plan"
 
 
+async def test_previous_report_survives_a_plan_written_after_it() -> None:
+    """The end-to-end form of the collision: phase-56 writes a plan every build, before any phase
+    runs, so on the *next* build the newest (build, code_change) artifact is always a plan."""
+    import json
+
+    from app.agents.codegen import BUILD_REPORT_KIND, CodegenAgent
+
+    project_id = PydanticObjectId()
+    artifacts = ArtifactService()
+    await artifacts.create_version(
+        project_id,
+        Stage.build,
+        ArtifactType.code_change,
+        text=json.dumps({"boot_status": "healthy", "summary": "did the thing", "phases": []}),
+        meta={"kind": BUILD_REPORT_KIND},
+    )
+    await artifacts.create_version(
+        project_id,
+        Stage.build,
+        ArtifactType.code_change,
+        text='{"phases": []}',
+        meta={"kind": "build_plan"},
+    )
+
+    previous = await CodegenAgent()._previous_report(project_id)
+    assert previous is not None and previous.summary == "did the thing"
+
+
 async def test_returns_none_when_no_artifact_of_that_kind_exists() -> None:
     project_id = PydanticObjectId()
     artifacts = ArtifactService()

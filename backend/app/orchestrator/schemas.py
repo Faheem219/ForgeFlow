@@ -171,6 +171,10 @@ class BuildActivityPublic(BaseModel):
     label: str = ""
     target: str = ""
     files: list[str] = Field(default_factory=list)
+    # The phase in flight (phase-56), so a reload reattaches to the right row of the phase rail.
+    phase_index: int = 0
+    phase_total: int = 0
+    phase_id: str = ""
 
 
 class ActivityPublic(BaseModel):
