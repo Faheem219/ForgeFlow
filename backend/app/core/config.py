@@ -122,6 +122,16 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     openai_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
 
+    # --- Provider request compatibility (phase-57) ---
+    # Endpoints disagree about the request schema (a reasoning-family model rejects `max_tokens` and
+    # wants `max_completion_tokens`; Mistral rejects `stream_options`). The transport reads the
+    # provider's own 400, repairs the body, retries, and remembers the working shape here — keyed by
+    # "<endpoint>|<model>", since the same base URL answers differently per model. Learned
+    # automatically; safe to clear (it is simply re-learned).
+    llm_param_quirks: str = ""
+    openai_max_param_repairs: int = 4  # per-call cap on request repairs (separate from retries)
+    openai_param_learning: bool = True  # off → seed table only; nothing learned or written
+
     # --- Agent tools (phase-21) ---
     # Prebuilt generated-app skeleton copied into /workspace by instantiate_skeleton (phase-22/23).
     # Relative paths resolve from the repo root; absolute paths are used as-is.

@@ -217,6 +217,33 @@ _KEYS: tuple[ConfigKey, ...] = (
         extra=_url_or_blank,
     ),
     ConfigKey(
+        "llm_param_quirks",
+        Cat.models,
+        "json",
+        'Learned per-endpoint/model request repairs: {"<base-url>|<model>": [{"adaptation": …}]}. '
+        "Written automatically when a provider rejects a parameter (e.g. a model that needs "
+        "max_completion_tokens instead of max_tokens). Safe to clear — it is re-learned on the "
+        "next call.",
+        extra=_valid_json_object,
+    ),
+    ConfigKey(
+        "openai_max_param_repairs",
+        Cat.models,
+        "int",
+        "Per-call cap on request repairs when an endpoint rejects a parameter. Counted separately "
+        "from the transient-retry budget; each repair must also be novel, so the loop is bounded "
+        "twice over.",
+        minimum=0,
+        maximum=10,
+    ),
+    ConfigKey(
+        "openai_param_learning",
+        Cat.models,
+        "bool",
+        "Learn and persist request repairs from provider errors. Off = use only the built-in seed "
+        "rules; nothing is written to llm_param_quirks.",
+    ),
+    ConfigKey(
         "anthropic_max_output_tokens",
         Cat.models,
         "int",

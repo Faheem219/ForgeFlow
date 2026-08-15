@@ -5,32 +5,25 @@ so cost accounting has real numbers. Mistral's schema has no such field and answ
 `422 extra_forbidden` ("Extra inputs are not permitted"), so sending it unconditionally makes
 *every* request to that provider fail. The transport drops it for endpoints that refuse it and
 keeps going; usage then reads zero there, a far better trade than not working at all.
+
+**phase-57 note.** This behaviour was originally a bespoke predicate (`_rejects_stream_options`) and
+an endpoint-keyed memo, built for this one parameter. It is now one instance of the general
+compatibility mechanism (`app.agents.provider_compat`), which reads whatever parameter the provider
+names. These tests are kept as the regression guard that generalising did not lose the specific
+case — the guarantees are unchanged, only the route to them is.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import httpx
 import pytest
 
-from app.agents.anthropic_client import (
-    MessageRequest,
-    _rejects_stream_options,
-    build_openai_params,
-)
+from app.agents.anthropic_client import MessageRequest, build_openai_params
+from app.agents.provider_compat import Adaptation, apply_repairs, diagnose_param_error
 
 openai_sdk = pytest.importorskip("openai", reason="the openai SDK is optional")
-
-
-@pytest.fixture(autouse=True)
-def _clear_memo() -> Iterator[None]:
-    from app.agents import anthropic_client
-
-    anthropic_client._NO_STREAM_USAGE.clear()
-    yield
-    anthropic_client._NO_STREAM_USAGE.clear()
 
 
 def _request(**overrides: Any) -> MessageRequest:
@@ -50,6 +43,16 @@ def _status_error(status: int, message: str) -> Any:
     return openai_sdk.APIStatusError(message, response=response, body=None)
 
 
+def _drop_stream_options(request: MessageRequest) -> dict[str, Any]:
+    """The body a strict endpoint gets, once the transport has learned it refuses the trailer."""
+    params = build_openai_params(request)
+    repair = diagnose_param_error(
+        _status_error(422, "Extra inputs are not permitted: stream_options"), params
+    )
+    assert repair is not None and repair.adaptation is Adaptation.drop
+    return apply_repairs(params, [repair])
+
+
 # ---------------------------------------------------------------- the request body
 
 
@@ -61,7 +64,7 @@ def test_the_usage_trailer_is_requested_by_default() -> None:
 
 def test_a_strict_endpoint_gets_a_body_it_accepts() -> None:
     """Everything left must be a documented Mistral chat-completions field."""
-    params = build_openai_params(_request(), stream_usage=False)
+    params = _drop_stream_options(_request())
 
     assert "stream_options" not in params
     mistral_fields = {"model", "messages", "max_tokens", "stream", "tools", "tool_choice"}
@@ -69,7 +72,7 @@ def test_a_strict_endpoint_gets_a_body_it_accepts() -> None:
 
 
 def test_tools_are_translated_for_a_strict_endpoint() -> None:
-    params = build_openai_params(
+    params = _drop_stream_options(
         _request(
             tools=[
                 {
@@ -78,8 +81,7 @@ def test_tools_are_translated_for_a_strict_endpoint() -> None:
                     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}},
                 }
             ]
-        ),
-        stream_usage=False,
+        )
     )
 
     assert params["tools"][0]["type"] == "function"
@@ -102,7 +104,13 @@ def test_tools_are_translated_for_a_strict_endpoint() -> None:
     ],
 )
 def test_a_refused_usage_trailer_is_recognised(message: str) -> None:
-    assert _rejects_stream_options(_status_error(422, message)) is True
+    params = build_openai_params(_request())
+
+    repair = diagnose_param_error(_status_error(422, message), params)
+
+    assert repair is not None
+    assert repair.adaptation is Adaptation.drop
+    assert repair.param == "stream_options"
 
 
 @pytest.mark.parametrize(
@@ -116,9 +124,15 @@ def test_a_refused_usage_trailer_is_recognised(message: str) -> None:
 )
 def test_unrelated_failures_are_not_mistaken_for_it(message: str) -> None:
     """A wrong guess here would silently disable usage accounting for a healthy provider."""
-    assert _rejects_stream_options(_status_error(422, message)) is False
+    params = build_openai_params(_request())
+
+    repair = diagnose_param_error(_status_error(422, message), params)
+
+    assert repair is None or repair.param != "stream_options"
 
 
 def test_a_server_error_naming_stream_options_is_not_treated_as_a_schema_refusal() -> None:
     """A 500 is an outage, not a rejected field — that path must stay with the transient retries."""
-    assert _rejects_stream_options(_status_error(500, "stream_options blew up")) is False
+    params = build_openai_params(_request())
+
+    assert diagnose_param_error(_status_error(500, "stream_options blew up"), params) is None

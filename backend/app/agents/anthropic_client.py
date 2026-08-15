@@ -24,7 +24,7 @@ import asyncio
 import json
 import logging
 import random
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -33,6 +33,15 @@ from beanie import PydanticObjectId
 from app.agents.budget import enforce_budget
 from app.agents.cost import Usage, record_cost
 from app.agents.models import TaskKind, route
+from app.agents.provider_compat import (
+    ParamMemo,
+    Repair,
+    apply_repairs,
+    diagnose_param_error,
+    parse_quirks,
+    persist_quirks,
+    seed_repairs,
+)
 from app.core.config import get_config
 from app.core.errors import ProviderError, SystemError, UserError  # noqa: A004 - taxonomy name
 from app.db.models import Run
@@ -556,6 +565,52 @@ async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
     )
 
 
+def _from_completion(response: Any) -> Iterator[StreamEvent]:
+    """Fold a **non-streamed** Chat Completion into the same events the streamed path yields.
+
+    The `no_stream` repair (phase-57) exists because some models/organizations refuse
+    ``stream: true``. The loop, the agents and cost accounting must not be able to tell the two
+    paths apart, so this emits one :class:`TextDelta` with the whole message followed by the same
+    terminal :class:`TurnComplete` — sharing :func:`_parse_tool_args` and :data:`_STOP_REASONS` with
+    :func:`_accumulate` so the two cannot drift. Only *live* token streaming is lost.
+    """
+    reported = getattr(response, "usage", None)
+    usage = (
+        Usage(
+            int(getattr(reported, "prompt_tokens", 0) or 0),
+            int(getattr(reported, "completion_tokens", 0) or 0),
+        )
+        if reported is not None
+        else Usage()
+    )
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        yield TurnComplete(usage=usage)
+        return
+
+    choice = choices[0]
+    message = getattr(choice, "message", None)
+    text = str(getattr(message, "content", None) or "")
+    if text:
+        yield TextDelta(text)
+
+    tool_uses = [
+        ToolUse(
+            id=getattr(call, "id", None) or f"call_{index}",
+            name=getattr(getattr(call, "function", None), "name", "") or "",
+            input=_parse_tool_args(getattr(getattr(call, "function", None), "arguments", "") or ""),
+        )
+        for index, call in enumerate(getattr(message, "tool_calls", None) or [])
+    ]
+    finish = getattr(choice, "finish_reason", None)
+    yield TurnComplete(
+        text=text,
+        tool_uses=tool_uses,
+        usage=usage,
+        stop_reason=_STOP_REASONS.get(finish, finish) if finish else "end_turn",
+    )
+
+
 #: Substrings marking a **mid-stream** provider failure as transient. An OpenAI-compatible server
 #: (NVIDIA NIM, vLLM, Together, …) may accept a request (HTTP 200), open the SSE stream, and only
 #: then report that it is out of capacity — e.g. "ResourceExhausted: Worker local total request
@@ -597,9 +652,24 @@ def _is_transient_openai_error(exc: BaseException) -> bool:
     return False
 
 
-def _provider_message(exc: BaseException, *, produced: bool) -> str:
+#: Request repairs learned this process, shared across the per-turn transport instances and seeded
+#: from (and persisted back to) the ``llm_param_quirks`` setting.
+_PARAM_MEMO = ParamMemo()
+
+
+def _provider_message(exc: BaseException, *, produced: bool, repair: Repair | None = None) -> str:
     """A user-facing explanation for a failed provider call (rendered by the API as a 502)."""
     text = str(exc).strip() or exc.__class__.__name__
+    if repair is not None:
+        # The parameter was identified but repairing it did not help (or the repair budget ran
+        # out). Naming it is the difference between an actionable message and the opaque one that
+        # made the original report hard to diagnose.
+        return (
+            f"The model provider rejected the request over the {repair.param!r} parameter, and "
+            f"adapting it did not help ({text}). Point MODEL_CODEGEN / MODEL_ROUTING at a "
+            "different model, or clear the LLM_PARAM_QUIRKS setting if a stale learned repair is "
+            "suspected."
+        )
     if not _is_transient_openai_error(exc):
         return f"The model provider rejected the request ({text})."
     if produced:
@@ -613,56 +683,30 @@ def _provider_message(exc: BaseException, *, produced: bool) -> str:
     )
 
 
-#: Endpoints (by base URL) that answered "unknown field" to ``stream_options``. Mistral's API and
-#: Azure's serverless deployments validate the body strictly and reject anything outside their
-#: schema with a 422, so the usage trailer is dropped for them (:func:`_rejects_stream_options`).
-_NO_STREAM_USAGE: set[str] = set()
-
-
-def build_openai_params(request: MessageRequest, *, stream_usage: bool = True) -> dict[str, Any]:
+def build_openai_params(
+    request: MessageRequest, *, repairs: Iterable[Repair] = ()
+) -> dict[str, Any]:
     """Translate the loop's Anthropic-shaped request into Chat Completions params.
 
-    Pure, so the wire format is testable without a network or an SDK. ``stream_usage`` asks for the
-    token-usage trailer; it is dropped for endpoints that reject unknown fields (cost accounting
-    then reads zero tokens for that provider, which beats every call failing).
+    Pure, so the wire format is testable without a network or an SDK. ``repairs`` are the
+    compatibility adaptations for this (endpoint, model) — seeded from the known-families table and
+    learned from the provider's own errors (phase-57). They are applied last, so the canonical body
+    is always built the same way and every provider-specific difference lives in one place.
     """
     params: dict[str, Any] = {
         "model": request.model,
         "max_tokens": request.max_tokens,
         "messages": _to_openai_messages(request.system, request.messages),
         "stream": True,
+        # Asks for the token-usage trailer so cost accounting has real numbers. Endpoints that
+        # reject unknown fields (Mistral, Azure serverless) answer 422 and it is dropped as a
+        # `drop` repair like any other — usage then reads zero there, which beats every call
+        # failing outright.
+        "stream_options": {"include_usage": True},
     }
-    if stream_usage:
-        params["stream_options"] = {"include_usage": True}
     if request.tools:
         params["tools"] = _to_openai_tools(request.tools)
-    return params
-
-
-def _rejects_stream_options(exc: BaseException) -> bool:
-    """Whether this failure is the endpoint refusing ``stream_options`` as an unknown field.
-
-    Mistral answers ``422 extra_forbidden`` / "Extra inputs are not permitted" (its schema has no
-    such field), and Azure's serverless endpoints do the same. That is a *request* problem we can
-    fix ourselves rather than an outage, so it is handled separately from the transient retries.
-    """
-    text = str(exc).lower()
-    if "stream_options" not in text and "include_usage" not in text:
-        return False
-    markers = (
-        "extra_forbidden",
-        "extra inputs are not permitted",
-        "not permitted",
-        "unknown",
-        "unrecognized",
-        "unsupported",
-        "not supported",
-        "invalid",
-    )
-    if any(marker in text for marker in markers):
-        return True
-    status = getattr(exc, "status_code", None)
-    return status in (400, 422)
+    return apply_repairs(params, repairs)
 
 
 class OpenAITransport:
@@ -673,6 +717,13 @@ class OpenAITransport:
     :class:`SdkTransport`, the real network path is lazy-imported and not exercised by tests; the
     translation, stream-reassembly and retry-classification helpers it delegates to are.
     """
+
+    def __init__(self, memo: ParamMemo | None = None) -> None:
+        # The memo is process-wide so a repair learned on one turn is applied on the next: the
+        # transport itself is resolved per turn (so an admin can switch providers without a
+        # restart), which would otherwise re-learn the same quirk on every call.
+        self._memo = memo if memo is not None else _PARAM_MEMO
+        self._memo.merge(parse_quirks(str(get_config().get("llm_param_quirks"))))
 
     async def stream(  # pragma: no cover - real network path
         self, request: MessageRequest
@@ -692,48 +743,113 @@ class OpenAITransport:
             )
         client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
-        endpoint = base_url or "default"
-        params = build_openai_params(request, stream_usage=endpoint not in _NO_STREAM_USAGE)
+        async def create(params: dict[str, Any]) -> Any:
+            return await client.chat.completions.create(**params)
+
+        async for event in self.run(
+            request, create, endpoint=base_url or "default", error_type=openai.OpenAIError
+        ):
+            yield event
+
+    async def run(
+        self,
+        request: MessageRequest,
+        create: Callable[[dict[str, Any]], Awaitable[Any]],
+        *,
+        endpoint: str,
+        error_type: type[BaseException],
+    ) -> AsyncIterator[StreamEvent]:
+        """The retry + repair loop, with the network injected so it is testable without an SDK.
+
+        Two independent bounded ladders, deliberately counted separately:
+
+        - **repairs** (phase-57) fix a request the provider *described* as wrong — a 400 naming a
+          parameter. They must not consume a transient-failure retry, because they are not failures
+          in the same sense: the endpoint is healthy and told us exactly what to change.
+        - **retries** handle a provider that is unhealthy, with backoff.
+        """
+        config = get_config()
+        model = request.model
+        # Seed rules spare a wasted first call on known families; learned repairs are authoritative
+        # over them, because they came from this endpoint's own answer.
+        repairs = _merge_repairs(seed_repairs(model), self._memo.get(endpoint, model))
+        params = build_openai_params(request, repairs=repairs)
+
+        learning = bool(config.get("openai_param_learning"))
+        repair_cap = int(config.get("openai_max_param_repairs"))
+        repairs_used = 0
+        applied = {r.signature for r in repairs}
 
         # The retry spans **opening and consuming** the stream, not just opening it: a compatible
         # server can answer 200 and only then fail inside the SSE body, which is precisely the case
         # a create-only retry would miss.
         attempts = int(config.get("openai_max_retries"))
-        for attempt in range(attempts + 1):
+        attempt = 0
+        while True:
             produced = False
             try:
-                raw = await client.chat.completions.create(**params)
-                async for event in _accumulate(raw):
-                    produced = True
-                    yield event
+                raw = await create(params)
+                if params.get("stream", True):
+                    async for event in _accumulate(raw):
+                        produced = True
+                        yield event
+                else:
+                    for event in _from_completion(raw):
+                        produced = True
+                        yield event
                 return
-            except openai.OpenAIError as exc:
-                # A strict endpoint (Mistral, Azure serverless) refusing the usage trailer is a
-                # request we can repair, not an outage: drop it, remember this endpoint refuses it,
-                # and try again. Without this every call to such a provider fails with a 422.
-                if not produced and "stream_options" in params and _rejects_stream_options(exc):
-                    _NO_STREAM_USAGE.add(endpoint)
-                    params.pop("stream_options", None)
+            except error_type as exc:
+                # A request the provider *described* as wrong is one we can repair. Once tokens have
+                # been emitted the turn cannot be restarted — replaying it would duplicate streamed
+                # output in the UI — so only a pre-output failure is ever repaired or retried.
+                repair = None if produced else diagnose_param_error(exc, params)
+                if repair is not None and repairs_used < repair_cap:
+                    if repair.signature in applied:
+                        # The same fix twice means it did not work; looping would be unbounded in
+                        # everything but name. Stop and report.
+                        raise ProviderError(
+                            _provider_message(exc, produced=produced, repair=repair)
+                        ) from exc
+                    applied.add(repair.signature)
+                    repairs_used += 1
+                    params = apply_repairs(params, [repair])
                     logger.info(
-                        "%s rejects stream_options; retrying without token-usage reporting",
+                        "%s/%s rejected %r (%s); retrying with the %s repair applied",
                         endpoint,
+                        model,
+                        repair.param,
+                        repair.reason[:200],
+                        str(repair.adaptation),
                     )
-                    continue
-                # Once tokens have been emitted the turn cannot be restarted — replaying it would
-                # duplicate streamed output in the UI — so only a pre-output failure is retryable.
+                    if learning and self._memo.learn(endpoint, model, repair):
+                        await persist_quirks(self._memo)
+                    continue  # deliberately does NOT consume a transient retry
                 if produced or attempt >= attempts or not _is_transient_openai_error(exc):
-                    raise ProviderError(_provider_message(exc, produced=produced)) from exc
+                    raise ProviderError(
+                        _provider_message(exc, produced=produced, repair=repair)
+                    ) from exc
                 delay = _backoff_delay(attempt)
+                attempt += 1
                 # A silent retry chain looks identical to a hung request from the outside; say so.
                 logger.warning(
                     "model provider unavailable, retrying in %.1fs (attempt %d/%d): %s",
                     delay,
-                    attempt + 1,
+                    attempt,
                     attempts,
                     exc,
                 )
                 await asyncio.sleep(delay)
-        raise ProviderError("The model provider request failed")  # unreachable
+
+
+def _merge_repairs(seed: list[Repair], learned: list[Repair]) -> list[Repair]:
+    """Seed rules plus learned ones, with **learned winning** on the same (adaptation, param).
+
+    A seed rule is a guess about a model family; a learned repair is this endpoint's own answer
+    about this model. When they disagree, the answer wins.
+    """
+    merged = {r.signature: r for r in seed}
+    merged.update({r.signature: r for r in learned})
+    return list(merged.values())
 
 
 # --------------------------------------------------------------------- provider selection

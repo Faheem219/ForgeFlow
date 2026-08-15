@@ -70,8 +70,9 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [54](./phase-54-skeleton-demo-removal.md) | Skeleton demo removal & tool-surface hardening | 13 · Build Reliability ✚ | 21, 22, 23 | ✅ |
 | [55](./phase-55-build-verification-selfheal.md) | Build verification & bounded self-heal | 13 · Build Reliability ✚ | 23, 24, 29, 30, 31 | ✅ |
 | [56](./phase-56-phased-build-plan.md) | Phased build plan & phase-by-phase codegen | 13 · Build Reliability ✚ | 54, 55 | ✅ |
+| [57](./phase-57-provider-param-compatibility.md) | Provider-agnostic request compatibility | 12 · Admin & Config ✚ | 53, 51, 20 | ✅ |
 
-✚ *Epics 12 (phases 51–53) and 13 (phases 54–56) were added per the user's directive — see "Additions beyond the roadmap" below.*
+✚ *Epics 12 (phases 51–53, 57) and 13 (phases 54–56) were added per the user's directive — see "Additions beyond the roadmap" below.*
 
 ## Changelog (post-roadmap changes)
 
@@ -108,4 +109,8 @@ Three capabilities were requested that Section 10 did not enumerate. They are ha
 
    **No locked decision is deviated from.** The repair loop stays bounded — `phase-55` *reuses* the phase-31 controller rather than writing a second one, and adds per-phase, integration and wall-clock caps (D7 / Golden Rule 5). The skeleton is still instantiated by deterministic copy and never model-generated (the phase-22/23 directive above); `templates/app-skeleton/` is not edited at all, since the user chose prompt-only removal backed by a deterministic check. Planning still routes to Haiku and codegen to Sonnet (D4 / Golden Rule 7). Artifacts stay versioned rather than overwritten (§7) — the phase plan is a new `meta.kind` under the existing `code_change` type, since `ArtifactType` is fixed by §6. And `deploy ⇐ build` / `validate ⇐ deploy` remain the only hard prerequisites (D12): the phase plan has a deterministic fallback so Build still runs with requirements-only, design-only, or neither.
 
-All four are recorded under **Design notes** in their phase files and remain faithful to the locked decisions (fixed generated-app stack, cost discipline, secret handling).
+5. **A model call must not fail because one provider spells the request differently.** Reported against `gpt-5.4-mini` on the official OpenAI endpoint: `400 Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.` The directive: *"ensure that these kind of errors dont occur in the future not just for max_tokens param but for other params as well… find out a way to make this llm provider agnostic and not coded according to only one llm provider."* → New [`phase-57`](./phase-57-provider-param-compatibility.md) in Epic 12: the transport reads the provider's **own** 400 (which names the offending parameter, and often its replacement), repairs the body — rename, drop, `system`→`developer`, or fall back to non-streaming — retries, and remembers the working shape per `(endpoint, model)` in the phase-51 settings store. `phase-53`'s bespoke `stream_options` special case collapses into this one mechanism rather than sitting beside it.
+
+   **No locked decision is deviated from.** `MessageRequest` and the `Transport` protocol are unchanged, so the Anthropic path is untouched and the phase-20 seam still means no agent/tool/cost code knows which provider is in use. Every ladder stays bounded (D7 / Golden Rule 5): repairs are capped, must be *novel*, and are counted separately from the transient-retry budget. A rename never degrades to a drop for an output cap, so budget accounting (D13) cannot be silently uncapped. Secrets are untouched (§7), and persistence is fail-soft — a failed write costs re-learning, never a broken call.
+
+All five are recorded under **Design notes** in their phase files and remain faithful to the locked decisions (fixed generated-app stack, cost discipline, secret handling).
