@@ -38,6 +38,7 @@ from app.agents.prompts.codegen import (
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.agents.tools.registry import ToolDispatch, ToolRegistry
+from app.agents.tools.skeleton import skeleton_relpaths
 from app.core.config import get_config
 from app.core.errors import NotFoundError, UserError
 from app.db.models import Project, RequirementSpec, Run
@@ -71,16 +72,39 @@ _FEATURE_ROOTS = ("backend/src", "frontend/src")
 _INVENTORY_SKIP = {"node_modules", ".git", "dist", "build", ".cache", "coverage", ".turbo"}
 
 # Skeleton files present from instantiation; listing them as "existing feature code" would invite
-# the model to treat scaffolding as its own output.
-_SKELETON_FILES = {
-    "backend/src/app.ts",
-    "backend/src/index.ts",
-    "backend/src/config.ts",
-    "backend/src/db.ts",
-    "frontend/src/main.tsx",
-    "frontend/src/routes.tsx",
-    "frontend/src/index.css",
-}
+# the model to treat scaffolding as its own output (the phase-54 bug). The set is *derived* from the
+# template directory (`skeleton_relpaths`) rather than hand-maintained, so it can never again drift
+# behind the skeleton as files are added. This small literal is only a defensive floor for an exotic
+# environment where the template dir is unreadable.
+_SKELETON_FALLBACK = frozenset(
+    {
+        "backend/src/app.ts",
+        "backend/src/index.ts",
+        "backend/src/config.ts",
+        "backend/src/db.ts",
+        "frontend/src/main.tsx",
+        "frontend/src/routes.tsx",
+        "frontend/src/index.css",
+    }
+)
+
+# Tools withheld from the MODEL's implement loop. `instantiate_skeleton` re-copies the skeleton and
+# silently overwrites app.ts/routes.tsx — wiping the routes the build just registered. It is safe
+# only as the deterministic step-0 action the agent runs itself (see `run`), not as a model choice.
+_MODEL_EXCLUDED_TOOLS = frozenset({"instantiate_skeleton"})
+
+
+def _skeleton_paths() -> frozenset[str]:
+    """Every path the skeleton ships, so `_existing_code` never reports scaffold as feature code.
+
+    Derived from the template dir; falls back to a small floor literal only if that dir is
+    unreadable — a skeleton file is then still never mistaken for feature code.
+    """
+    try:
+        return skeleton_relpaths()
+    except UserError:  # skeleton dir missing/unreadable in an exotic env
+        return _SKELETON_FALLBACK
+
 
 _INVENTORY_MAX_FILES = 120  # a cap so a large workspace cannot blow the prompt budget
 
@@ -288,7 +312,7 @@ class CodegenAgent:
                         ),
                     }
                 ],
-                tools=self._registry.anthropic_tools(),
+                tools=self._model_tools(),
                 tool_dispatch=dispatch,
                 channel=channel,
             )
@@ -423,6 +447,15 @@ class CodegenAgent:
 
     # -- helpers -------------------------------------------------------------------------
 
+    def _model_tools(self) -> list[dict[str, Any]]:
+        """The tool schemas handed to the implement loop: the full registry minus the tools that
+        are safe deterministically but destructive as a model choice (see `_MODEL_EXCLUDED_TOOLS`).
+
+        `self._registry` stays the *full* registry, so the agent's own step-0 dispatch of
+        `instantiate_skeleton` still resolves.
+        """
+        return self._registry.anthropic_tools(exclude=set(_MODEL_EXCLUDED_TOOLS))
+
     def _make_dispatch(
         self, ctx: ToolContext, tracker: _BuildTracker, channel: str, run: Run
     ) -> ToolDispatch:
@@ -479,6 +512,7 @@ class CodegenAgent:
         Paths + sizes only — the model pulls contents with ``read_file`` when it actually needs them
         (§7 cost discipline: never feed the whole repo when a listing suffices).
         """
+        skeleton = _skeleton_paths()  # derived once; every file the skeleton itself ships
         found: list[tuple[str, int]] = []
         for root in _FEATURE_ROOTS:
             try:
@@ -492,7 +526,7 @@ class CodegenAgent:
                 parts = path.split("/")
                 if any(part in _INVENTORY_SKIP for part in parts):
                     continue
-                if path in _SKELETON_FILES:
+                if path in skeleton:
                     continue
                 found.append((path, int(getattr(node, "size", 0) or 0)))
 

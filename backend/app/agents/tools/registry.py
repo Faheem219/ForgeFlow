@@ -73,9 +73,17 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def anthropic_tools(self) -> list[dict[str, Any]]:
-        """The tool list to hand the phase-20 client."""
-        return [tool.anthropic_schema() for tool in self._tools.values()]
+    def anthropic_tools(self, exclude: set[str] | None = None) -> list[dict[str, Any]]:
+        """The tool list to hand the phase-20 client, optionally dropping tools by name.
+
+        ``exclude`` lets a caller withhold a tool that is safe to run deterministically but unsafe
+        as a model choice — the build loop uses it to hide ``instantiate_skeleton`` (phase-54),
+        which re-copies the skeleton and overwrites app.ts/routes.tsx if the model calls it again.
+        """
+        excluded = exclude or set()
+        return [
+            tool.anthropic_schema() for tool in self._tools.values() if tool.name not in excluded
+        ]
 
     async def dispatch(self, ctx: ToolContext, name: str, raw_args: dict[str, Any]) -> str:
         tool = self._tools.get(name)

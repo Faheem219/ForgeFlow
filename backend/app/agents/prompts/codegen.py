@@ -37,7 +37,18 @@ CODEGEN_SYSTEM_EXTRA = (
     "built and any follow-ups.\n"
     "Resuming: a build may run against a workspace an earlier build already wrote to (it may have "
     "failed part-way). Never restart from scratch when feature code is already listed as present — "
-    "read what exists, keep what is correct, and write only the missing or incomplete parts."
+    "read what exists, keep what is correct, and write only the missing or incomplete parts.\n"
+    "Product surface: the skeleton ships PLACEHOLDER demo files that are NOT part of the product. "
+    "Each MUST be OVERWRITTEN (never deleted) so nothing of the template survives into the "
+    "finished app: `frontend/src/pages/HomePage.tsx` — replace with the app's real landing page; "
+    "`frontend/src/routes.tsx` — the INDEX route must render a real feature page, so replace the "
+    "placeholder child, not merely add siblings after the FORGEFLOW:ROUTES marker; "
+    "`frontend/src/components/Layout.tsx` — the wordmark must be the app's name; "
+    "`frontend/index.html` — the `<title>` must be the app's name; "
+    "`frontend/src/App.test.tsx` and `frontend/e2e/home.spec.ts` — REWRITE them in place to assert "
+    "real app content (deleting a test file makes the test run exit with 'No test files found', a "
+    "false failure). The bar: the finished app contains no `ForgeFlow`, no `Your app starts here`, "
+    "and no `Learn Vite`."
 )
 
 
@@ -62,11 +73,14 @@ def format_existing(inventory: str | None) -> str:
     if not inventory:
         return "Existing feature code: none — this is the first build on a bare skeleton."
     return (
-        "Existing feature code (from earlier builds — ALREADY ON DISK):\n"
+        "Repository map — FEATURE code from earlier builds, ALREADY ON DISK "
+        "(paths + sizes; use `read_file` for contents):\n"
         f"{inventory}\n"
-        "Treat this as work already done. Do NOT rewrite a file that is already correct: use "
-        "`read_file` to check anything you intend to change, then write ONLY what is missing, "
-        "incomplete, or required by the request above. Finishing a half-built feature is the goal."
+        "This is your record of what already exists. The scaffold is NOT listed here and is not "
+        "yours to rewrite. Recognise this functionality: modify the file above in place rather "
+        "than creating a duplicate, and write ONLY what is missing, incomplete, or required by "
+        "the request. Do NOT rewrite a file that is already correct. Finishing a half-built "
+        "feature is the goal."
     )
 
 

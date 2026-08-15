@@ -51,7 +51,7 @@ def _inventory_block(text: str) -> str:
     """Just the file listing — between the header and the instruction that follows it."""
     start = text.find("ALREADY ON DISK")
     assert start != -1, "no inventory block was sent"
-    end = text.find("Treat this as work already done", start)
+    end = text.find("This is your record", start)
     return text[start : end if end != -1 else len(text)]
 
 
