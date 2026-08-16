@@ -1,0 +1,98 @@
+<mxfile host="app.diagrams.net" agent="ForgeFlow" version="24.7.17">
+  <diagram id="fig2-stages" name="Fig 2 - Non-linear Stage Model">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1150" pageHeight="720" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Conductor -->
+        <mxCell id="cond" value="CONDUCTOR — the only component that decides whether a transition is legal&#10;intent = { message, target_stage, action ∈ refine | proceed | skip }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="30" width="600" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- Entry node -->
+        <mxCell id="entry" value="USER&#10;may enter at&#10;ANY stage" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="270" width="120" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Stages -->
+        <mxCell id="s1" value="REQUIREMENTS&#10;&#10;RequirementSpec&#10;features → acceptance&#10;criteria" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="225" y="255" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="DESIGN&#10;&#10;DesignProvider&#10;Stitch / Figma&#10;versioned artifacts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="395" y="255" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="BUILD&#10;&#10;Codegen agent over&#10;the fixed skeleton&#10;(React/Express/Mongo)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="565" y="255" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="TEST + REPAIR&#10;&#10;test-gen → run →&#10;BOUNDED diff-aware&#10;repair loop (Fig. 3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=3;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="735" y="255" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="DEPLOY&#10;&#10;infra analyzer →&#10;Vercel FE + Render BE&#10;+ Atlas DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="905" y="255" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="VALIDATE&#10;&#10;E2E re-run against&#10;the LIVE URL&#10;+ repair path" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="255" width="60" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- forward edges -->
+        <mxCell id="f1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="s3" target="s4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f4" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#B00000;" edge="1" parent="1" source="s4" target="s5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f5" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#B00000;" edge="1" parent="1" source="s5" target="s6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- hard prerequisite gate labels -->
+        <mxCell id="g1" value="HARD PREREQ&#10;deploy ⇐ build" style="text;html=1;align=center;fontSize=10;fontColor=#B00000;fontStyle=1;labelBackgroundColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="850" y="200" width="110" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" value="HARD PREREQ&#10;validate ⇐ deploy" style="text;html=1;align=center;fontSize=10;fontColor=#B00000;fontStyle=1;labelBackgroundColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="200" width="115" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" value="These two are the ONLY mandatory orderings in the system.&#10;Every other arrow below is optional." style="text;html=1;align=center;fontSize=11;fontColor=#B00000;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="780" y="150" width="360" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- enter-anywhere edges -->
+        <mxCell id="ea1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1;endArrow=classic;strokeColor=#555555;dashed=1;" edge="1" parent="1" source="entry" target="s1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ea2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1;endArrow=classic;strokeColor=#555555;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="entry" target="s3">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="100" y="470" /><mxPoint x="635" y="470" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="ea3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1;endArrow=classic;strokeColor=#555555;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="entry" target="s4">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="100" y="510" /><mxPoint x="805" y="510" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="eal" value="ENTER ANYWHERE (D12) — a project may start at build with the user's own designs,&#10;or at test with an existing workspace; no stage is a precondition for entry" style="text;html=1;align=left;fontSize=11;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="140" y="525" width="520" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- skip self loops -->
+        <mxCell id="sk1" value="skip" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="s2" target="s4">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="465" y="215" /><mxPoint x="805" y="215" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="sk2" value="skip testing" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="s3" target="s5">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="635" y="120" /><mxPoint x="940" y="120" /></Array></mxGeometry>
+        </mxCell>
+
+        <!-- jump back / refine -->
+        <mxCell id="jb" value="JUMP BACK / REFINE — re-entering a completed stage opens a new conversation round;&#10;outputs become NEW artifact versions (never overwritten)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;verticalAlign=bottom;fontSize=11;" edge="1" parent="1" source="s5" target="s1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="975" y="610" /><mxPoint x="295" y="610" /></Array></mxGeometry>
+        </mxCell>
+
+        <!-- staleness cascade -->
+        <mxCell id="stale" value="STALENESS CASCADE — refining an upstream stage marks every downstream stage `stale`,&#10;never deleted; stale stages remain viewable and are re-runnable on demand" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#333333;dashed=1;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="225" y="405" width="650" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="stl1" style="edgeStyle=none;html=1;strokeWidth=1;endArrow=classic;strokeColor=#777777;dashed=1;" edge="1" parent="1" source="s1" target="stale"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- legend -->
+        <mxCell id="leg" value="StageState.status ∈ { empty · in_progress · awaiting_user · complete · skipped · stale }&#10;One independent StageState per stage per project — this is what makes non-linearity an invariant&#10;rather than a UI affordance. Downstream handlers must tolerate missing or stale upstream artifacts." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#333333;fontSize=11;align=left;spacingLeft=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="700" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="LEGEND&#10;──── solid    = normal forward progression&#10;╌╌╌╌ dashed  = optional (skip / enter-anywhere)&#10;━━━━ red      = the two hard prerequisites" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;align=left;spacingLeft=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="770" y="640" width="365" height="62" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
