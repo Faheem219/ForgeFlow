@@ -71,6 +71,11 @@ services:
       # dashboard + API can read host-generated eval/results/*.json (phase-44/45). In-container
       # RESULTS_DIR resolves to /eval/results, which this maps onto the host's eval/results.
       - ../eval:/eval:ro
+      # The control plane creates the per-project sandboxes on the HOST daemon, so it needs the
+      # socket. Without this, build/preview/test/deploy all report "Sandbox runtime unavailable".
+      # Dev-only trade-off: the api container gains host-Docker (~root) access. Never in prod.
+      # Colima: override with DOCKER_SOCK=${HOME}/.colima/default/docker.sock if the path is absent.
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
       - "8000:8000"
 
