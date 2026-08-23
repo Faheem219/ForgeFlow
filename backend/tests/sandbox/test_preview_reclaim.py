@@ -7,11 +7,19 @@ and the decisions made from its output, without needing a Docker daemon.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import shlex
+import shutil
 import subprocess
+import sys
+import time
+
+import pytest
 
 from app.sandbox.ports import (
     BUSY_MARKER,
+    KILL_TREE_FUNCTIONS,
     PIDFILE_DIR,
     parse_busy_ports,
     parse_process_count,
@@ -107,3 +115,99 @@ def test_an_unreadable_process_count_is_none_not_zero() -> None:
     """Zero would read as "no processes", which would silence the pressure warning."""
     assert parse_process_count("") is None
     assert parse_process_count("ls: cannot access\n") is None
+
+
+# --------------------------------------------------------------------- the process-tree walk
+#
+# These execute the real shell against real processes. A container run caught what string matching
+# could not: the first _kill_tree was recursive, and POSIX sh has no lexical scope, so recursing
+# clobbered the caller's `_p` and the OUTERMOST process survived. The port still freed (its child
+# died), so every port-level check passed while orphans accumulated toward the PID ceiling — which
+# is the failure this module exists to prevent.
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32" or shutil.which("pgrep") is None,
+    reason="needs a POSIX shell with pgrep",
+)
+
+
+def _spawn_parent_with_child() -> subprocess.Popen[bytes]:
+    """A parent that keeps running after its child dies — the pnpm→vite shape.
+
+    The `exec` and the foreground `sleep` are both load-bearing. An earlier fixture used
+    ``sleep 30 & wait``, where killing the child makes ``wait`` return and the parent exits *by
+    itself* — so the test passed against the recursive implementation it was written to catch.
+    Here the parent's own lifetime is independent of the child's, so only an actual kill ends it.
+    """
+    return subprocess.Popen(  # noqa: S602 - a fixed, literal command
+        ["sh", "-c", "sleep 30 & exec sleep 30"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
+def _child_pids(pid: int) -> list[int]:
+    out = subprocess.run(
+        ["pgrep", "-P", str(pid)], capture_output=True, text=True, check=False
+    ).stdout
+    return [int(line) for line in out.split() if line.isdigit()]
+
+
+def test_the_kill_walk_removes_the_parent_not_only_its_child() -> None:
+    parent = _spawn_parent_with_child()
+    try:
+        deadline = time.monotonic() + 5
+        children: list[int] = []
+        while time.monotonic() < deadline and not children:
+            children = _child_pids(parent.pid)
+            if not children:
+                time.sleep(0.05)
+        assert children, "the test fixture never spawned a child"
+
+        subprocess.run(
+            ["sh", "-c", f"{KILL_TREE_FUNCTIONS}\n_kill_tree {parent.pid}"],
+            check=True,
+            capture_output=True,
+        )
+
+        parent.wait(timeout=5)
+        assert not _alive(parent.pid), "the parent survived — the recursion bug is back"
+        for child in children:
+            assert not _alive(child), f"child {child} survived"
+    finally:
+        with contextlib.suppress(Exception):
+            parent.kill()
+            parent.wait(timeout=5)
+
+
+def test_the_kill_walk_tolerates_an_empty_pid() -> None:
+    """A missing or unreadable pidfile must be a no-op, never an error that aborts the reclaim."""
+    result = subprocess.run(
+        ["sh", "-c", f'{KILL_TREE_FUNCTIONS}\n_kill_tree ""'],
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+
+
+def test_the_kill_walk_tolerates_a_pid_that_is_already_gone() -> None:
+    parent = _spawn_parent_with_child()
+    parent.kill()
+    parent.wait(timeout=5)
+
+    result = subprocess.run(
+        ["sh", "-c", f"{KILL_TREE_FUNCTIONS}\n_kill_tree {parent.pid}"],
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0

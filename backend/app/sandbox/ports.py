@@ -31,6 +31,58 @@ import shlex
 #: docker-specific PID lookup.
 PIDFILE_DIR = ".forgeflow/preview"
 
+#: The process-tree walk, kept as its own constant so a test can source and *execute* it against
+#: real processes instead of only string-matching the generated script. That matters here: the
+#: first version was recursive, and POSIX sh has no lexical scope, so the recursion clobbered the
+#: caller's loop variable and left the outermost process alive. The port freed (its child died) and
+#: the parent leaked -- invisible to any test that only checks whether the port is free.
+KILL_TREE_FUNCTIONS = r"""
+# Direct children of $1, one per line.
+_children() {
+  if command -v pgrep >/dev/null 2>&1; then
+    pgrep -P "$1" 2>/dev/null
+  else
+    for _s in /proc/[0-9]*/stat; do
+      _line=$(cat "$_s" 2>/dev/null) || continue
+      # /proc/PID/stat is "pid (comm) state ppid ...", and comm can contain spaces and parens,
+      # so split on the LAST ") " rather than counting fields from the left.
+      _cpid=${_line%% *}
+      _rest=${_line##*) }
+      _ppid=$(echo "$_rest" | cut -d' ' -f2)
+      [ "$_ppid" = "$1" ] && echo "$_cpid"
+    done
+  fi
+}
+
+# Kill a PID and every descendant. Collected breadth-first and killed together, deliberately
+# WITHOUT recursion: POSIX sh has no lexical scope, so a recursive walk clobbers the caller's
+# loop variable and the outermost process survives -- the ports free (its child dies) while the
+# parent leaks, which is the orphan accumulation this whole module exists to stop. A container
+# test caught exactly that; `test_the_kill_walk_is_not_recursive` is the regression guard.
+#
+# Root-first is safe because SIGKILL cannot be trapped: the parent is gone before it could
+# respawn anything.
+_kill_tree() {
+  _root=$1
+  [ -n "$_root" ] || return 0
+  _pending=$_root
+  _all=""
+  _depth=0
+  while [ -n "$_pending" ] && [ "$_depth" -lt 32 ]; do
+    _next=""
+    for _pid in $_pending; do
+      _all="$_all $_pid"
+      _next="$_next $(_children "$_pid")"
+    done
+    _pending=$_next
+    _depth=$((_depth + 1))
+  done
+  for _pid in $_all; do
+    kill -9 "$_pid" 2>/dev/null || true
+  done
+}
+"""
+
 #: Marker the reclaim script prints for a port that is still listening after every attempt.
 BUSY_MARKER = "FORGEFLOW_PORT_BUSY"
 
@@ -109,23 +161,7 @@ _busy() {{
     /proc/net/tcp /proc/net/tcp6 2>/dev/null
 }}
 
-# Kill a PID and everything under it: pgrep -P walks one level, so recurse to reach
-# pnpm -> vite -> esbuild. Killing only the parent is what leaves the socket held.
-_kill_tree() {{
-  _p=$1
-  [ -n "$_p" ] || return 0
-  if command -v pkill >/dev/null 2>&1; then
-    for _c in $(pgrep -P "$_p" 2>/dev/null); do _kill_tree "$_c"; done
-  else
-    for _s in /proc/[0-9]*/stat; do
-      _c=$(cut -d' ' -f1 "$_s" 2>/dev/null) || continue
-      _pp=$(sed -e 's/.*) . //' "$_s" 2>/dev/null | cut -d' ' -f1) || continue
-      [ "$_pp" = "$_p" ] && _kill_tree "$_c"
-    done
-  fi
-  kill -9 "$_p" 2>/dev/null || true
-}}
-
+{KILL_TREE_FUNCTIONS}
 for _f in {pidfiles or '""'}; do
   [ -n "$_f" ] && [ -f "$_f" ] || continue
   _kill_tree "$(cat "$_f" 2>/dev/null)"
