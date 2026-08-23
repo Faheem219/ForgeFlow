@@ -239,8 +239,26 @@ stash. `ruff` clean; `mypy` clean apart from the 4 pre-existing `runtime.py` con
 errors. The generated reclaim script is checked with `sh -n` in the suite, so a syntax error cannot
 reach the sandbox unnoticed.
 
-**Deferred (as scoped):** no live multi-cycle start/stop run against a real sandbox (needs a rebuilt
-image and a daemon) — the shell is validated by syntax check and the decisions by unit test.
+**Corrected after a live run.** The paragraph above originally claimed the reclaim was verified;
+what had actually been verified was `sh -n` syntax plus unit tests over the *decisions*. Running it
+against a rebuilt image found the shell logic itself was wrong: `_kill_tree` recursed, and POSIX sh
+has no lexical scope, so each recursive call reassigned the shared `_p` and the outermost frame
+re-killed the deepest descendant instead of the root. The socket-holding child died — so every
+port-level check passed — while the **parent leaked**, which is precisely the orphan accumulation
+this phase exists to stop. The walk is now iterative (breadth-first collect, then kill, depth-bounded)
+and is exported as `KILL_TREE_FUNCTIONS` so tests *execute* it against real processes.
+
+The first regression test for that was also wrong, and only caught by re-introducing the bug: its
+fixture was `sleep 30 & wait`, where killing the child makes `wait` return and the parent exits by
+itself, so it passed against the very defect it was written for. It now uses
+`sleep 30 & exec sleep 30`, giving the parent a lifetime independent of its child.
+
+**Verified live (2026-08-23):** image rebuilds; `ps`/`pgrep`/`pkill`/`fuser` present and runnable as
+`app` under a read-only root; two parent/child pairs holding 5173 and 3001 fully removed with both
+ports freed and pidfiles cleaned; a second reclaim is a clean no-op.
+
+**Deferred (as scoped):** no multi-cycle preview start/stop through the real `PreviewService`
+(needs the full stack).
 `setsid`-based process-group creation was considered and **rejected**: `setsid` forks when already
 a group leader, and `setsid -w` puts the child in a session the exec's PID is not part of, so
 `kill -- -PID` would reach nothing. Tree-walking plus port reclaim is correct without that fragility.

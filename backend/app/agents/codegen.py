@@ -378,7 +378,9 @@ class CodegenAgent:
             existing_files=len(existing_paths),
             forced=forced_scope,
         )
-        notes.append(f"Build scope: {decision.scope} — {decision.reason}.")
+        # Deliberately NOT appended to `notes`: those record exceptions worth a user's attention
+        # (missing upstream artifacts, a resume point, unfinished phases), and every build has a
+        # scope. It is persisted as structured fields instead, which the Build panel renders.
 
         if decision.is_small:
             # No planner call, no `phase-plan/` rewrite: the change becomes one synthetic phase and

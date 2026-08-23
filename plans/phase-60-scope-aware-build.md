@@ -216,6 +216,13 @@ of `MODEL_CLASSIFY`/`MODEL_ROUTING`/`MODEL_CODEGEN` rather than Haiku/Sonnet, an
 and testing bullets follow. D4 is **annotated, not changed** — the roles are locked, the vendor is
 not. `DEVELOPER.md`'s OpenAI section is folded into the main configuration flow.
 
+**The scope is not a build note.** An early draft appended
+*"Build scope: large — an initial build always plans its phases"* to `BuildReport.notes` on every
+build. `test_codegen_smoke` caught it: `notes` records **exceptions** worth a user's attention
+(missing or stale upstream artifacts, a resume point, unfinished phases), and every build has a
+scope. It is persisted as structured fields (`scope`, `scope_reason`) that the Build panel renders,
+so nothing is lost and `notes` stays meaningful.
+
 **Verification.** `tests/agents/test_build_scope.py` 25, `test_codegen_scope_routing.py` 19,
 `tests/config/test_model_classify.py` 6, `BuildPanel.test.tsx` 17 — all passing. `ruff` clean;
 `mypy` clean apart from the 4 pre-existing `runtime.py` errors. Frontend typecheck clean.
