@@ -713,6 +713,15 @@ _KEYS: tuple[ConfigKey, ...] = (
         "Backend dev-server command (the port arrives via the injected PORT env var).",
     ),
     ConfigKey(
+        "preview_pid_warn_ratio",
+        Cat.preview,
+        "float",
+        "Warn when the sandbox process count reaches this fraction of SANDBOX_PIDS_LIMIT; "
+        "0 disables.",
+        minimum=0.0,
+        maximum=1.0,
+    ),
+    ConfigKey(
         "preview_fe_port",
         Cat.preview,
         "int",

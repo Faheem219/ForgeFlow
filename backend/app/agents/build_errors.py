@@ -70,9 +70,25 @@ _ENV_CLASSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     (
         "the sandbox hit its process limit",
-        ("fork: resource temporarily unavailable", "spawn enomem", "cannot fork"),
+        (
+            "fork: resource temporarily unavailable",
+            "spawn enomem",
+            "cannot fork",
+            # Node does not fail gracefully at the PID ceiling: it cannot start its own libuv
+            # threadpool and aborts with a native assertion that mentions neither PIDs nor limits.
+            # Without this it reads like a code crash and the repair loop burns iterations on it
+            # (phase-59).
+            "uv_thread_create",
+            "workerthreadstaskrunner",
+        ),
         "The sandbox reached its process limit (SANDBOX_PIDS_LIMIT). Raise it, or avoid spawning "
         "extra dev servers during the build, then rebuild.",
+    ),
+    (
+        "a preview port was already in use",
+        ("eaddrinuse", "is in use, trying another one"),
+        "A dev server could not take its assigned port because an orphaned process still held it. "
+        "Restart the preview (ports are reclaimed on start) or restart the sandbox, then rebuild.",
     ),
     (
         "the sandbox ran out of disk space",

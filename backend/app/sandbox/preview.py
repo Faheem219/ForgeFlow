@@ -27,13 +27,22 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from app.core.config import get_config
-from app.core.errors import UserError
+
+# SystemError shadows the builtin (taxonomy name fixed by the plan); A004 suppressed on-line.
+from app.core.errors import SystemError, UserError  # noqa: A004
 from app.db.models import Project
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
 from app.sandbox.deps import ensure_dependencies
 from app.sandbox.exec import aiter_chunks
 from app.sandbox.manager import container_name, get_manager
+from app.sandbox.ports import (
+    PROCESS_COUNT_SCRIPT,
+    parse_busy_ports,
+    parse_process_count,
+    reclaim_script,
+    wrap_with_pidfile,
+)
 from app.sandbox.runtime import DockerRuntime, ExecHandle, WorkspaceRuntime
 from app.sandbox.schemas import PreviewInfo, PreviewProcess, PreviewStatus
 from app.sandbox.workspace import RuntimeProvider, active_runtime_provider
@@ -73,6 +82,15 @@ PROXY_MISSING_WARNING = (
 #: *sandbox*, and its network is `internal`, so there is no route to a database on the host either:
 #: the generated backend starts fine and then every query dies with mongoose's
 #: "buffering timed out after 10000ms", which reads as a bug in the generated code.
+#: Shown when the sandbox is close to its PID ceiling. Worth surfacing *before* the ceiling is hit,
+#: because node does not fail gracefully there — it aborts with
+#: ``Assertion failed: (0) == (uv_thread_create(...))``, which names neither PIDs nor limits and
+#: reads like a native crash (phase-59).
+PID_PRESSURE_WARNING = (
+    "This sandbox is running {count} processes, close to its limit of {limit}. Orphaned dev "
+    "servers are the usual cause; restart the preview, or restart the sandbox if it persists."
+)
+
 DB_UNREACHABLE_WARNING = (
     "The generated app's database is configured as {host}, which from inside the sandbox means the "
     "sandbox itself — its queries will time out. Point APP_DB_CLUSTER_URI at a MongoDB the sandbox "
@@ -143,6 +161,21 @@ async def _run_to_completion(runtime: WorkspaceRuntime, argv: list[str], cwd: st
     return await asyncio.to_thread(drain)
 
 
+async def _run_capture(
+    runtime: WorkspaceRuntime, argv: list[str], cwd: str = ""
+) -> tuple[int, str]:
+    """Run a short command in the sandbox and return ``(exit_code, combined output)``."""
+    handle = await asyncio.to_thread(runtime.start_exec, argv, cwd, None)
+
+    def drain() -> tuple[int, str]:
+        chunks: list[str] = []
+        for chunk in handle.stream():
+            chunks.append(chunk.data.decode("utf-8", errors="replace"))
+        return handle.wait(), "".join(chunks)
+
+    return await asyncio.to_thread(drain)
+
+
 class PreviewService:
     def __init__(self, provider: RuntimeProvider | None = None) -> None:
         self._provider = provider
@@ -169,6 +202,40 @@ class PreviewService:
         except Exception:  # a probe must never take the service down
             logger.debug("preview probe failed", exc_info=True)
             return False
+
+    async def _reclaim(self, runtime: WorkspaceRuntime, ports: list[int]) -> None:
+        """Guarantee the preview ports are free before anything is started.
+
+        Not an optimisation: the proxy routes to *fixed* ports, so a dev server that slides to the
+        next free one is unreachable however healthy it reports itself. Reclaiming by port (rather
+        than by the PIDs this process happens to remember) is what makes a restart correct after a
+        ``--reload``, a crash, or anything else that emptied ``self._state``.
+        """
+        script = reclaim_script(ports, kinds=[str(k) for k in PreviewProcess])
+        try:
+            _code, output = await _run_capture(runtime, ["sh", "-c", script])
+        except Exception as exc:  # a sandbox that cannot run sh has bigger problems
+            raise SystemError("Could not reclaim the preview ports") from exc
+
+        busy = parse_busy_ports(output)
+        if busy:
+            # Fail loudly. The alternative -- letting Vite pick 5175 -- reports a healthy preview
+            # on a port nothing proxies, which is strictly worse than an error (phase-59).
+            raise SystemError(
+                "Preview port(s) "
+                + ", ".join(str(p) for p in busy)
+                + " are still in use inside the sandbox and could not be freed. "
+                "Restart the sandbox for this project and try again."
+            )
+
+    async def _process_count(self, runtime: WorkspaceRuntime) -> int | None:
+        """How many processes the sandbox is running (diagnostics; never fatal)."""
+        try:
+            _code, output = await _run_capture(runtime, ["sh", "-c", PROCESS_COUNT_SCRIPT])
+        except Exception:
+            logger.debug("preview process census failed", exc_info=True)
+            return None
+        return parse_process_count(output)
 
     async def _pump(self, project_id: str, kind: PreviewProcess, proc: _Proc) -> None:
         """Stream a dev server's output until it exits (it normally never does)."""
@@ -228,6 +295,10 @@ class PreviewService:
         fe_port = int(config.get("preview_fe_port"))
         be_port = int(config.get("preview_be_port"))
 
+        # Orphans from a previous run own these ports until proven otherwise -- including orphans
+        # this process never started, which is the common case after a --reload.
+        await self._reclaim(runtime, [be_port, fe_port])
+
         # The skeleton's env contract (phase-22): BE reads MONGODB_URI/PORT, FE reads
         # VITE_API_BASE_URL. The MONGODB_URI is the project's isolated database — BYO if the owner
         # supplied one, else a per-project DB in the shared cluster (phase-36) — addressed the way a
@@ -259,6 +330,17 @@ class PreviewService:
             if not await get_manager().preview_proxy_attached():
                 warnings.append(PROXY_MISSING_WARNING)
                 logger.warning("preview started for %s with no reverse proxy running", project_id)
+            limit = int(config.get("sandbox_pids_limit"))
+            ratio = float(config.get("preview_pid_warn_ratio"))
+            count = await self._process_count(runtime)
+            if count is not None and ratio > 0 and limit > 0 and count >= limit * ratio:
+                warnings.append(PID_PRESSURE_WARNING.format(count=count, limit=limit))
+                logger.warning(
+                    "sandbox %s is at %d/%d processes before preview start",
+                    project_id,
+                    count,
+                    limit,
+                )
             db_host = loopback_db_host(be_env["MONGODB_URI"])
             if db_host:
                 warnings.append(DB_UNREACHABLE_WARNING.format(host=db_host))
@@ -289,9 +371,13 @@ class PreviewService:
                 str(config.get("preview_health_path")),
             ),
         ):
-            argv = shlex.split(str(config.get(cmd_key)).format(port=port))
-            if not argv:
+            command = str(config.get(cmd_key)).format(port=port).strip()
+            if not shlex.split(command):
                 raise UserError(f"{cmd_key} is empty")
+            # The process records its own PID and then `exec`s, so the pidfile holds the dev server
+            # itself -- not a wrapper whose death would leave an unkillable orphan. Written into the
+            # workspace, so ownership outlives this control-plane process.
+            argv = wrap_with_pidfile(command, str(kind))
             handle = await asyncio.to_thread(
                 runtime.start_exec, argv, str(config.get(dir_key)), env
             )

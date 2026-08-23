@@ -21,6 +21,7 @@ skeleton conventions), never the whole repo — mirroring the repair loop's disc
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -51,6 +52,8 @@ from app.design.service import DesignService
 from app.orchestrator.artifacts import ArtifactService
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
+
+logger = logging.getLogger(__name__)
 
 BOOT_HEALTHY = "healthy"
 BOOT_UNHEALTHY = "unhealthy"
@@ -272,6 +275,15 @@ class CodegenAgent:
         self._planner = BuildPlanner(self._client, self._artifacts)
         self._phases = PhaseRunner(self._client)
 
+    async def _quiesce_preview(self, project: Project, channel: str) -> None:
+        """Stop a running preview so codegen writes cannot trigger a watcher restart storm."""
+        try:
+            from app.sandbox.preview import get_preview_service
+
+            await get_preview_service().stop(project)
+        except Exception:  # never let this block a build
+            logger.debug("could not quiesce the preview before build", exc_info=True)
+
     async def run(
         self,
         project: Project,
@@ -291,6 +303,12 @@ class CodegenAgent:
         tracker = _BuildTracker()
         dispatch = self._make_dispatch(ctx, tracker, channel, run)
         notes: list[str] = []
+
+        # Quiesce any preview before writing a single file (phase-59). A build rewrites dozens of
+        # files; a dev server left watching restarts on each one, and those restarts race each other
+        # for the same port -- the EADDRINUSE storm reported against a refine. Verification starts a
+        # fresh preview at the end, which is the only preview a build should ever have running.
+        await self._quiesce_preview(project, channel)
 
         stages = {s.stage: s.status for s in await self._stages.list_for_project(project_id)}
 

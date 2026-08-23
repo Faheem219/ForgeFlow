@@ -39,7 +39,10 @@ from app.core.config import subprocess_env
 from app.core.errors import SystemError, UserError  # noqa: A004
 
 DOCKER_WORKSPACE = "/workspace"
-_PRUNE_DIRS = {"node_modules", ".git"}
+#: Never surfaced in the workspace tree. ``.forgeflow`` is ForgeFlow's own in-workspace bookkeeping
+#: (preview pidfiles, phase-59) — it is not the user's code, must not reach the model's context, and
+#: must not be uploaded with a deploy.
+_PRUNE_DIRS = {"node_modules", ".git", ".forgeflow"}
 
 #: Returned by :meth:`ExecHandle.wait` when the exit code cannot be read — a container that died
 #: mid-exec reports ``ExitCode: null``, which must never be coerced to 0 (= success). Distinct and
@@ -574,6 +577,9 @@ class DockerRuntime:
             "-o",
             "-name",
             ".git",
+            "-o",
+            "-name",
+            ".forgeflow",
             ")",
             "-prune",
             "-o",

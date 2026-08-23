@@ -41,6 +41,11 @@ RUN apt-get update \
         ca-certificates \
         curl \
         git \
+        # procps (ps/pgrep/pkill) + psmisc (fuser) let the preview reclaim its fixed ports and kill
+        # a dev-server process TREE (phase-59). Without them a `pnpm` parent dies leaving its `vite`
+        # child holding 5173, Vite slides to 5175, and the proxy serves nothing. A few hundred KB.
+        procps \
+        psmisc \
         tini \
     && rm -rf /var/lib/apt/lists/*
 

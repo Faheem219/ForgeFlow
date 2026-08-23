@@ -6,7 +6,7 @@
 - **Title:** Preview process lifecycle & port reclaim (orphan reaping, PID-budget safety, restart storms)
 - **Epic:** Epic 2 — Sandbox & IDE *(amends `phase-15`)*
 - **Milestone:** M1 *(reliability)*
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-23)*
 
 ## Goal
 
@@ -193,3 +193,55 @@ user in the terminal can run `ps`, `pkill` or `fuser`.
   already chose visibility over silence.
 - **Isolation is unchanged.** No new host access, no capability, no network. `procps`/`psmisc` act
   only inside the container, and the reclaim path only ever targets the two preview ports.
+
+## Implementation status (as-built, 2026-08-23)
+
+**Ports, not PIDs.** New `app/sandbox/ports.py` builds the reclaim as pure shell strings, so the
+whole thing is unit-testable without a daemon. `PreviewService._reclaim` runs it after `stop` and
+before any launch, unconditionally — the invariant is *"these ports are mine"*, which holds after a
+`--reload` wiped `_state`, and the old PID-based one did not. A port that survives every attempt
+raises a `SystemError` naming it, because a preview reported healthy on a port nothing proxies is
+strictly worse than an error.
+
+**Two reclaim mechanisms.** `fuser -k -n tcp` first; then a pure `/proc` scan (state `0A` in
+`/proc/net/tcp{,6}` → socket inode → the owning fd in `/proc/*/fd`) so a container still running the
+**old image** degrades rather than failing. Recorded pidfiles are killed tree-wise first, recursing
+through `pgrep -P` (or `/proc/*/stat` PPIDs) so a `pnpm` parent cannot leave its `vite` child on the
+socket.
+
+**Ownership survives a restart.** Rather than a docker-specific PID lookup, the launch command is
+wrapped as `sh -c 'mkdir -p … && echo $$ > <pidfile> && exec <cmd>'`. The `exec` is load-bearing:
+the shell is *replaced*, so the recorded PID is the dev server itself, not a wrapper whose death
+leaves an unkillable orphan. Pidfiles live in `.forgeflow/preview/`, added to `_PRUNE_DIRS` and the
+`find -prune` list so they never reach the workspace tree, the model's context, or a deploy upload.
+
+**Fail honest.** `PREVIEW_FE_CMD` gains `--strictPort`, so Vite errors instead of sliding to 5175 and
+reporting success on a port the proxy does not route to.
+
+**PID pressure is visible.** A process census rides on preview start and warns past
+`PREVIEW_PID_WARN_RATIO` (0.8) of `SANDBOX_PIDS_LIMIT`. `build_errors` now classifies
+`uv_thread_create` / `WorkerThreadsTaskRunner` as **environment** under the existing process-limit
+class — node aborts natively at the ceiling with a message naming neither PIDs nor limits, so it
+previously read as a code crash and would have burned repair iterations. `EADDRINUSE` and Vite's
+`is in use, trying another one` get their own environment class.
+
+**Restart storms.** `CodegenAgent.run` quiesces any running preview before writing a file. A build
+rewrites dozens of files; a watcher left running restarts on each and those restarts race for the
+port — the exact `EADDRINUSE` sequence reported against a refine. Verification starts one fresh
+preview at the end.
+
+**Image.** `procps` + `psmisc` added; `run_smoke.sh` asserts `ps`/`pgrep`/`pkill`/`fuser` exist *and*
+run as the `app` user under a read-only root, which is the only way the sandbox ever calls them.
+
+**Verification.** `tests/sandbox` + `tests/agents`: **428 passed**, 2 skipped. The 5 failures in
+`test_repair_*` are the known pre-existing Docker-daemon tests — confirmed identical on a clean
+stash. `ruff` clean; `mypy` clean apart from the 4 pre-existing `runtime.py` conditional-import
+errors. The generated reclaim script is checked with `sh -n` in the suite, so a syntax error cannot
+reach the sandbox unnoticed.
+
+**Deferred (as scoped):** no live multi-cycle start/stop run against a real sandbox (needs a rebuilt
+image and a daemon) — the shell is validated by syntax check and the decisions by unit test.
+`setsid`-based process-group creation was considered and **rejected**: `setsid` forks when already
+a group leader, and `setsid -w` puts the child in a session the exec's PID is not part of, so
+`kill -- -PID` would reach nothing. Tree-walking plus port reclaim is correct without that fragility.
+

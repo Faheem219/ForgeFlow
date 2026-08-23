@@ -215,8 +215,12 @@ class Settings(BaseSettings):
     # Commands run inside the sandbox against the phase-22 skeleton layout ({port} is substituted).
     preview_fe_dir: str = "frontend"
     preview_be_dir: str = "backend"
-    preview_fe_cmd: str = "pnpm dev --host 0.0.0.0 --port {port}"
+    # --strictPort is load-bearing (phase-59): the proxy routes to a FIXED port, so a Vite that
+    # slides to the next free one is unreachable while reporting itself healthy. Fail instead.
+    preview_fe_cmd: str = "pnpm dev --host 0.0.0.0 --port {port} --strictPort"
     preview_be_cmd: str = "pnpm dev"  # port arrives via the injected PORT env var
+    # Warn once the sandbox process count reaches this fraction of sandbox_pids_limit; 0 disables.
+    preview_pid_warn_ratio: float = 0.8
     preview_fe_port: int = 5173
     preview_be_port: int = 3001
     preview_health_timeout_s: int = 90  # how long start() waits for both servers to answer
