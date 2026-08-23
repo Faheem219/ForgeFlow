@@ -89,20 +89,20 @@ describe('RequirementsForm', () => {
     const onDraft = vi.fn().mockResolvedValue({
       app_name: 'Focus',
       features: [
-      {
-        name: 'Todos',
-        description: 'manage a todo list',
-        inputs: ['title'],
-        expected_behaviors: ['the new todo appears'],
-        acceptance_criteria: [{ text: 'Adding a todo shows it in the list', kind: 'e2e' }],
-      },
-      {
-        name: 'Auth',
-        description: '',
-        inputs: [],
-        expected_behaviors: [],
-        acceptance_criteria: [{ text: 'A user can log in', kind: 'unit' }],
-      },
+        {
+          name: 'Todos',
+          description: 'manage a todo list',
+          inputs: ['title'],
+          expected_behaviors: ['the new todo appears'],
+          acceptance_criteria: [{ text: 'Adding a todo shows it in the list', kind: 'e2e' }],
+        },
+        {
+          name: 'Auth',
+          description: '',
+          inputs: [],
+          expected_behaviors: [],
+          acceptance_criteria: [{ text: 'A user can log in', kind: 'unit' }],
+        },
       ],
     });
     const onSave = vi.fn();

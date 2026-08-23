@@ -384,3 +384,48 @@ describe('BuildPanel', () => {
     expect(screen.queryByTestId('build-stop-reason')).not.toBeInTheDocument();
   });
 });
+
+// --- phase-60: scope routing is visible and overridable -----------------------------------------
+
+function withReport(extra: Record<string, unknown>): void {
+  state.reportDetail = {
+    ...reportArtifact(),
+    content: JSON.stringify({ ...REPORT, ...extra }),
+  };
+  installFetch(state);
+}
+
+describe('build scope', () => {
+  it('says when a build was an incremental change', async () => {
+    withReport({ scope: 'small', scope_reason: 'only the home page component changes' });
+    renderPanel();
+
+    const badge = await screen.findByTestId('build-scope');
+    expect(badge).toHaveTextContent('Incremental change');
+    expect(badge).toHaveAttribute('title', 'only the home page component changes');
+  });
+
+  it('says how many phases a planned build ran', async () => {
+    withReport({
+      scope: 'large',
+      scope_reason: 'touches every page',
+      phases: [
+        { id: 'a', title: 'A', kind: 'backend', status: 'done', note: '', summary: '' },
+        { id: 'b', title: 'B', kind: 'frontend', status: 'done', note: '', summary: '' },
+      ],
+    });
+    renderPanel();
+
+    expect(await screen.findByTestId('build-scope')).toHaveTextContent(
+      'Planned build \u00b7 2 phases',
+    );
+  });
+
+  it('shows no badge for a report written before scope routing', async () => {
+    withReport({});
+    renderPanel();
+
+    await screen.findByTestId('build-status');
+    expect(screen.queryByTestId('build-scope')).toBeNull();
+  });
+});

@@ -17,6 +17,8 @@ import { useDeleteProject } from '../dashboard/useDeleteProject';
 import { ChatPanel } from './ChatPanel';
 import { StageNavigator } from './StageNavigator';
 import { StagePanel } from './StagePanel';
+import { Pane, PaneHandle, Split } from './layout/SplitPane';
+import { layoutId, resetLayouts } from './layout/layoutStorage';
 import { getProject, listStages, submitIntent } from './api';
 
 // xterm is heavy and only needed once the drawer is opened — keep it out of the main chunk.
@@ -74,6 +76,8 @@ export default function Workspace(): JSX.Element {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [view, setView] = useState<'stage' | 'data'>('stage');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Bumped by "Reset layout" to force the panel groups to remount and re-read their defaults.
+  const [layoutNonce, setLayoutNonce] = useState(0);
   const { remove, isDeleting } = useDeleteProject();
 
   const projectQuery = useQuery({
@@ -173,9 +177,7 @@ export default function Workspace(): JSX.Element {
     <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-fg">
-            {projectQuery.data.name}
-          </h1>
+          <h1 className="truncate text-xl font-semibold text-fg">{projectQuery.data.name}</h1>
           <p className="text-sm text-fg-muted">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
@@ -215,6 +217,18 @@ export default function Workspace(): JSX.Element {
           <Button
             size="sm"
             variant="ghost"
+            data-testid="workspace-reset-layout"
+            title="Restore the default panel sizes"
+            onClick={() => {
+              resetLayouts(projectId);
+              setLayoutNonce((n) => n + 1);
+            }}
+          >
+            Reset layout
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             data-testid="workspace-delete"
             className="text-danger hover:bg-danger/10"
             onClick={() => setConfirmDelete(true)}
@@ -225,71 +239,110 @@ export default function Workspace(): JSX.Element {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-4">
-        {stagesOpen ? (
-          <div className="flex w-60 shrink-0 flex-col gap-4 overflow-auto">
-            <Panel title="Stages">
-              <StageNavigator
-                statusByStage={statusByStage}
-                activeStage={activeStage}
-                onSelect={setActiveStage}
-                onAction={(stage, action) => navAction.mutate({ stage, action })}
-                busy={navAction.isPending}
-              />
-            </Panel>
-            <Panel title="Cost">
-              <Suspense
-                fallback={
-                  <div className="flex justify-center py-4">
-                    <Spinner />
-                  </div>
-                }
-              >
-                <CostPanel projectId={projectId} />
-              </Suspense>
-            </Panel>
-          </div>
-        ) : null}
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-          {view === 'data' ? (
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center">
-                  <Spinner />
-                </div>
-              }
-            >
-              <DataBrowser projectId={projectId} />
-            </Suspense>
-          ) : (
-            // A crash in one stage panel stays contained + clears when you switch stages.
-            <ErrorBoundary resetKey={activeStage}>
-              <StagePanel projectId={projectId} stage={activeStage} />
-            </ErrorBoundary>
-          )}
-        </div>
-
-        {assistantOpen ? (
-          <section className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
-            <ChatPanel projectId={projectId} activeStage={activeStage} />
-          </section>
-        ) : null}
-      </div>
-
-      {terminalOpen ? (
-        <section className="h-64 shrink-0 overflow-hidden rounded-xl border border-edge bg-surface">
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <Spinner />
-              </div>
-            }
+      {/*
+        Resizable, not fixed (phase-61). Every region here used to have a hard-coded size, which
+        left the centre column as the only elastic one — and it subdivides again for the IDE and
+        the preview, so with both open neither was readable. Sizes persist per project.
+      */}
+      <Split
+        // Remounting on reset is what makes the panels re-read (now-empty) storage and fall back
+        // to their default sizes; the library reads defaultLayout once, on mount.
+        key={layoutNonce}
+        id={layoutId(projectId, 'shell')}
+        direction="vertical"
+        panelIds={['body', 'terminal']}
+        className="flex-1"
+      >
+        <Pane id="body" minSize={30}>
+          <Split
+            id={layoutId(projectId, 'columns')}
+            direction="horizontal"
+            panelIds={['rail', 'main', 'assistant']}
+            className="flex-1 gap-0"
           >
-            <Terminal projectId={projectId} />
-          </Suspense>
-        </section>
-      ) : null}
+            {stagesOpen ? (
+              <>
+                <Pane id="rail" defaultSize={18} minSize={12} maxSize={34}>
+                  <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto pr-1">
+                    <Panel title="Stages">
+                      <StageNavigator
+                        statusByStage={statusByStage}
+                        activeStage={activeStage}
+                        onSelect={setActiveStage}
+                        onAction={(stage, action) => navAction.mutate({ stage, action })}
+                        busy={navAction.isPending}
+                      />
+                    </Panel>
+                    <Panel title="Cost">
+                      <Suspense
+                        fallback={
+                          <div className="flex justify-center py-4">
+                            <Spinner />
+                          </div>
+                        }
+                      >
+                        <CostPanel projectId={projectId} />
+                      </Suspense>
+                    </Panel>
+                  </div>
+                </Pane>
+                <PaneHandle direction="horizontal" />
+              </>
+            ) : null}
+
+            <Pane id="main" minSize={30}>
+              <div className="min-h-0 flex-1 overflow-auto">
+                {view === 'data' ? (
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center">
+                        <Spinner />
+                      </div>
+                    }
+                  >
+                    <DataBrowser projectId={projectId} />
+                  </Suspense>
+                ) : (
+                  // A crash in one stage panel stays contained + clears when you switch stages.
+                  <ErrorBoundary resetKey={activeStage}>
+                    <StagePanel projectId={projectId} stage={activeStage} />
+                  </ErrorBoundary>
+                )}
+              </div>
+            </Pane>
+
+            {assistantOpen ? (
+              <>
+                <PaneHandle direction="horizontal" />
+                <Pane id="assistant" defaultSize={24} minSize={16} maxSize={45}>
+                  <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
+                    <ChatPanel projectId={projectId} activeStage={activeStage} />
+                  </section>
+                </Pane>
+              </>
+            ) : null}
+          </Split>
+        </Pane>
+
+        {terminalOpen ? (
+          <>
+            <PaneHandle direction="vertical" />
+            <Pane id="terminal" defaultSize={28} minSize={10}>
+              <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center">
+                      <Spinner />
+                    </div>
+                  }
+                >
+                  <Terminal projectId={projectId} />
+                </Suspense>
+              </section>
+            </Pane>
+          </>
+        ) : null}
+      </Split>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -301,8 +354,8 @@ export default function Workspace(): JSX.Element {
         confirmPhrase={projectQuery.data.name}
         description={
           <>
-            <strong className="font-medium text-fg">{projectQuery.data.name}</strong> and
-            everything it owns will be permanently removed. This cannot be undone.
+            <strong className="font-medium text-fg">{projectQuery.data.name}</strong> and everything
+            it owns will be permanently removed. This cannot be undone.
           </>
         }
       >

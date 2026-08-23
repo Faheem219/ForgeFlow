@@ -185,7 +185,14 @@ _KEYS: tuple[ConfigKey, ...] = (
         "model_routing",
         Cat.models,
         "str",
-        "Cheap model for classification/summaries/routing (cost discipline).",
+        "Cheap model for summaries/routing (cost discipline).",
+    ),
+    ConfigKey(
+        "model_classify",
+        Cat.models,
+        "str",
+        "Model for cheap classification calls (e.g. deciding whether a change request needs a "
+        "phased build). Blank uses MODEL_ROUTING.",
     ),
     ConfigKey(
         "anthropic_api_key",
@@ -713,6 +720,15 @@ _KEYS: tuple[ConfigKey, ...] = (
         "Backend dev-server command (the port arrives via the injected PORT env var).",
     ),
     ConfigKey(
+        "preview_pid_warn_ratio",
+        Cat.preview,
+        "float",
+        "Warn when the sandbox process count reaches this fraction of SANDBOX_PIDS_LIMIT; "
+        "0 disables.",
+        minimum=0.0,
+        maximum=1.0,
+    ),
+    ConfigKey(
         "preview_fe_port",
         Cat.preview,
         "int",
@@ -927,10 +943,18 @@ _KEYS: tuple[ConfigKey, ...] = (
         maximum=10,
     ),
     ConfigKey(
+        "deploy_be_provider",
+        Cat.deploy,
+        "str",
+        "Where the backend deploys: 'vercel' (inline upload, no git host) or 'render' (clones "
+        "DEPLOY_REPO_URL).",
+        choices=("vercel", "render"),
+    ),
+    ConfigKey(
         "deploy_repo_url",
         Cat.deploy,
         "str",
-        "Git repo Render builds the backend from (blank locally / when mocked).",
+        "Git repo Render builds the backend from. Unused when DEPLOY_BE_PROVIDER=vercel.",
     ),
     ConfigKey(
         "deploy_region", Cat.deploy, "str", "Optional provider region for the backend service."

@@ -78,3 +78,24 @@ Implements D11 dual-mode deploy. **BE never goes to Vercel** (D11/risk §12) —
 - Tests use `httpx.MockTransport` rather than a mocked client, so the adapters' real URLs, methods, auth headers and JSON bodies must all be correct for a route to match: `test_vercel_adapter.py` (20), `test_render_adapter.py` (19), `test_modes.py` + `test_be_not_on_vercel.py` (19). Backend 456 passed (the 7 failures are the pre-existing Docker-daemon-dependent repair tests, identical at HEAD).
 
 **Not done here (as scoped):** the live smoke path against real Vercel/Render accounts is deferred — it needs real credentials and creates billable provider resources. Everything else is covered by mocked integration. Orchestration/ordering is phase-37.
+
+---
+
+## Amendment (phase-58, 2026-08-23)
+
+This phase made "the backend never reaches Vercel's transport" **structural**: one target per
+provider, checked before any network call. **D11 has since been amended** and that constraint is
+replaced, not merely relaxed — see [`phase-58`](./phase-58-vercel-backend-deploy.md).
+
+What changed here:
+
+- `VercelDeployProvider` declares `targets = {fe, be}`; `_check_target` tests **membership** rather
+  than identity, so the guard still fires for a target a provider has no code path for. Render is
+  unchanged and still serves `be` only.
+- `provider_for` routes `be` by `DEPLOY_BE_PROVIDER` (`vercel` default, `render` opt-in).
+- `DeployRef` gained a `target`, because one provider now serves two and `status()` has only the ref.
+- `tests/deploy/test_be_not_on_vercel.py` is replaced by `tests/deploy/test_deploy_target_routing.py`,
+  which asserts the replacement invariant.
+
+The as-built section above is left as written — it was accurate for phase-35.
+

@@ -2,8 +2,11 @@
 
 The sequence is fixed by the wiring dependencies (§8, risk §12):
 
-    prereq (build complete) → infra plan → provision DB → deploy BE (Render, +MONGODB_URI) →
+    prereq (build complete) → infra plan → provision DB → deploy BE (+MONGODB_URI) →
     build FE with VITE_API_BASE_URL=<BE url> → deploy FE (Vercel) → health-check → record Deployment
+
+Since phase-58 the backend ships to **Vercel** by default, as an inline upload of the workspace's
+backend directory (``DEPLOY_BE_PROVIDER=render`` restores the repo-clone path).
 
 **Backend before frontend** is not a preference: the SPA bakes ``VITE_API_BASE_URL`` at *build*
 time, so the backend must be live and its URL known before the frontend is built and shipped. Each
@@ -33,7 +36,12 @@ from app.db.models.enums import DeployMode, Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.deploy.analyzer import BackendPlan, FrontendPlan, InfraAnalyzer, InfraPlan
 from app.deploy.db_provision import DbProvisioner
-from app.deploy.providers import DeployProvider, DeployTarget, provider_for
+from app.deploy.providers import (
+    DeployProvider,
+    DeployTarget,
+    backend_uploads_source,
+    provider_for,
+)
 from app.deploy.providers.base import DeployResult, DeploySpec, DeployState
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
@@ -51,6 +59,10 @@ _TERMINAL = frozenset({DeployState.live, DeployState.failed, DeployState.cancele
 # A workspace-relative built-SPA file set (path → content), and the builder that produces it.
 FrontendBuilder = Callable[[Project, FrontendPlan, dict[str, str]], Awaitable[dict[str, str]]]
 
+#: Reads the backend source out of the workspace (path → content) for an inline upload (phase-58).
+#: A seam like the FE builder, so the ordering/wiring logic is testable without Docker.
+BackendSource = Callable[[Project, BackendPlan], Awaitable[dict[str, str]]]
+
 #: The analyzer slice the orchestrator needs (tests inject a plan directly).
 PlanSource = Callable[[Project], Awaitable[InfraPlan]]
 
@@ -61,6 +73,7 @@ class DeployOrchestrator:
         *,
         plan_source: PlanSource | None = None,
         frontend_builder: FrontendBuilder | None = None,
+        backend_source: BackendSource | None = None,
         db: DbProvisioner | None = None,
         provider_factory: Callable[[DeployTarget], DeployProvider] = provider_for,
         blob_store: BlobStore | None = None,
@@ -69,6 +82,7 @@ class DeployOrchestrator:
     ) -> None:
         self._plan_source = plan_source or _analyze
         self._build_frontend = frontend_builder or _WorkspaceFrontendBuilder()
+        self._backend_source = backend_source or _WorkspaceBackendSource()
         self._db = db or DbProvisioner()
         self._provider_factory = provider_factory
         self._blobs = blob_store
@@ -101,7 +115,7 @@ class DeployOrchestrator:
             log.append(f"db: provisioned ({db_target})")
             await self._step(channel, "db", "ready", target=db_target)
 
-        # 2) Backend → Render (before the frontend, which needs its URL).
+        # 2) Backend (before the frontend, which needs its URL).
         be_result: DeployResult | None = None
         be_error: ProviderError | None = None
         be_url: str | None = None
@@ -119,10 +133,19 @@ class DeployOrchestrator:
                 log.append(f"be: FAILED — {exc}")
                 await self._step(channel, "be", "failed", error=str(exc))
 
-        # 3) Frontend → Vercel (built with the BE URL, then shipped). Skipped if the BE failed.
+        # 3) Frontend → Vercel (built with the BE URL, then shipped). Skipped unless the backend is
+        # actually LIVE — not merely "did not raise". A provider that returns `failed`, or that is
+        # still building when _await_live times out, raises nothing; shipping a real (billed)
+        # frontend wired to that backend produces a live SPA calling an API that is not there.
+        # This is the same definition _overall_status uses, so the two can no longer disagree.
         fe_result: DeployResult | None = None
         fe_error: ProviderError | None = None
-        if plan.fe is not None and be_error is None:
+        backend_ok = plan.be is None or _is_live(be_result, be_error)
+        if plan.fe is not None and not backend_ok:
+            reason = "the backend did not come up, so there is nothing to point the frontend at"
+            log.append(f"fe: skipped — {reason}")
+            await self._step(channel, "fe", "skipped", error=reason)
+        if plan.fe is not None and backend_ok:
             await self._step(channel, "fe", "building")
             try:
                 fe_result = await self._deploy_frontend(
@@ -142,7 +165,11 @@ class DeployOrchestrator:
             project_id=project_id,
             mode=mode,
             fe_target="vercel" if plan.fe is not None else None,
-            be_target="render" if plan.be is not None else None,
+            be_target=(
+                (be_result.provider if be_result else _configured_be_provider())
+                if plan.be is not None
+                else None
+            ),
             db_target=db_target,
             urls=urls,
             status=status,
@@ -183,10 +210,14 @@ class DeployOrchestrator:
         if mongodb_uri:
             env["MONGODB_URI"] = mongodb_uri
         config = get_config()
+        # Only collect the workspace when the provider will actually upload it — reading the source
+        # costs sandbox round-trips, and the repo-clone path has no use for it.
+        files = await self._backend_source(project, be) if backend_uploads_source() else None
         spec = DeploySpec(
             name=_service_name(project, "api"),
             target=DeployTarget.be,
             env=env,
+            files=files,
             repo_url=str(config.get("deploy_repo_url")) or None,
             branch="main",
             root_dir=be.dir,
@@ -317,7 +348,9 @@ def _topology(
             {
                 "id": "be",
                 "kind": "backend",
-                "provider": "render",
+                # The vendor is configurable since phase-58, so read it off the result rather than
+                # hardcoding it; a failed deploy has no result, so fall back to what is configured.
+                "provider": be.provider if be else _configured_be_provider(),
                 "url": be.url if be else None,
                 "status": str(be.status) if be else "failed",
             }
@@ -369,8 +402,54 @@ class _WorkspaceFrontendBuilder:
         return files
 
 
+#: Never uploaded with the backend source: install output, git history, build artifacts and
+#: ForgeFlow's own in-workspace bookkeeping. node_modules alone would be tens of thousands of files.
+_BE_SOURCE_SKIP_DIRS = frozenset({"node_modules", ".git", "dist", "build", ".turbo", ".forgeflow"})
+
+
+class _WorkspaceBackendSource:
+    """Read the backend directory out of the sandbox for an inline upload (phase-58).
+
+    The workspace stays the single source of truth: what ships is the code the build stage wrote and
+    the repair loop validated, read through the archive API. Untrusted code is never executed here —
+    it is copied.
+    """
+
+    async def __call__(  # pragma: no cover - needs the Docker sandbox
+        self, project: Project, be: BackendPlan
+    ) -> dict[str, str]:
+        from app.sandbox.workspace import WorkspaceService
+
+        workspace = WorkspaceService()
+        root = be.dir.strip("/")
+        prefix = f"{root}/" if root else ""
+        files: dict[str, str] = {}
+        for node in await workspace.tree(project, root, depth=None):
+            if node.type != "file":
+                continue
+            rel = node.path[len(prefix) :] if node.path.startswith(prefix) else node.path
+            if any(part in _BE_SOURCE_SKIP_DIRS for part in rel.split("/")):
+                continue
+            content = await workspace.read(project, node.path)
+            files[rel] = content.content
+        if not files:
+            raise UserError("The backend directory is empty — nothing to deploy")
+        if "vercel.json" not in files:
+            raise UserError(
+                "The backend has no vercel.json — it cannot be deployed as a Vercel function. "
+                "Re-run Build so the skeleton's deploy entrypoint is present."
+            )
+        return files
+
+
+def _configured_be_provider() -> str:
+    """The backend provider name recorded on a Deployment when no result carries one."""
+    return "vercel" if backend_uploads_source() else "render"
+
+
 __all__ = [
     "DeployOrchestrator",
+    "BackendSource",
     "FrontendBuilder",
     "STATUS_DEGRADED",
     "STATUS_FAILED",

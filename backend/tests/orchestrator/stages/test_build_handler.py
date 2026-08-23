@@ -67,6 +67,7 @@ class FakeCodegen:
         channel: str | None = None,
         instruction: str | None = None,
         fresh: bool = False,
+        forced_scope: object | None = None,
     ) -> BuildReport:
         self.calls.append(
             {
@@ -74,6 +75,8 @@ class FakeCodegen:
                 "channel": channel,
                 "run_kind": run.kind,
                 "fresh": fresh,
+                # phase-60: an explicit plan-vs-incremental override off the intent payload.
+                "forced_scope": forced_scope,
             }
         )
         if self._error is not None:

@@ -53,6 +53,24 @@ if ! docker run --rm --read-only --network none --tmpfs /tmp "${IMAGE}" true 2>&
   exit 1
 fi
 
+# phase-59: the preview reclaims its fixed ports and kills dev-server process TREES using these.
+# Assert them as the `app` user under a read-only root, which is how they actually run.
+echo "==> Checking the process/port tools the preview reclaim depends on"
+docker run --rm --read-only --network none --tmpfs /tmp \
+  -v "${IMAGE_HOME_VOL:-forgeflow-smoke-home}:/home/app" \
+  "${IMAGE}" \
+  bash -c '
+    set -euo pipefail
+    for tool in ps pgrep pkill fuser; do
+      command -v "$tool" >/dev/null || { echo "FAIL: $tool missing from the image" >&2; exit 1; }
+    done
+    # Not just present -- runnable unprivileged, which is the only way the sandbox ever calls them.
+    ps -o pid= -p $$ >/dev/null
+    pgrep -P 1 >/dev/null || true
+    fuser -n tcp 5173 >/dev/null 2>&1 || true
+    echo "process tools OK"
+  '
+
 echo "==> Running the sample Node app + Playwright chromium test in-container"
 docker run --rm \
   -v "${SCRIPT_DIR}:/workspace/smoke:ro" \

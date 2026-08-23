@@ -4,9 +4,9 @@ Shaped after ``DesignProvider`` (phase-16) so targets stay pluggable without the
 knowing any vendor. Two things are deliberately structural rather than conventional:
 
 1. **A provider serves exactly one target.** :attr:`BaseDeployProvider.target` is a class
-   attribute, and :meth:`BaseDeployProvider._check_target` rejects a mismatched spec before any
-   network call. Deploying a backend to Vercel is therefore not a policy you could relax — there is
-   no code path that reaches Vercel's transport with a ``be`` spec (D11, risk §12).
+   set, and :meth:`BaseDeployProvider._check_target` rejects a spec outside it before any network
+   call. Render serves ``be`` only and Vercel serves both (D11 as amended, phase-58): the check is
+   membership, so a provider can never be handed a target it has no code path for.
 2. **Credentials are resolved per mode, at call time.** ``seamless`` uses the platform credential
    (vault, then config); ``byo`` requires *this user's* token and fails with an actionable auth
    error if it is absent. Nothing is cached and nothing is logged (phase-34).
@@ -88,11 +88,11 @@ class DeploySpec:
                 "A frontend deployment needs the built static output",
                 target=str(self.target),
             )
-        if self.target is DeployTarget.be and not (self.start_cmd or "").strip():
+        if self.target is DeployTarget.be and not (self.files or (self.start_cmd or "").strip()):
             raise deploy_error(
-                "render",
+                "deploy",
                 DeployErrorKind.config,
-                "A backend deployment needs a start command",
+                "A backend deployment needs uploaded source or a start command",
                 target=str(self.target),
             )
 
@@ -105,6 +105,9 @@ class DeployRef:
     id: str
     #: Provider-side project/service name — Vercel scopes env vars to the project, not a deployment.
     project: str | None = None
+    #: Which target this deployment serves. Needed because one provider may serve both (phase-58):
+    #: ``status`` has only the ref, so without this it could not tell an fe deploy from a be one.
+    target: DeployTarget | None = None
 
 
 @dataclass(frozen=True)
@@ -291,16 +294,21 @@ class BaseDeployProvider:
 
     # -- guards + helpers -------------------------------------------------------------------
 
+    @property
+    def served_targets(self) -> frozenset[DeployTarget]:
+        """Every target this adapter can deploy. Defaults to just its primary ``target``."""
+        return getattr(self, "targets", None) or frozenset({self.target})
+
     def _check_target(self, spec: DeploySpec) -> None:
         """Refuse a spec this provider does not serve — the D11 split, enforced in code."""
-        if spec.target is not self.target:
+        if spec.target not in self.served_targets:
             raise self._error(
                 DeployErrorKind.config,
-                f"{self.key} only deploys the '{self.target}' target, not '{spec.target}'",
+                f"{self.key} does not deploy the '{spec.target}' target",
                 target=str(spec.target),
                 hint=(
-                    "The frontend deploys to Vercel and the backend to Render. A persistent Node "
-                    "service cannot run on Vercel's serverless model."
+                    "Vercel serves the frontend and (since phase-58) the backend; Render serves "
+                    "the backend only. Check DEPLOY_BE_PROVIDER."
                 ),
             )
 

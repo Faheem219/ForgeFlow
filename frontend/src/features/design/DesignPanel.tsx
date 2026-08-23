@@ -160,7 +160,11 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   const design = useMemo(
     () =>
       viewingOther
-        ? { html: screenQuery.data?.html ?? '', css: screenQuery.data?.css ?? '', screens: EMPTY_SCREENS }
+        ? {
+            html: screenQuery.data?.html ?? '',
+            css: screenQuery.data?.css ?? '',
+            screens: EMPTY_SCREENS,
+          }
         : version,
     [viewingOther, screenQuery.data?.html, screenQuery.data?.css, version],
   );

@@ -14,6 +14,7 @@ from app.deploy.orchestrate import DeployOrchestrator
 from app.deploy.providers.base import DeployTarget
 from app.projects.service import ProjectService
 from tests.deploy.orchestrate_fakes import (
+    FakeBackendSource,
     FakeDeployProvider,
     FakeFrontendBuilder,
     RecordingEmitter,
@@ -31,6 +32,7 @@ def _orchestrator() -> DeployOrchestrator:
     return DeployOrchestrator(
         plan_source=static_plan_source(full_plan()),
         frontend_builder=FakeFrontendBuilder(),
+        backend_source=FakeBackendSource(),
         provider_factory=factory_of(fe, be),
         emitter=RecordingEmitter(),
     )

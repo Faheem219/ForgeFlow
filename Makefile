@@ -12,7 +12,7 @@ PREVIEW_NETWORK ?= forgeflow-preview
 DOTENV := $(wildcard $(CURDIR)/.env)
 ENV_FILE_ARG := $(if $(DOTENV),--env-file $(DOTENV),)
 
-.PHONY: help dev preview-net proxy down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
+.PHONY: help dev preview-net proxy host-deps down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -27,6 +27,9 @@ preview-net: ## Create the preview network if absent (the sandbox manager owns i
 
 proxy: preview-net ## Run ONLY the reverse proxy — preview URLs need it even when api/web run on the host
 	$(COMPOSE) up -d --no-deps proxy
+
+host-deps: preview-net ## Host mode: start ONLY what a host-run backend needs (generated-app DB + proxy)
+	$(COMPOSE) up -d --no-deps appdb proxy
 
 down: ## Stop and remove the local stack
 	$(COMPOSE) down

@@ -14,19 +14,20 @@ You are building **ForgeFlow**: an AI-native, human-in-the-loop **PWA** that tak
 4. **Never hardcode or log secrets.** All config from env; provider tokens encrypted at rest; decrypted only at call time; never returned to the client.
 5. **The repair loop is always bounded.** Diff-aware context, max iterations, no-progress detection, human escalation. Never build an unbounded fix loop.
 6. **Non-linearity is an invariant.** No stage is mandatory. Downstream stages must tolerate missing/stale upstream artifacts. Only hard prereqs: deploy⇐build, validate⇐deploy.
-7. **Cost discipline.** Use `MODEL_ROUTING` (Haiku) for classification/summaries/routing; `MODEL_CODEGEN` (Sonnet) only for real code/test/repair work. Record token usage per project; respect budget caps.
+7. **Cost discipline.** Route by *role*, never by vendor: `MODEL_CLASSIFY` for classification (blank ⇒ `MODEL_ROUTING`), `MODEL_ROUTING` for summaries/routing, `MODEL_CODEGEN` **only** for real code/test/repair work. Record token usage per project; respect budget caps. Prefer skipping expensive *planning* over skipping *verification* — a cheap path must never mean an unproven one.
 8. **Ship phases independently.** Each phase must build, pass its tests, and leave the app runnable. No half-finished phases.
 
 ---
 
 ## Tech stack
 
-- **Control plane:** FastAPI (Python 3.11, `uv`), Pydantic v2, Motor + Beanie (MongoDB), `anthropic` SDK, `docker` SDK, WebSockets, `httpx`, `cryptography`, `pytest`.
+- **Control plane:** FastAPI (Python 3.11, `uv`), Pydantic v2, Motor + Beanie (MongoDB), `docker` SDK, WebSockets, `httpx`, `cryptography`, `pytest`. LLM access goes through the phase-20 `Transport` seam — both the `anthropic` SDK and any **OpenAI-compatible Chat Completions** endpoint (`openai` extra).
 - **Frontend:** React 18 + Vite + TS + Tailwind (semantic tokens, light+dark, indigo/violet), Zustand, TanStack Query, `@monaco-editor/react`, `xterm.js`, `@xyflow/react` (React Flow), `vite-plugin-pwa`; UI-revamp additions (authorized): `framer-motion`, `react-resizable-panels`, `lucide-react`, `clsx`+`tailwind-merge`, `@fontsource` Inter/JetBrains Mono.
 - **Generated apps (fixed):** React+Vite+TS / Express+TS / Mongoose / Zod / Vitest / Jest+supertest / Playwright.
 - **Sandbox image:** Node 20 + pnpm + Playwright + git, non-root.
-- **Deploy:** Vercel (SPA FE), Render (Node BE). **BE is never deployed to Vercel.**
-- **Models:** `MODEL_CODEGEN=claude-sonnet-5`, `MODEL_ROUTING=claude-haiku-4-5-20251001` (env-configurable).
+- **Deploy:** Vercel for **both** the SPA frontend and the Node backend (a function built from an inline source upload — no git host in the path), Atlas for the DB. Render stays available behind `DEPLOY_BE_PROVIDER=render`. *(D11 amended 2026-08-23, phase-58 — the earlier rule "BE is never deployed to Vercel" no longer applies.)*
+- **LLM provider (priority, amended 2026-08-23 — phase-60):** **OpenAI-compatible Chat Completions is the primary interface**, because it is the standard most providers implement; Anthropic is fully supported behind the same seam and remains the default `LLM_PROVIDER`. Treat neither as privileged when writing code: nothing above the transport may assume a vendor's request shape, model ids, or error format (`phase-53`, `phase-57`).
+- **Models:** ids are *configuration, not identity* — `MODEL_CODEGEN`, `MODEL_ROUTING`, `MODEL_CLASSIFY`. Defaults are `claude-sonnet-5` / `claude-haiku-4-5-20251001` / blank (⇒ routing); set them to the target provider's ids and price them via `MODEL_PRICING_JSON`.
 
 ## Repository structure
 
@@ -50,7 +51,7 @@ See Section 5 of the plan. Backend under `backend/app/**` (core, db, auth, proje
 
 ## Testing conventions
 
-- **Control plane:** `pytest` (+`pytest-asyncio`); mock external providers (Anthropic, Stitch, Vercel, Render); use a disposable test Mongo DB.
+- **Control plane:** `pytest` (+`pytest-asyncio`); mock external providers (the LLM transport, Stitch, Vercel, Render); use a disposable test Mongo DB. Provider tests must cover **both** transports where behaviour could diverge.
 - **Frontend:** Vitest + Testing Library for units; keep components testable.
 - **Generated apps:** Vitest/Jest for units, Playwright for E2E; E2E runs against the sandbox preview (dev) and the live URL (validation).
 - A phase is **not done** until its acceptance criteria (in `plans/phase-XX`) are met with passing tests.

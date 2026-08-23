@@ -250,6 +250,35 @@ def _extract_object(text: str) -> dict[str, Any] | None:
     return None
 
 
+def incremental_plan(instruction: str) -> BuildPlan:
+    """A single-phase plan for a small change request (phase-60).
+
+    A refine that touches a few files does not need planning — but it *does* need everything the
+    phase runner already provides: a bounded loop, a scoped typecheck gate, a fix sub-loop and a
+    commit. So the change becomes one synthetic ``wiring`` phase and reuses that machinery, rather
+    than growing a second implementation path that would drift from it.
+
+    ``wiring`` is deliberate: it is the one kind whose typecheck gate covers *both* packages, and a
+    small change is not known in advance to stay on one side of the app.
+    """
+    goal = instruction.strip()
+    return BuildPlan(
+        phases=[
+            BuildPhase(
+                id="change",
+                title="Apply the requested change",
+                kind="wiring",
+                goal=goal,
+                done_when=[
+                    "The requested change is implemented in the existing code.",
+                    "Nothing else about the app's behaviour changed.",
+                ],
+            )
+        ],
+        assumptions=[],
+    )
+
+
 def fallback_plan(features: list[str], *, has_design: bool) -> BuildPlan:
     """The deterministic plan — what makes a build possible with no upstream artifacts (D12)."""
     feature_text = ", ".join(features[:6]) if features else "a minimal but genuinely useful feature"
@@ -375,6 +404,7 @@ __all__ = [
     "SOURCE_FALLBACK",
     "SOURCE_MODEL",
     "fallback_plan",
+    "incremental_plan",
     "parse_build_plan",
     "render_markdown",
 ]

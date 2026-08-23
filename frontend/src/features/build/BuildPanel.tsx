@@ -42,6 +42,10 @@ async function openGeneratedFile(projectId: string, path: string): Promise<void>
 }
 
 // Monaco / xterm-backed IDE + preview are heavy — pull them in only when Build is shown.
+import { FocusButton, FocusOverlay } from '../workspace/layout/FocusOverlay';
+import { Pane, PaneHandle, Split } from '../workspace/layout/SplitPane';
+import { layoutId } from '../workspace/layout/layoutStorage';
+
 const Ide = lazy(() => import('../ide/Ide'));
 const Preview = lazy(() => import('../ide/Preview'));
 
@@ -96,6 +100,8 @@ const PHASE_TONE: Record<string, string> = {
 export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const queryClient = useQueryClient();
   const [showPreview, setShowPreview] = useState(false);
+  // Which pane, if any, is maximized. Momentary intent, so it is not persisted across reloads.
+  const [focused, setFocused] = useState<'ide' | 'preview' | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [runKey, setRunKey] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -160,6 +166,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
     enabled: Boolean(latestReportId),
   });
   const report = parseBuildReport(reportQuery.data?.content);
+  // Which path the last build took. Empty for reports written before scope routing (phase-60), and
+  // for those the badge is simply absent rather than guessing.
+  const scopeLabel =
+    report?.scope === 'small'
+      ? 'Incremental change'
+      : report?.scope === 'large'
+        ? `Planned build · ${report.phases.length} phase${report.phases.length === 1 ? '' : 's'}`
+        : '';
 
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
@@ -291,6 +305,15 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               {activityLabel ? `${activityLabel}…` : 'Generating…'}
             </span>
           ) : null}
+          {scopeLabel ? (
+            <span
+              className="text-xs text-fg-muted"
+              data-testid="build-scope"
+              title={report?.scope_reason || undefined}
+            >
+              {scopeLabel}
+            </span>
+          ) : null}
         </span>
         <div className="flex gap-2">
           <Button
@@ -354,6 +377,25 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                     Rebuild from scratch
                     <span className="mt-0.5 block text-[11px] text-fg-subtle">
                       Ignore existing feature code and regenerate it.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="build-force-plan"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      intent.mutate({
+                        stage: 'build',
+                        action: 'proceed',
+                        payload: { scope: 'large' },
+                      });
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised"
+                  >
+                    Force a planned build
+                    <span className="mt-0.5 block text-[11px] text-fg-subtle">
+                      Plan the work in phases even if the change looks small.
                     </span>
                   </button>
                 </div>
@@ -548,33 +590,77 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
         </p>
       )}
 
-      {/* Live generation (IDE stream) fills the panel; preview splits in beside it on demand. */}
-      <div
-        className={`grid min-h-0 flex-1 gap-3 ${
-          showPreview ? 'grid-rows-2 xl:grid-cols-2 xl:grid-rows-1' : 'grid-rows-1'
-        }`}
+      {/*
+        Live generation (IDE stream) and the preview, side by side and DRAGGABLE (phase-61). This
+        used to be `grid-rows-2 xl:grid-cols-2`, i.e. a fixed 50/50 inside a column that was already
+        the narrowest region on screen — which is how both ended up ~200px wide and unreadable.
+        Either pane can also take the whole window; the subtree stays mounted through that, so the
+        preview iframe does not reload and terminal/editor state survives.
+      */}
+      <Split
+        id={layoutId(projectId, 'build-center')}
+        direction="horizontal"
+        panelIds={['ide', 'preview']}
+        className="min-h-0 flex-1"
       >
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center">
-              <Spinner />
-            </div>
-          }
-        >
-          <Ide projectId={projectId} />
-        </Suspense>
-        {showPreview ? (
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <Spinner />
-              </div>
-            }
+        <Pane id="ide" minSize={25}>
+          <FocusOverlay
+            open={focused === 'ide'}
+            title="Files & editor"
+            onClose={() => setFocused(null)}
           >
-            <Preview projectId={projectId} />
-          </Suspense>
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <div className="absolute right-1 top-1 z-10">
+                <FocusButton
+                  label="Files & editor"
+                  testId="focus-ide"
+                  onClick={() => setFocused((f) => (f === 'ide' ? null : 'ide'))}
+                />
+              </div>
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center">
+                    <Spinner />
+                  </div>
+                }
+              >
+                <Ide projectId={projectId} />
+              </Suspense>
+            </div>
+          </FocusOverlay>
+        </Pane>
+        {showPreview ? (
+          <>
+            <PaneHandle direction="horizontal" />
+            <Pane id="preview" defaultSize={45} minSize={20}>
+              <FocusOverlay
+                open={focused === 'preview'}
+                title="Preview"
+                onClose={() => setFocused(null)}
+              >
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  <div className="absolute right-1 top-1 z-10">
+                    <FocusButton
+                      label="Preview"
+                      testId="focus-preview"
+                      onClick={() => setFocused((f) => (f === 'preview' ? null : 'preview'))}
+                    />
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center">
+                        <Spinner />
+                      </div>
+                    }
+                  >
+                    <Preview projectId={projectId} />
+                  </Suspense>
+                </div>
+              </FocusOverlay>
+            </Pane>
+          </>
         ) : null}
-      </div>
+      </Split>
     </div>
   );
 }

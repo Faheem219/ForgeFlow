@@ -10,6 +10,7 @@ from app.deploy.db_provision import DbProvisioner
 from app.deploy.orchestrate import DeployOrchestrator
 from app.deploy.providers.base import DeployTarget
 from tests.deploy.orchestrate_fakes import (
+    FakeBackendSource,
     FakeDeployProvider,
     FakeFrontendBuilder,
     RecordingEmitter,
@@ -32,6 +33,7 @@ async def test_backend_gets_the_db_uri_and_frontend_gets_the_backend_url() -> No
     orch = DeployOrchestrator(
         plan_source=static_plan_source(full_plan()),
         frontend_builder=builder,
+        backend_source=FakeBackendSource(),
         provider_factory=factory_of(fe, be),
         emitter=RecordingEmitter(),
     )
@@ -77,6 +79,7 @@ async def test_frontend_is_built_after_the_backend_is_live() -> None:
     orch = DeployOrchestrator(
         plan_source=static_plan_source(full_plan()),
         frontend_builder=OrderedBuilder(),
+        backend_source=FakeBackendSource(),
         provider_factory=factory_of(fe, be),
         emitter=RecordingEmitter(),
     )
