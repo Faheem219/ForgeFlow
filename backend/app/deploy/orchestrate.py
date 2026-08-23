@@ -165,9 +165,11 @@ class DeployOrchestrator:
             project_id=project_id,
             mode=mode,
             fe_target="vercel" if plan.fe is not None else None,
-            be_target=(be_result.provider if be_result else _configured_be_provider())
-            if plan.be is not None
-            else None,
+            be_target=(
+                (be_result.provider if be_result else _configured_be_provider())
+                if plan.be is not None
+                else None
+            ),
             db_target=db_target,
             urls=urls,
             status=status,

@@ -7,6 +7,8 @@ not the one you want doing routing. Blank must behave exactly as before.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 from app.agents.models import TaskKind, route
@@ -14,7 +16,7 @@ from app.core.config import reset_config
 
 
 @pytest.fixture(autouse=True)
-def _clean_config() -> None:
+def _clean_config() -> Iterator[None]:
     reset_config()
     yield
     reset_config()

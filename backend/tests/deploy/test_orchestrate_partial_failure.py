@@ -10,8 +10,8 @@ from app.db.models.enums import DeployMode
 from app.deploy.orchestrate import STATUS_DEGRADED, STATUS_FAILED, STATUS_LIVE, DeployOrchestrator
 from app.deploy.providers.base import DeployState, DeployTarget
 from tests.deploy.orchestrate_fakes import (
-    FakeDeployProvider,
     FakeBackendSource,
+    FakeDeployProvider,
     FakeFrontendBuilder,
     RecordingEmitter,
     factory_of,

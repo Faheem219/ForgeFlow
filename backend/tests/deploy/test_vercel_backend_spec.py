@@ -9,6 +9,7 @@ a static 404 is entirely in ``projectSettings`` and where the env lands.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -48,11 +49,13 @@ def _be_spec(env: dict[str, str] | None = None) -> DeploySpec:
     )
 
 
-async def _deploy(api: FakeDeployApi, spec: DeploySpec) -> dict:
+async def _deploy(api: FakeDeployApi, spec: DeploySpec) -> dict[str, Any]:
     provider = VercelDeployProvider(transport=api.transport(), sleep=no_sleep)
     await provider.deploy(spec, mode=DeployMode.seamless)
     body = api.bodies[0]
-    return json.loads(body) if isinstance(body, (str, bytes)) else body
+    parsed = json.loads(body) if isinstance(body, (str, bytes)) else body
+    assert isinstance(parsed, dict)
+    return parsed
 
 
 async def test_the_workspace_source_is_uploaded_inline(platform_creds: None) -> None:

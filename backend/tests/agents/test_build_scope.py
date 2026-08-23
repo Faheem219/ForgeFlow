@@ -13,6 +13,7 @@ import pytest
 from app.agents.build_scope import (
     BuildScope,
     ScopeClassifier,
+    ScopeDecision,
     heuristic_scope,
     parse_scope,
     user_prompt,
@@ -29,7 +30,9 @@ class _FakeResult:
 class _FakeClient:
     """Records the loop it was asked to run; returns a canned verdict or raises."""
 
-    def __init__(self, text: str = "SMALL\na contained fix", error: Exception | None = None) -> None:
+    def __init__(
+        self, text: str = "SMALL\na contained fix", error: Exception | None = None
+    ) -> None:
         self._text = text
         self._error = error
         self.calls: list[dict[str, object]] = []
@@ -46,7 +49,9 @@ def _classifier(**kwargs: object) -> tuple[ScopeClassifier, _FakeClient]:
     return ScopeClassifier(client), client
 
 
-async def _decide(classifier: ScopeClassifier, instruction: str | None, **kw: object):
+async def _decide(
+    classifier: ScopeClassifier, instruction: str | None, **kw: object
+) -> ScopeDecision:
     """Drive one decision. ``run`` is opaque to the classifier (it only forwards it to the loop),
     so a stub keeps these tests off the database entirely."""
     from types import SimpleNamespace
@@ -155,7 +160,8 @@ async def test_the_reported_instruction_routes_to_a_single_pass() -> None:
 
     decision = await _decide(
         classifier,
-        "The home page just has a sign in prompt but no actual button to help me sign in, please fix",
+        "The home page just has a sign in prompt but no actual button to help me sign in, "
+        "please fix",
     )
 
     assert decision.scope is BuildScope.small

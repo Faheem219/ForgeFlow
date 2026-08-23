@@ -10,8 +10,8 @@ from app.deploy.db_provision import DbProvisioner
 from app.deploy.orchestrate import DeployOrchestrator
 from app.deploy.providers.base import DeployTarget
 from tests.deploy.orchestrate_fakes import (
-    FakeDeployProvider,
     FakeBackendSource,
+    FakeDeployProvider,
     FakeFrontendBuilder,
     RecordingEmitter,
     factory_of,

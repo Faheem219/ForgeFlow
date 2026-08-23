@@ -10,8 +10,8 @@ from app.deploy.orchestrate import STATUS_LIVE, DeployOrchestrator
 from app.deploy.providers.base import DeployTarget
 from app.realtime.schemas import EventType
 from tests.deploy.orchestrate_fakes import (
-    FakeDeployProvider,
     FakeBackendSource,
+    FakeDeployProvider,
     FakeFrontendBuilder,
     RecordingEmitter,
     factory_of,

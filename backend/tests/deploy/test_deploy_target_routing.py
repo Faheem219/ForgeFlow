@@ -57,7 +57,9 @@ def fe_spec() -> DeploySpec:
 
 
 async def test_vercel_now_accepts_a_backend_spec(platform_creds: None) -> None:
-    api = FakeDeployApi({("POST", "/v13/deployments"): (200, {"id": "dpl_1", "readyState": "READY"})})
+    api = FakeDeployApi(
+        {("POST", "/v13/deployments"): (200, {"id": "dpl_1", "readyState": "READY"})}
+    )
     provider = VercelDeployProvider(transport=api.transport(), sleep=no_sleep)
 
     result = await provider.deploy(be_spec(), mode=DeployMode.seamless)
@@ -70,7 +72,9 @@ async def test_a_backend_deploy_reports_the_backend_target_not_the_primary_one(
     platform_creds: None,
 ) -> None:
     """One provider serves two targets, so the ref must carry which one it is (phase-58)."""
-    api = FakeDeployApi({("POST", "/v13/deployments"): (200, {"id": "dpl_1", "readyState": "READY"})})
+    api = FakeDeployApi(
+        {("POST", "/v13/deployments"): (200, {"id": "dpl_1", "readyState": "READY"})}
+    )
     provider = VercelDeployProvider(transport=api.transport(), sleep=no_sleep)
 
     result = await provider.deploy(be_spec(), mode=DeployMode.seamless)
@@ -110,9 +114,7 @@ def test_a_frontend_spec_still_needs_built_output() -> None:
 
 
 def test_each_provider_declares_which_targets_it_serves() -> None:
-    assert VercelDeployProvider().served_targets == frozenset(
-        {DeployTarget.fe, DeployTarget.be}
-    )
+    assert VercelDeployProvider().served_targets == frozenset({DeployTarget.fe, DeployTarget.be})
     assert RenderDeployProvider().served_targets == frozenset({DeployTarget.be})
 
 

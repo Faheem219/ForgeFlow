@@ -99,11 +99,8 @@ def reclaim_script(ports: list[int], *, kinds: list[str] | None = None) -> str:
         return "exit 0"
 
     pidfiles = " ".join(shlex.quote(pidfile_path(k)) for k in (kinds or []))
-    busy_checks = "".join(
-        f"""
-if _busy {port}; then echo "{BUSY_MARKER} {port}"; fi"""
-        for port in ports
-    )
+    busy_checks = "".join(f"""
+if _busy {port}; then echo "{BUSY_MARKER} {port}"; fi""" for port in ports)
     return f"""set -u
 
 # LISTEN (state 0A) on this port, by hex suffix in /proc/net/tcp{{,6}}.
@@ -152,7 +149,7 @@ def parse_busy_ports(output: str) -> list[int]:
 
 #: Counts processes in the sandbox — a runaway count is what surfaces later as node's inscrutable
 #: ``uv_thread_create`` assertion, so it is worth seeing directly (phase-59).
-PROCESS_COUNT_SCRIPT = 'ls -d /proc/[0-9]* 2>/dev/null | wc -l'
+PROCESS_COUNT_SCRIPT = "ls -d /proc/[0-9]* 2>/dev/null | wc -l"
 
 
 def parse_process_count(output: str) -> int | None:
