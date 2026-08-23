@@ -30,6 +30,12 @@ export interface BuildReportData {
   verification: Record<string, unknown> | null;
   outcome: string;
   stop_reason: string | null;
+  /**
+   * phase-60 — which path the build took: 'small' is one incremental pass, 'large' is a planned,
+   * phase-by-phase build. Empty on every report written before scope routing.
+   */
+  scope: string;
+  scope_reason: string;
 }
 
 export const BUILD_REPORT_KIND = 'build_report';
@@ -136,5 +142,7 @@ export function parseBuildReport(content: string | null | undefined): BuildRepor
         : null,
     outcome: str(raw.outcome),
     stop_reason: typeof raw.stop_reason === 'string' ? raw.stop_reason : null,
+    scope: str(raw.scope),
+    scope_reason: str(raw.scope_reason),
   };
 }

@@ -185,7 +185,14 @@ _KEYS: tuple[ConfigKey, ...] = (
         "model_routing",
         Cat.models,
         "str",
-        "Cheap model for classification/summaries/routing (cost discipline).",
+        "Cheap model for summaries/routing (cost discipline).",
+    ),
+    ConfigKey(
+        "model_classify",
+        Cat.models,
+        "str",
+        "Model for cheap classification calls (e.g. deciding whether a change request needs a "
+        "phased build). Blank uses MODEL_ROUTING.",
     ),
     ConfigKey(
         "anthropic_api_key",

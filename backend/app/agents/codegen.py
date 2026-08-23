@@ -24,7 +24,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from beanie import PydanticObjectId
 
@@ -36,7 +36,8 @@ from app.agents.build_phases import (
     PhaseRunner,
     story_so_far,
 )
-from app.agents.build_plan import PHASE_DONE, PHASE_PENDING, BuildPlan
+from app.agents.build_plan import PHASE_DONE, PHASE_PENDING, BuildPlan, incremental_plan
+from app.agents.build_scope import BuildScope, ScopeClassifier
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.agents.tools.registry import ToolDispatch, ToolRegistry
@@ -186,6 +187,9 @@ class BuildReport:
     verification: dict[str, Any] | None = None
     outcome: str = ""
     stop_reason: str | None = None
+    # phase-60 additions — defaulted, so reports written before scope routing still parse.
+    scope: str = ""
+    scope_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -202,6 +206,8 @@ class BuildReport:
             "verification": self.verification,
             "outcome": self.outcome,
             "stop_reason": self.stop_reason,
+            "scope": self.scope,
+            "scope_reason": self.scope_reason,
         }
 
     @property
@@ -274,6 +280,8 @@ class CodegenAgent:
         # phase-56: the build is planned into phases and implemented one at a time.
         self._planner = BuildPlanner(self._client, self._artifacts)
         self._phases = PhaseRunner(self._client)
+        # phase-60: decides whether this invocation needs planning at all.
+        self._scope = ScopeClassifier(self._client)
 
     async def _quiesce_preview(self, project: Project, channel: str) -> None:
         """Stop a running preview so codegen writes cannot trigger a watcher restart storm."""
@@ -293,6 +301,7 @@ class CodegenAgent:
         channel: str | None = None,
         instruction: str | None = None,
         fresh: bool = False,
+        forced_scope: BuildScope | None = None,
     ) -> BuildReport:
         project_id = project.id
         if project_id is None:  # pragma: no cover - a persisted project always carries an id
@@ -355,24 +364,51 @@ class CodegenAgent:
         if instruction:
             notes.insert(0, f"Change request: {instruction}")
 
-        # Step 1 — plan (Haiku). The phase plan lands in `phase-plan/` and as a versioned artifact.
+        # Step 1 — decide how much build this actually needs (phase-60), then plan only if it does.
+        # A one-line refine used to trigger a full re-plan plus phase-by-phase execution; scope is a
+        # property of the request, so a cheap classify call routes it.
         await self._emit(channel, "plan", run)
-        build_plan = await self._planner.plan(
-            project,
-            run,
-            ctx=ctx,
+        decision = await self._scope.decide(
+            project_id=project_id,
+            run=run,
             channel=channel,
-            design=design,
-            requirements=requirements,
-            features=features,
-            existing=existing,
             instruction=instruction,
+            has_build=bool(existing_paths),
+            fresh=fresh,
+            existing_files=len(existing_paths),
+            forced=forced_scope,
         )
+        notes.append(f"Build scope: {decision.scope} — {decision.reason}.")
+
+        if decision.is_small:
+            # No planner call, no `phase-plan/` rewrite: the change becomes one synthetic phase and
+            # reuses the phase runner's bounded loop, typecheck gate, fix sub-loop and commit. The
+            # saving is in PLANNING, never in proof — phase-55 verification runs unchanged below.
+            assert instruction is not None  # a small scope implies a change request
+            build_plan = incremental_plan(instruction)
+        else:
+            build_plan = await self._planner.plan(
+                project,
+                run,
+                ctx=ctx,
+                channel=channel,
+                design=design,
+                requirements=requirements,
+                features=features,
+                existing=existing,
+                instruction=instruction,
+            )
         plan = build_plan.to_prose()  # BuildReport.plan keeps its existing string shape
 
         # Step 2 — implement phase by phase (Sonnet, one *small* bounded loop each). Resume skips
         # every phase the last report already recorded as `done`.
-        resume_from, carried = await self._resume_point(project_id, build_plan, fresh=fresh)
+        #
+        # A small change never resumes: its synthetic phase id is stable, so a second refine would
+        # see the first one's `change` phase recorded as done and skip the new request entirely.
+        if decision.is_small:
+            resume_from, carried = 0, cast(list[PhaseOutcome], [])
+        else:
+            resume_from, carried = await self._resume_point(project_id, build_plan, fresh=fresh)
         if resume_from:
             notes.append(
                 f"Resuming at phase {resume_from + 1} of {len(build_plan.phases)} — "
@@ -392,6 +428,7 @@ class CodegenAgent:
                 notes=notes,
                 resume_from=resume_from,
                 carried=carried,
+                write_plan_files=not decision.is_small,
             )
         except Exception as exc:
             # Persist what the failed attempt DID achieve. Without this the files it wrote are
@@ -414,6 +451,8 @@ class CodegenAgent:
                 phases=list(carried),
                 outcome="failed",
                 stop_reason="failed",
+                scope=str(decision.scope),
+                scope_reason=decision.reason,
             )
             await self._persist_report(project_id, partial, failed=True)
             await emit(
@@ -457,6 +496,8 @@ class CodegenAgent:
             phases=phased.phases,
             outcome=("complete" if phased.complete and phased.stop_reason is None else "partial"),
             stop_reason=phased.stop_reason,
+            scope=str(decision.scope),
+            scope_reason=decision.reason,
         )
         await self._persist_report(project_id, report)
         await emit(
@@ -484,6 +525,7 @@ class CodegenAgent:
         notes: list[str],
         resume_from: int,
         carried: list[PhaseOutcome],
+        write_plan_files: bool = True,
     ) -> _PhaseLoopResult:
         """Implement the plan one phase at a time, rewriting ``phase-plan/`` as it goes.
 
@@ -535,10 +577,12 @@ class CodegenAgent:
                 notes.append(f"Build stopped — {abort.reason}. {abort.hint}".strip())
                 break
             outcomes.append(outcome)
-            # Rewrite the workspace checklist after EVERY phase, so it visibly fills in.
-            await self._planner.write_workspace(
-                project, ctx, plan, {o.id: o.status for o in outcomes}
-            )
+            # Rewrite the workspace checklist after EVERY phase, so it visibly fills in. A small
+            # change has no plan to show, and must not clobber the one a real build left behind.
+            if write_plan_files:
+                await self._planner.write_workspace(
+                    project, ctx, plan, {o.id: o.status for o in outcomes}
+                )
 
         remaining = [p for p in plan.phases if p.id not in {o.id for o in outcomes}]
         for phase in remaining:  # never silently drop a phase the build did not reach
@@ -551,7 +595,7 @@ class CodegenAgent:
                     note="not reached",
                 )
             )
-        if remaining:
+        if remaining and write_plan_files:
             await self._planner.write_workspace(
                 project, ctx, plan, {o.id: o.status for o in outcomes}
             )

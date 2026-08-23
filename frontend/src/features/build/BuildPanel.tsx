@@ -160,6 +160,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
     enabled: Boolean(latestReportId),
   });
   const report = parseBuildReport(reportQuery.data?.content);
+  // Which path the last build took. Empty for reports written before scope routing (phase-60), and
+  // for those the badge is simply absent rather than guessing.
+  const scopeLabel =
+    report?.scope === 'small'
+      ? 'Incremental change'
+      : report?.scope === 'large'
+        ? `Planned build · ${report.phases.length} phase${report.phases.length === 1 ? '' : 's'}`
+        : '';
 
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
@@ -291,6 +299,15 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               {activityLabel ? `${activityLabel}…` : 'Generating…'}
             </span>
           ) : null}
+          {scopeLabel ? (
+            <span
+              className="text-xs text-fg-muted"
+              data-testid="build-scope"
+              title={report?.scope_reason || undefined}
+            >
+              {scopeLabel}
+            </span>
+          ) : null}
         </span>
         <div className="flex gap-2">
           <Button
@@ -354,6 +371,25 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                     Rebuild from scratch
                     <span className="mt-0.5 block text-[11px] text-fg-subtle">
                       Ignore existing feature code and regenerate it.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="build-force-plan"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      intent.mutate({
+                        stage: 'build',
+                        action: 'proceed',
+                        payload: { scope: 'large' },
+                      });
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised"
+                  >
+                    Force a planned build
+                    <span className="mt-0.5 block text-[11px] text-fg-subtle">
+                      Plan the work in phases even if the change looks small.
                     </span>
                   </button>
                 </div>

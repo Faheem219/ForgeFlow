@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.agents.build_plan import PHASE_DONE
+from app.agents.build_scope import BuildScope
 from app.agents.codegen import BuildReport, CodegenAgent
 from app.agents.tools.context import ToolContext
 from app.core.errors import UserError
@@ -72,6 +73,9 @@ class BuildStageHandler:
         # Opt-in escape hatch: regenerate the feature code instead of extending what is on disk
         # (the default, so a failed build resumes rather than starting over).
         fresh = bool(intent.payload.get("fresh"))
+        # phase-60: the scope classifier decides plan-vs-incremental, and this overrides it when it
+        # gets one wrong — a misclassification should cost a click, not a dead end.
+        forced_scope = _forced_scope(intent.payload.get("scope"))
 
         # Codegen + verification share ONE costed Run (kept distinct from the conductor's intent
         # trace) and ONE ToolContext, so budget/cost accounting and the concurrent-build lock cover
@@ -87,6 +91,7 @@ class BuildStageHandler:
                 channel=channel,
                 instruction=instruction,
                 fresh=fresh,
+                forced_scope=forced_scope,
             )
             # Verify for real (install → typecheck → boot → placeholder) and self-heal code-class
             # failures through the bounded repair loop; env failures short-circuit, zero repairs.
@@ -131,6 +136,16 @@ class BuildStageHandler:
                 }
             ],
         )
+
+
+def _forced_scope(value: object) -> BuildScope | None:
+    """Read an explicit scope override off the intent payload; anything unrecognised is ignored."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return BuildScope(value.strip().lower())
+    except ValueError:
+        return None
 
 
 def _summarize(report: BuildReport, verify: BuildVerifyReport) -> str:

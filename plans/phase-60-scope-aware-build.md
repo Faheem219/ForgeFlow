@@ -6,7 +6,7 @@
 - **Title:** Scope-aware build (refine fast path), configurable classifier model, OpenAI-first posture
 - **Epic:** Epic 13 — Build quality *(amends `phase-56`)*
 - **Milestone:** M5
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-23)*
 
 ## Goal
 
@@ -174,3 +174,53 @@ Anthropic-only; the **documentation** is, and that is what this task corrects.
 - **The docs change, the architecture does not.** `phase-53`'s seam already makes provider a runtime
   choice; `phase-57` removed the last vendor-shaped assumption from the request. Declaring
   OpenAI-compatible primary is recording where the code already is.
+
+## Implementation status (as-built, 2026-08-23)
+
+**The distinction existed; it was discarded.** `build.py` already commented *"A refine carries the
+change-request instruction; a proceed is the initial build"* and then passed both down the same
+path. `CodegenAgent.run` now decides **before** planning.
+
+**Classifier.** New `app/agents/build_scope.py`: `heuristic_scope` answers without a model wherever
+it can (no instruction, `fresh`, no existing build, explicit override), and only a genuine refine on
+a built project reaches `ScopeClassifier`. That call is `TaskKind.classify`, `tools=[]`,
+`max_turns=1` — a verdict, not a task. Every failure route (`UserError`/`NotFoundError`, unparseable
+reply, ambiguous reply naming both words) falls back to `large`, so a build is never blocked on the
+classifier. `parse_scope` tolerates `**SMALL**` / `Answer: SMALL` / `SMALL.` but rejects a reply
+naming both, because resolving ambiguity by word order would be a coin flip.
+
+**Routing.** `MODEL_CLASSIFY` added, blank ⇒ `MODEL_ROUTING`, so an existing deployment changes
+nothing. `route()` in `app/agents/models.py` is the only place that knows.
+
+**The small path reuses the machinery.** Rather than a second implementation, a small change becomes
+a **single synthetic `wiring` phase** (`incremental_plan`) run through the existing `PhaseRunner` —
+same bounded loop, same typecheck gate, same fix sub-loop, same commit. `wiring` is deliberate: it
+is the one kind whose gate spans both packages, and a small change is not known in advance to stay
+on one side. Skipped for a small pass: the `BuildPlanner` call and the `phase-plan/` rewrite
+(`write_plan_files=False`, so a real plan on disk is not clobbered). **Verification is not skipped** —
+install → typecheck → boot → placeholder and the bounded repair loop run exactly as before.
+
+**A resume hazard found while wiring it.** The synthetic phase id is stable (`change`), so
+`_resume_point` would have seen the *previous* refine's phase recorded as `done` and skipped the new
+request entirely. The small path forces `resume_from=0`; `test_two_small_changes_must_not_share_a_
+resume_id` pins the property that makes that necessary.
+
+**UI.** The header states which path ran (*"Incremental change"* / *"Planned build · N phases"*) with
+the classifier's reason on hover, and the overflow menu gains **Force a planned build** — a
+misclassification costs a click, not a dead end. No badge at all for reports written before scope
+routing, rather than guessing.
+
+**Provider posture.** `CLAUDE.md` now states OpenAI-compatible Chat Completions as the **primary**
+interface with Anthropic fully supported behind the same seam; Golden Rule 7 is expressed in terms
+of `MODEL_CLASSIFY`/`MODEL_ROUTING`/`MODEL_CODEGEN` rather than Haiku/Sonnet, and the *Tech stack*
+and testing bullets follow. D4 is **annotated, not changed** — the roles are locked, the vendor is
+not. `DEVELOPER.md`'s OpenAI section is folded into the main configuration flow.
+
+**Verification.** `tests/agents/test_build_scope.py` 25, `test_codegen_scope_routing.py` 19,
+`tests/config/test_model_classify.py` 6, `BuildPanel.test.tsx` 17 — all passing. `ruff` clean;
+`mypy` clean apart from the 4 pre-existing `runtime.py` errors. Frontend typecheck clean.
+
+**Deferred (as scoped):** no live end-to-end refine against a real provider (needs a key and a built
+project) — the classifier is covered by a fake transport, and the routing decision by unit test.
+`phase-56`'s planner, phase runner and gates are untouched.
+

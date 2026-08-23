@@ -73,7 +73,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [57](./phase-57-provider-param-compatibility.md) | Provider-agnostic request compatibility | 12 · Admin & Config ✚ | 53, 51, 20 | ✅ |
 | [58](./phase-58-vercel-backend-deploy.md) | Vercel-hosted backend & deploy correctness | 7 · Deploy ✚ | 34, 35, 36, 37, 22 | ✅ |
 | [59](./phase-59-preview-process-lifecycle.md) | Preview process lifecycle & port reclaim | 2 · Sandbox & IDE ✚ | 10, 11, 13, 15, 55, 56 | ✅ |
-| [60](./phase-60-scope-aware-build.md) | Scope-aware build & OpenAI-first posture | 13 · Build Reliability ✚ | 23, 53, 55, 56, 57 | ⬜ |
+| [60](./phase-60-scope-aware-build.md) | Scope-aware build & OpenAI-first posture | 13 · Build Reliability ✚ | 23, 53, 55, 56, 57 | ✅ |
 | [61](./phase-61-workspace-layout.md) | Workspace layout: resizable panels & focus mode | 1 · Orchestration Core ✚ | 09, 13, 14, 15 | ⬜ |
 
 ✚ *Epics 12 (phases 51–53, 57) and 13 (phases 54–56) were added per the user's directive — see "Additions beyond the roadmap" below.*

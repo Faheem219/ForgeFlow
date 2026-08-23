@@ -1,8 +1,14 @@
 """Model routing (phase-20) — the single place that maps a task to a model id (D4, cost discipline).
 
-Code-shaped work (real generation/repair) goes to ``MODEL_CODEGEN`` (Sonnet); cheap
-routing/classification/summaries go to ``MODEL_ROUTING`` (Haiku). Both ids come from the layered
-config, so the admin dashboard can change them (phase-51/52) without touching any agent.
+Code-shaped work (real generation/repair) goes to ``MODEL_CODEGEN``; cheap routing/summaries go to
+``MODEL_ROUTING``; **classification** goes to ``MODEL_CLASSIFY``, falling back to ``MODEL_ROUTING``
+when blank (phase-60). Classification earns its own dial because it is the highest-volume cheap call
+— every refine hits it — and on an OpenAI-compatible endpoint the cheapest capable model for a
+one-word verdict is often not the one you want doing routing.
+
+Every id comes from the layered config, so the admin dashboard changes them without touching an
+agent, and **no id is hardcoded to a vendor**: the defaults happen to be Claude models, but an
+OpenAI-compatible endpoint is a first-class target (D4 as annotated, phase-60).
 """
 
 from __future__ import annotations
@@ -34,5 +40,12 @@ _CODEGEN_TASKS: frozenset[TaskKind] = frozenset(
 
 def route(task_kind: TaskKind) -> str:
     """Return the configured model id for a task kind."""
-    key = "model_codegen" if task_kind in _CODEGEN_TASKS else "model_routing"
-    return str(get_config().get(key))
+    config = get_config()
+    if task_kind in _CODEGEN_TASKS:
+        return str(config.get("model_codegen"))
+    if task_kind is TaskKind.classify:
+        # Blank -> MODEL_ROUTING, so an existing deployment behaves exactly as before.
+        explicit = str(config.get("model_classify")).strip()
+        if explicit:
+            return explicit
+    return str(config.get("model_routing"))

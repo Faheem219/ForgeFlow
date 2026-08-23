@@ -113,17 +113,26 @@ Everything up to and including **test + self-healing repair** runs entirely offl
 
 **Want a persistent Node process instead of a function?** `DEPLOY_BE_PROVIDER=render` restores the Render path — but Render builds by *cloning* `DEPLOY_REPO_URL`, and nothing pushes the workspace to a git remote, so it only works if you point it at a repo that already holds the app. That limitation is exactly why the default moved to Vercel.
 
-### Using an OpenAI-compatible provider instead
+### Choosing the LLM provider
+
+ForgeFlow targets **OpenAI-compatible Chat Completions as its primary interface** (the standard most
+providers implement); Anthropic is fully supported behind the same seam and is still the default.
+Model ids are configuration, not identity — set them to whatever your endpoint serves.
 
 ```bash
-cd backend && uv sync --extra openai
+cd backend && uv sync --extra openai     # only needed for LLM_PROVIDER=openai
 # .env:
 LLM_PROVIDER=openai
 OPENAI_API_KEY=...
 OPENAI_BASE_URL=            # blank = api.openai.com · http://localhost:11434/v1 for Ollama
-MODEL_CODEGEN=gpt-4o
-MODEL_ROUTING=gpt-4o-mini
+MODEL_CODEGEN=gpt-4o        # real code/test/repair work
+MODEL_ROUTING=gpt-4o-mini   # summaries + routing
+MODEL_CLASSIFY=             # blank = use MODEL_ROUTING; set it to go cheaper still
 ```
+
+`MODEL_CLASSIFY` covers the highest-volume cheap call — deciding whether a change request needs a
+full phased build or a single incremental pass — so it is worth pointing at the cheapest model your
+endpoint has.
 
 Getting a Stitch key: [stitch.withgoogle.com](https://stitch.withgoogle.com) → profile → Stitch settings → API keys. Quota is ~350 generations/month, and the API is text-prompt only — screenshot intake falls back to `fake`.
 

@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     anthropic_base_url: str = ""
     model_codegen: str = "claude-sonnet-5"
     model_routing: str = "claude-haiku-4-5-20251001"
+    # Model for cheap CLASSIFICATION calls (phase-60). Blank -> use model_routing. Split out
+    # because it is the highest-volume cheap call and often wants a different model.
+    model_classify: str = ""
     budget_cap_inr_per_project: float | None = None
     budget_cap_inr_global: float | None = None
 
