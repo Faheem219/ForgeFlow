@@ -72,19 +72,35 @@ export function CommandPalette({
       navigate(to);
     };
     const items: Command[] = [
-      ...(projectsQuery.data ?? []).map(
-        (p): Command => ({
-          id: `project-${p.id}`,
-          section: 'Projects',
-          label: p.name,
-          icon: FolderKanban,
-          hint: 'Open workspace',
-          run: go(`/projects/${p.id}`),
-        }),
-      ),
-      { id: 'nav-dashboard', section: 'Go to', label: 'Dashboard', icon: LayoutGrid, run: go('/dashboard') },
-      { id: 'nav-eval', section: 'Go to', label: 'Evaluation', icon: ChartNoAxesColumn, run: go('/eval') },
-      { id: 'nav-settings', section: 'Go to', label: 'Settings', icon: Settings2, run: go('/settings') },
+      ...(projectsQuery.data ?? []).map((p): Command => ({
+        id: `project-${p.id}`,
+        section: 'Projects',
+        label: p.name,
+        icon: FolderKanban,
+        hint: 'Open workspace',
+        run: go(`/projects/${p.id}`),
+      })),
+      {
+        id: 'nav-dashboard',
+        section: 'Go to',
+        label: 'Dashboard',
+        icon: LayoutGrid,
+        run: go('/dashboard'),
+      },
+      {
+        id: 'nav-eval',
+        section: 'Go to',
+        label: 'Evaluation',
+        icon: ChartNoAxesColumn,
+        run: go('/eval'),
+      },
+      {
+        id: 'nav-settings',
+        section: 'Go to',
+        label: 'Settings',
+        icon: Settings2,
+        run: go('/settings'),
+      },
       {
         id: 'action-new-project',
         section: 'Actions',
@@ -128,7 +144,16 @@ export function CommandPalette({
       });
     }
     return items;
-  }, [projectsQuery.data, role, themeMode, navigate, onClose, clearAuth, setThemeMode, requestNewProject]);
+  }, [
+    projectsQuery.data,
+    role,
+    themeMode,
+    navigate,
+    onClose,
+    clearAuth,
+    setThemeMode,
+    requestNewProject,
+  ]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

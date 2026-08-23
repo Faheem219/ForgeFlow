@@ -416,7 +416,9 @@ describe('build scope', () => {
     });
     renderPanel();
 
-    expect(await screen.findByTestId('build-scope')).toHaveTextContent('Planned build \u00b7 2 phases');
+    expect(await screen.findByTestId('build-scope')).toHaveTextContent(
+      'Planned build \u00b7 2 phases',
+    );
   });
 
   it('shows no badge for a report written before scope routing', async () => {

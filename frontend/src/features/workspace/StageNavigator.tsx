@@ -83,9 +83,7 @@ function StageRow({
       <div
         className={cn(
           'flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors',
-          active
-            ? 'bg-brand/10 ring-1 ring-inset ring-brand/25'
-            : 'hover:bg-surface-raised',
+          active ? 'bg-brand/10 ring-1 ring-inset ring-brand/25' : 'hover:bg-surface-raised',
         )}
       >
         {/* Name and status stack rather than compete for one line — at rail width the pair does not

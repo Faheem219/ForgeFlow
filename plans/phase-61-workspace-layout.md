@@ -6,7 +6,7 @@
 - **Title:** Workspace layout — resizable panels, collapsible rails, focus overlay
 - **Epic:** Epic 1 — Orchestration Core *(amends `phase-09`, `phase-14`, `phase-15`)*
 - **Milestone:** M5 *(usability)*
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-23)*
 
 ## Goal
 
@@ -157,3 +157,51 @@ layout the user shapes, and any single pane can take the whole window when it ne
 - **Keeping panes mounted is the load-bearing detail.** Unmounting on maximize would be far simpler
   and would silently reload the preview and destroy terminal scrollback — the two things a user is
   most likely to be maximizing *in order to read*.
+
+## Implementation status (as-built, 2026-08-23)
+
+**Primitives.** `features/workspace/layout/` — `SplitPane.tsx` wraps `react-resizable-panels` v4
+(`Group`/`Panel`/`Separator`/`useDefaultLayout`) in project-styled `Split`/`Pane`/`PaneHandle`, and
+`layoutStorage.ts` holds the persistence rules. They are separate files because the storage helpers
+are worth testing on their own — and because the `react-refresh` lint rule requires component-only
+modules. Handles carry a thin visible line inside a real grab target; a 1px hit area is the
+difference between resizable and technically resizable.
+
+**Persistence.** Keys are `forgeflow:layout:<projectId>:<name>`, so two projects arrange
+independently and `resetLayouts` can clear one project without touching auth tokens or anything
+else. `onlySaveAfterUserInteractions` means a window resize cannot overwrite an arrangement someone
+chose deliberately. Every `localStorage` access is guarded — private mode and a full quota both
+throw, and a layout preference must never take the workspace down. **Reset layout** clears storage
+and bumps a nonce that remounts the groups, because the library reads `defaultLayout` once on mount.
+
+**Shell.** `Workspace.tsx`'s fixed `w-60 / flex-1 / w-80 / h-64` becomes a vertical `Split`
+(body ⇄ terminal) containing a horizontal one (rail ⇄ main ⇄ assistant), each pane with an honest
+`minSize` so panes stop shrinking rather than silently squeezing. The terminal is now a resizable
+region instead of an unconditional 256px.
+
+**The reported pane.** `BuildPanel`'s `grid-rows-2 xl:grid-cols-2` — a fixed 50/50 inside the
+narrowest region on screen, which is how the IDE and preview each ended up ~200px — is now a
+draggable `Split` with `minSize` 25/20 and a maximize control on each.
+
+**Focus mode, and a bug the test caught.** The first draft returned a fragment when closed and a
+`createPortal` when open. That remounts: React reconciles them as different types at the same
+position, so the preview iframe would reload and terminal scrollback would be lost — precisely what
+the feature exists to prevent. `test_keeps_the_child_mounted_across_open_and_close` failed on it.
+The fix is that the wrapper never moves in the React tree *or* the DOM: focus mode is a CSS
+promotion to `position: fixed`, and only the inert, stateless backdrop is portalled. Documented
+alongside its one constraint — no ancestor may use a CSS transform, and the flex-based panel layout
+does not.
+
+**Accessibility.** `role="dialog"` + `aria-modal` only while open, a Tab trap that wraps at both
+ends, focus restored to whatever opened it, `Esc` to close, labelled maximize buttons (not
+icon-only), and `motion-reduce` on the transitions.
+
+**Verification.** Frontend **448 tests / 57 files** passing (up from 426/55): 10 new for storage,
+9 for the overlay, 3 for the scope badge from phase-60. `tsc`, `eslint --max-warnings 0` and
+`prettier --check` all clean.
+
+**Deferred (as scoped):** no visual regression or real-browser drag test — the drag mechanics belong
+to the library; what is tested here is persistence, reset scoping, mount preservation and the focus
+contract. Detachable/pop-out panes and user-defined arrangements beyond size and collapse stay out
+of scope, as does any change to the Data/Admin/Eval/Settings pages.
+

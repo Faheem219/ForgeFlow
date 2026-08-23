@@ -141,8 +141,8 @@ export function DeleteConfirm({
     >
       <p data-testid="delete-warning">
         This permanently removes <code className="font-mono text-fg">{docId}</code> from{' '}
-        <code className="font-mono text-fg">{collection}</code>. It affects your live app
-        data and cannot be undone.
+        <code className="font-mono text-fg">{collection}</code>. It affects your live app data and
+        cannot be undone.
       </p>
     </Modal>
   );
