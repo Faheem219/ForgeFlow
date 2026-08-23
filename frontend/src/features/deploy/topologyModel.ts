@@ -46,13 +46,13 @@ export const NODE_STATUS_TONES: Record<NodeStatus, 'neutral' | 'brand' | 'succes
 };
 
 /**
- * The fixed generated-app stack (a Vite SPA on Vercel, an Express API on Render, Mongo behind it),
+ * The fixed generated-app stack (a Vite SPA and an Express API on Vercel, Mongo behind them),
  * so the graph shows the shape a deploy *will* take before one has ever run.
  */
 export const DEFAULT_SNAPSHOT: TopologySnapshotDto = {
   nodes: [
     { id: 'fe', kind: 'frontend', provider: 'vercel', status: 'idle' },
-    { id: 'be', kind: 'backend', provider: 'render', status: 'idle' },
+    { id: 'be', kind: 'backend', provider: 'vercel', status: 'idle' },
     { id: 'db', kind: 'database', provider: 'platform', status: 'idle' },
   ],
   edges: [

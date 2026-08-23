@@ -295,7 +295,10 @@ class Settings(BaseSettings):
     deploy_timeout_s: float = 60.0  # per-call wall clock
     deploy_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
     # --- Deploy orchestration (phase-37) ---
-    deploy_repo_url: str = ""  # git repo Render builds the backend from (blank locally/mocked)
+    # Where the backend deploys (phase-58). "vercel" uploads the workspace inline and needs no git
+    # host; "render" clones deploy_repo_url below.
+    deploy_be_provider: str = "vercel"
+    deploy_repo_url: str = ""  # git repo Render builds from; unused when deploy_be_provider=vercel
     deploy_region: str = ""  # optional provider region for the backend service
     deploy_health_timeout_s: int = 180  # seconds to poll a deploy until it goes live
 

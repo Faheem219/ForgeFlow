@@ -71,7 +71,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 | [55](./phase-55-build-verification-selfheal.md) | Build verification & bounded self-heal | 13 · Build Reliability ✚ | 23, 24, 29, 30, 31 | ✅ |
 | [56](./phase-56-phased-build-plan.md) | Phased build plan & phase-by-phase codegen | 13 · Build Reliability ✚ | 54, 55 | ✅ |
 | [57](./phase-57-provider-param-compatibility.md) | Provider-agnostic request compatibility | 12 · Admin & Config ✚ | 53, 51, 20 | ✅ |
-| [58](./phase-58-vercel-backend-deploy.md) | Vercel-hosted backend & deploy correctness | 7 · Deploy ✚ | 34, 35, 36, 37, 22 | ⬜ |
+| [58](./phase-58-vercel-backend-deploy.md) | Vercel-hosted backend & deploy correctness | 7 · Deploy ✚ | 34, 35, 36, 37, 22 | ✅ |
 | [59](./phase-59-preview-process-lifecycle.md) | Preview process lifecycle & port reclaim | 2 · Sandbox & IDE ✚ | 10, 11, 13, 15, 55, 56 | ⬜ |
 | [60](./phase-60-scope-aware-build.md) | Scope-aware build & OpenAI-first posture | 13 · Build Reliability ✚ | 23, 53, 55, 56, 57 | ⬜ |
 | [61](./phase-61-workspace-layout.md) | Workspace layout: resizable panels & focus mode | 1 · Orchestration Core ✚ | 09, 13, 14, 15 | ⬜ |

@@ -927,10 +927,18 @@ _KEYS: tuple[ConfigKey, ...] = (
         maximum=10,
     ),
     ConfigKey(
+        "deploy_be_provider",
+        Cat.deploy,
+        "str",
+        "Where the backend deploys: 'vercel' (inline upload, no git host) or 'render' (clones "
+        "DEPLOY_REPO_URL).",
+        choices=("vercel", "render"),
+    ),
+    ConfigKey(
         "deploy_repo_url",
         Cat.deploy,
         "str",
-        "Git repo Render builds the backend from (blank locally / when mocked).",
+        "Git repo Render builds the backend from. Unused when DEPLOY_BE_PROVIDER=vercel.",
     ),
     ConfigKey(
         "deploy_region", Cat.deploy, "str", "Optional provider region for the backend service."

@@ -25,7 +25,7 @@ You are building **ForgeFlow**: an AI-native, human-in-the-loop **PWA** that tak
 - **Frontend:** React 18 + Vite + TS + Tailwind (semantic tokens, light+dark, indigo/violet), Zustand, TanStack Query, `@monaco-editor/react`, `xterm.js`, `@xyflow/react` (React Flow), `vite-plugin-pwa`; UI-revamp additions (authorized): `framer-motion`, `react-resizable-panels`, `lucide-react`, `clsx`+`tailwind-merge`, `@fontsource` Inter/JetBrains Mono.
 - **Generated apps (fixed):** React+Vite+TS / Express+TS / Mongoose / Zod / Vitest / Jest+supertest / Playwright.
 - **Sandbox image:** Node 20 + pnpm + Playwright + git, non-root.
-- **Deploy:** Vercel (SPA FE), Render (Node BE). **BE is never deployed to Vercel.**
+- **Deploy:** Vercel for **both** the SPA frontend and the Node backend (a function built from an inline source upload — no git host in the path), Atlas for the DB. Render stays available behind `DEPLOY_BE_PROVIDER=render`. *(D11 amended 2026-08-23, phase-58 — the earlier rule "BE is never deployed to Vercel" no longer applies.)*
 - **Models:** `MODEL_CODEGEN=claude-sonnet-5`, `MODEL_ROUTING=claude-haiku-4-5-20251001` (env-configurable).
 
 ## Repository structure

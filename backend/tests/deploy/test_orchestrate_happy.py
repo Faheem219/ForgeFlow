@@ -11,6 +11,7 @@ from app.deploy.providers.base import DeployTarget
 from app.realtime.schemas import EventType
 from tests.deploy.orchestrate_fakes import (
     FakeDeployProvider,
+    FakeBackendSource,
     FakeFrontendBuilder,
     RecordingEmitter,
     factory_of,
@@ -34,6 +35,7 @@ def _orchestrator(
     orch = DeployOrchestrator(
         plan_source=static_plan_source(full_plan()),
         frontend_builder=builder,
+        backend_source=FakeBackendSource(),
         provider_factory=factory_of(fe, be),
         emitter=emitter,
     )

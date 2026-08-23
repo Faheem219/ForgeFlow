@@ -47,13 +47,30 @@ async def project_with_build(name: str = "app") -> Project:
 
 
 class FakeDeployProvider:
-    """Records deploy/env/status calls; returns a live URL, or fails on ``deploy``."""
+    """Records deploy/env/status calls; returns a live URL, or fails on ``deploy``.
 
-    def __init__(self, key: str, target: DeployTarget, url: str, *, fail: bool = False) -> None:
+    Two *different* ways to fail, because the real providers have two (phase-58):
+
+    - ``fail=True`` raises a ``ProviderError`` — an auth/quota/network refusal.
+    - ``status=`` returns that state without raising — a provider that accepted the request and
+      then reported ``failed``, or that is still ``building`` when the health poll times out. This
+      is the common case and was previously untested.
+    """
+
+    def __init__(
+        self,
+        key: str,
+        target: DeployTarget,
+        url: str,
+        *,
+        fail: bool = False,
+        status: DeployState = DeployState.live,
+    ) -> None:
         self.key = key
         self.target = target
         self._url = url
         self._fail = fail
+        self._status = status
         self.deploy_specs: list[DeploySpec] = []
         self.env_calls: list[dict[str, str]] = []
         self.status_calls = 0
@@ -70,19 +87,25 @@ class FakeDeployProvider:
                 target=str(self.target),
             )
         return DeployResult(
-            ref=DeployRef(id=f"{self.key}-1", project=spec.name),
+            ref=DeployRef(id=f"{self.key}-1", project=spec.name, target=self.target),
             provider=self.key,
             target=self.target,
-            status=DeployState.live,
-            url=self._url,
+            status=self._status,
+            url=self._url if self._status is DeployState.live else None,
         )
 
     async def status(
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
     ) -> DeployResult:
         self.status_calls += 1
+        # Polling must report the SAME state the deploy returned, or a provider stuck in `building`
+        # would silently "become" live and the health-timeout path could never be exercised.
         return DeployResult(
-            ref=ref, provider=self.key, target=self.target, status=DeployState.live, url=self._url
+            ref=ref,
+            provider=self.key,
+            target=self.target,
+            status=self._status,
+            url=self._url if self._status is DeployState.live else None,
         )
 
     async def set_env(
@@ -126,6 +149,23 @@ class FakeFrontendBuilder:
         self, project: Project, fe: FrontendPlan, build_env: dict[str, str]
     ) -> dict[str, str]:
         self.calls.append({"dir": fe.dir, "env": dict(build_env)})
+        return dict(self.files)
+
+
+class FakeBackendSource:
+    """Returns a canned backend file set; records the plan dir it was asked for (phase-58)."""
+
+    def __init__(self, files: dict[str, str] | None = None) -> None:
+        self.files = files or {
+            "package.json": '{"name":"backend"}',
+            "vercel.json": '{"version":2}',
+            "api/index.ts": "export { default } from '../src/serverless'",
+            "src/app.ts": "export const createApp = () => null",
+        }
+        self.calls: list[str] = []
+
+    async def __call__(self, project: Project, be: BackendPlan) -> dict[str, str]:
+        self.calls.append(be.dir)
         return dict(self.files)
 
 

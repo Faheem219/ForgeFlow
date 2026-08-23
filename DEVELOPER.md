@@ -96,24 +96,22 @@ Secrets set via `/admin` are encrypted and never readable again. To get an admin
 | **Codegen, build, repair** | `ANTHROPIC_API_KEY` | stages 401 / no-op |
 | **Design** | `STITCH_API_KEY` | falls back down `DESIGN_FALLBACK_CHAIN` → `fake` |
 | **Build / preview / test / repair** | Docker + `make sandbox-build` | `Sandbox runtime unavailable` |
-| **Deploy — frontend** | `VERCEL_TOKEN` | `platform has no vercel credential` |
-| **Deploy — backend** | `RENDER_API_KEY` — but see below, **a token is not enough** | Render builds the wrong source |
+| **Deploy — frontend + backend** | `VERCEL_TOKEN` | `platform has no vercel credential` |
 | **Deploy — database** | `APP_DB_CLUSTER_URI` = an Atlas URI | deployed app can't reach `localhost:27018` |
 | **Live validation** | a successful deploy | no URL to validate against |
 | `/eval` dashboard | run the harness → `eval/results/*.json` | "no data" |
 | Hero demo seed | `DEMO_PASSWORD` | `make demo-seed` refuses |
 
-### Deploy — what actually works
+### Deploy
 
-Running locally is not the constraint (your machine has internet); these call the real Vercel/Render APIs and there is no mock provider.
+Two things are needed, and both are just config:
 
-- **Frontend → Vercel — works.** Give it `VERCEL_TOKEN`. The sandbox runs `pnpm build` and the `dist` files are uploaded inline, so Vercel never needs repo access and what ships is exactly what the repair loop validated.
-- **Database — works.** Put an Atlas URI in `APP_DB_CLUSTER_URI` (the per-project DB name is appended), or a BYO `mongodb+srv://` URI in the credential vault (Settings → Provider credentials).
-- **Backend → Render — NOT wired end-to-end.** Render builds by **cloning a git repo**, but nothing pushes the sandbox workspace to a remote: [`sandbox/git.py`](./backend/app/sandbox/git.py) only does init/commit/diff (it exists for diff-aware repair), and `DEPLOY_REPO_URL` is a single **global** value ([`orchestrate.py:190`](./backend/app/deploy/orchestrate.py#L190)), not per-project. So Render clones whatever that URL points at — never the app the build stage just generated. A valid `RENDER_API_KEY` does not close this; the missing piece is code, not credentials.
+- **`VERCEL_TOKEN`** — deploys the frontend *and* the backend (phase-58). Both ship as inline file uploads: the sandbox runs `pnpm build` and the `dist` files go up for the SPA; the backend's source plus its `vercel.json` go up and Vercel builds it into a function. No git host, no repo, no second credential.
+- **`APP_DB_CLUSTER_URI`** — must be an **Atlas** URI, not `localhost:27018`, since the deployed backend has to reach it. A BYO `mongodb+srv://` URI in the credential vault (Settings → Provider credentials) works too. Allow Vercel's egress on the cluster (`0.0.0.0/0` on a shared tier).
 
-What you observe if you run deploy anyway: the Render call succeeds (no `ProviderError`), so the frontend still deploys; the service then fails its build or times out at `DEPLOY_HEALTH_TIMEOUT_S`, and `_overall_status` marks the deployment **failed** because the BE never went live. You get a live Vercel SPA pointing at an API that isn't there — and live validation runs against it and fails its E2E suite.
+Everything up to and including **test + self-healing repair** runs entirely offline once the sandbox image is built.
 
-Everything up to and including **test + self-healing repair** runs entirely offline once the sandbox image is built. Phase-37 deferred the live Vercel/Render smoke path as billable, so this path has never had a real run.
+**Want a persistent Node process instead of a function?** `DEPLOY_BE_PROVIDER=render` restores the Render path — but Render builds by *cloning* `DEPLOY_REPO_URL`, and nothing pushes the workspace to a git remote, so it only works if you point it at a repo that already holds the app. That limitation is exactly why the default moved to Vercel.
 
 ### Using an OpenAI-compatible provider instead
 

@@ -22,7 +22,7 @@ These were decided deliberately. Do **not** silently change them; if a phase for
 | D8 | **Database:** one platform **MongoDB Atlas** cluster. Control-plane metadata in `forgeflow_meta`; **one database per user-project** for generated-app data. Users may supply their own URI. A **project-scoped CRUD data browser** ships in-app. | Single DB technology, cheap (M0 free tier), per-project isolation, zero DB setup for the user. |
 | D9 | **Design stage is PLUGGABLE:** a `DesignProvider` interface; **Stitch MCP** default (image→UI + text→UI + fetch HTML/CSS), **Figma MCP** alternative. | Avoids lock-in and hedges Stitch's quota/auth constraints (see D10). |
 | D10 | **Stitch constraints acknowledged:** requires a GCP project with billing + OAuth/service-account auth; ~350 generations/month free; access tokens are short-lived. The **platform** holds credentials centrally; provider layer must handle token refresh, quota exhaustion, and graceful fallback. | Multi-user quota is a real risk; the adapter must fail soft (queue / fallback provider / clear user message). |
-| D11 | **Deployment is DUAL-MODE:** **seamless** on platform-owned accounts (Vercel FE + Render BE + shared Atlas) **or** **bring-your-own** tokens. FE→Vercel (SPA), BE→Render (persistent Node service). A **React Flow** topology shows FE/BE/DB nodes with live status/logs. | Vercel alone can't host a persistent Node backend + Mongo; Render covers the BE. Beginner-safe by default, power-user friendly when needed. |
+| D11 | **Deployment is DUAL-MODE:** **seamless** on platform-owned accounts (Vercel + shared Atlas) **or** **bring-your-own** tokens. FE→Vercel (SPA), **BE→Vercel** (Node function), DB→Atlas. A **React Flow** topology shows FE/BE/DB nodes with live status/logs. **Amended 2026-08-23 (phase-58, user-authorised).** Originally *BE→Render (persistent Node service)*, on the rationale that *"Vercel alone can't host a persistent Node backend + Mongo"* — no longer true, and that split had no working source-delivery path: Render clones a git repo and nothing ever pushed the sandbox workspace to one. Vercel deploys the backend from the same **inline file upload** the SPA already used, so delivery needs no git host, no extra credential and no push plumbing. Render is retained behind `DEPLOY_BE_PROVIDER=render` for a genuinely persistent process. | Beginner-safe by default, power-user friendly when needed. The generated stack (D2) is request/response CRUD — no websockets, no background jobs — so a function is a correct fit, and what ships is byte-identical to what the repair loop validated. |
 | D12 | **Non-linear orchestration invariant:** **no stage is mandatory.** Users can enter at any stage, refine any output conversationally, jump back, or skip forward. | Core product promise; every stage handler and UI must honor it. |
 | D13 | **Evaluation harness** is a first-class deliverable: benchmark of app specs measuring first-pass vs post-repair pass rate, repair-iteration count, and screenshot→URL time. | Turns the project into publishable/pitchable evidence. |
 | D14 | **The platform itself is a PWA** (installable, offline app shell). It builds regular web apps (not PWAs, not mobile/native). | Per scope. |
@@ -473,7 +473,9 @@ Phases are grouped into epics and are designed to be **independently executable 
 - **Acceptance:** secrets encrypted at rest; never exposed to client; used correctly.
 
 **Phase 35 — Deploy provider adapters (Vercel + Render)**
-- **Goal:** Deploy FE→Vercel, BE→Render, in both modes.
+- **Goal:** Deploy FE→Vercel, BE→Render, in both modes. *(Amended by phase 58: the backend now
+  routes to Vercel by default — see D11 — and Render is opt-in via `DEPLOY_BE_PROVIDER`. Both
+  adapters remain.)*
 - **Depends on:** 33, 34
 - **Tasks:** Vercel adapter (SPA deploy, env, domain, status/logs); Render adapter (Node web service, env, status/logs); seamless (platform creds) + BYO (user creds); a common `DeployProvider` interface.
 - **Deliverables:** adapters + integration tests (mocked) + live smoke path.
@@ -609,7 +611,14 @@ Phases are grouped into epics and are designed to be **independently executable 
 - **Sandbox security:** strict isolation + hardening pass (Phase 47); never run generated code outside sandboxes.
 - **Cost overrun (₹6k):** Haiku for small calls, budget caps, cost dashboard; cache/skeleton to cut tokens.
 - **Scope creep:** fixed stack + out-of-scope list; resist adding stacks/collab/payments.
-- **Vercel BE limitation:** BE on Render, not Vercel (D11).
+- **Serverless BE trade-offs (D11 as amended, phase-58):** the backend is a Vercel function, not a
+  long-lived process. Consequences accepted: **cold starts** on an idle project; **no background
+  jobs, websockets or in-process schedulers** (out of scope for the fixed D2 stack anyway); and
+  **connection churn**, mitigated by caching the Mongoose connection on `globalThis` in the skeleton
+  — without which each invocation opens a socket and exhausts the Atlas connection limit. Atlas must
+  permit access from Vercel's egress (`0.0.0.0/0` on a shared tier). If a project ever needs a
+  persistent process, `DEPLOY_BE_PROVIDER=render` restores the Render path — which then requires a
+  git repo, the limitation that motivated the amendment.
 
 ## 13. Environment Variables (`.env.example` reference)
 

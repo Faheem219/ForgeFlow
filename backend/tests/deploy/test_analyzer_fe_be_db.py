@@ -25,7 +25,9 @@ async def test_full_stack_plan_covers_all_three_tiers(fe_be_db: FakeAnalyzerWork
     plan = await InfraAnalyzer(fe_be_db).analyze(project, persist=False)
 
     assert plan.fe is not None and plan.fe.target == "vercel"
-    assert plan.be is not None and plan.be.target == "render"
+    # phase-58: the default backend route is Vercel; DEPLOY_BE_PROVIDER=render overrides it at
+    # deploy time, and the recorded Deployment carries whichever provider actually ran.
+    assert plan.be is not None and plan.be.target == "vercel"
     assert plan.db is not None
     assert plan.db.type == "mongo" and plan.db.provider == TARGET_DB
     assert plan.db.env_var == "MONGODB_URI"
@@ -51,7 +53,7 @@ async def test_plan_is_persisted_as_a_versioned_artifact(fe_be_db: FakeAnalyzerW
     latest = versions[-1]
     assert latest.meta["kind"] == INFRA_PLAN_KIND
     assert latest.meta["confidence"] == "high"
-    assert latest.meta["targets"] == {"fe": "vercel", "be": "render", "db": "atlas"}
+    assert latest.meta["targets"] == {"fe": "vercel", "be": "vercel", "db": "atlas"}
     assert latest.meta["required_secrets"] == ["MONGODB_URI"]
 
     body = json.loads(await artifacts.get_content(latest) or "{}")

@@ -6,7 +6,7 @@
 - **Title:** Vercel-hosted backend & deploy correctness (source delivery, D11 amendment, partial-failure guard)
 - **Epic:** Epic 7 — Deploy *(amends `phase-35`/`phase-37`)*
 - **Milestone:** M4
-- **Status:** ⬜ todo
+- **Status:** ✅ done *(2026-08-23)*
 
 ## Goal
 
@@ -197,3 +197,51 @@ The missing feature (1) triggers exactly this untested branch.
   Mongoose, one added entrypoint. Untrusted code still never executes in the control plane: the
   workspace is *read* via the archive API and handed to Vercel. Secrets stay vault-resolved at call
   time. `deploy ⇐ build` is still the only prerequisite.
+
+## Implementation status (as-built, 2026-08-23)
+
+**Docs amended first.** D11 (`IMPLEMENTATION_PLAN.md:25`) now reads *FE→Vercel, BE→Vercel, DB→Atlas*
+with the original rationale retained as superseded context and the authorisation dated. Risk §12's
+"Vercel BE limitation" is replaced by the serverless trade-offs actually taken on (cold starts, no
+background jobs, connection churn, Atlas network access). `CLAUDE.md`'s deploy bullet and
+`DEVELOPER.md` §3 follow; `plans/phase-35` carries an amendment note with its as-built section left
+intact.
+
+**Skeleton.** `backend/api/index.ts` re-exports `src/serverless.ts`, which wraps `createApp()` in a
+thin Express app whose one middleware ensures the cached connection before delegating — so
+`app.ts` stays database-free for supertest and the preview path is byte-for-byte unchanged.
+`src/db.ts` parks the connection on `globalThis` and drops a rejected promise so a failed attempt is
+retried rather than cached. `vercel.json` declares the function. `tsconfig.json` typechecks
+`src` + `api`; `tsconfig.build.json` pins `rootDir: src` so `dist/index.js` keeps its path and
+`pnpm start` is untouched. `make skeleton-verify` green (8 backend tests, FE build unchanged).
+
+**Adapters.** `BaseDeployProvider.served_targets` + membership-based `_check_target` replace the
+identity check; `VercelDeployProvider.targets = {fe, be}` while Render still serves `be` only.
+`DeployRef` gained a `target` — one provider serving two targets means `status()` could not
+otherwise tell them apart. The BE body sets `projectSettings={"framework": None}` (no
+`outputDirectory`, which would 404 the function) and puts env in `env` only, never `build.env`,
+because `MONGODB_URI` is a request-time secret.
+
+**Registry & orchestration.** `provider_for` routes `be` via `DEPLOY_BE_PROVIDER` (`vercel` default,
+unknown values fall back rather than crash). `_WorkspaceBackendSource` reads the backend directory
+through the archive API, skipping `node_modules`/`.git`/`dist`/`build`/`.turbo`/`.forgeflow`, and
+refuses a source set with no `vercel.json`. It is behind a `BackendSource` seam and is only invoked
+when the provider will actually upload.
+
+**The guard.** `orchestrate.py:143` is now `backend_ok = plan.be is None or _is_live(be_result,
+be_error)` — the same predicate `_overall_status` uses, so the two halves of `deploy()` can no
+longer disagree. A skipped frontend emits an `fe` step with status `skipped` and a reason. The
+topology node and `Deployment.be_target` read the provider off the result instead of hardcoding
+`"render"`.
+
+**Verification.** `tests/deploy` **143 passed**. The two new partial-failure tests were confirmed to
+**fail against the old guard** and pass against the fix, so the regression is genuinely covered.
+`tests/config` green (the registry-completeness test forced the `.env.example` entry).
+`ruff`/`mypy` clean across the phase-58 surface — the 4 pre-existing `app/sandbox/runtime.py`
+conditional-import errors are unrelated and unchanged. Frontend: 426 tests, lint and typecheck
+clean.
+
+**Deferred (as scoped):** no live smoke against a real Vercel account (billable, same reason
+phase-37 deferred it) — the transport is pinned by request-body assertions instead. Render's path is
+untouched and still needs a repo. `destroy` is not wired into the stage.
+

@@ -1,11 +1,16 @@
-"""Vercel adapter — the **frontend only** (phase-35, D11).
+"""Vercel adapter — frontend **and** backend (phase-35; backend added in phase-58, D11 amended).
 
-Deploys the *built* SPA: the sandbox runs the Vite build and this uploads the output directory as
-an inline file set, so Vercel never needs repo access and the artifact that ships is exactly the
-one the repair loop validated.
+Both targets ship the same way: an **inline file upload**. Vercel never needs repo access, so what
+deploys is exactly what the repair loop validated, and there is no git host anywhere in the path.
 
-``target`` is ``fe`` and :meth:`~app.deploy.providers.base.BaseDeployProvider._check_target`
-rejects anything else, so a backend can never reach this transport (risk §12).
+The two targets differ only in what is uploaded and who builds it:
+
+- ``fe`` — the *built* SPA. The sandbox runs the Vite build and the output directory is uploaded
+  as-is (``framework: None``), because there is no source for Vercel to build.
+- ``be`` — the backend **source** plus the skeleton's ``vercel.json``, which points Vercel at
+  ``api/index.ts`` (the entrypoint added in phase-58 that exports the Express app). Vercel compiles
+  it into a function. D11's original rationale — *"Vercel alone can't host a persistent Node
+  backend"* — no longer holds; the trade-offs actually taken on are recorded in risk §12.
 
 Two Vercel API shapes matter here: a **deployment** is immutable (status/logs/destroy key off its
 id), while **env vars belong to the project** — hence :class:`DeployRef` carrying both.
@@ -43,7 +48,10 @@ _STATES: dict[str, DeployState] = {
 
 class VercelDeployProvider(BaseDeployProvider):
     key = "vercel"
+    #: Primary target — what a result reports when a ref carries no target of its own.
     target = DeployTarget.fe
+    #: Both targets are served; ``_check_target`` tests membership (phase-58).
+    targets = frozenset({DeployTarget.fe, DeployTarget.be})
     credential_kind = CredentialKind.vercel
     api_base = "vercel_api_url"
 
@@ -56,21 +64,31 @@ class VercelDeployProvider(BaseDeployProvider):
         body: dict[str, Any] = {
             "name": spec.name,
             "target": "production",
-            # Inline the built bundle — no git integration, no repo access needed.
+            # Inline the file set — no git integration, no repo access needed, for either target.
             "files": [
                 {"file": path, "data": content, "encoding": "utf-8"}
                 for path, content in sorted((spec.files or {}).items())
             ],
-            # `framework: null` + an output dir tells Vercel to serve the bundle as-is rather than
-            # re-running a build it has no source for.
-            "projectSettings": {"framework": None, "outputDirectory": None},
         }
-        if spec.env:
-            body["env"] = dict(spec.env)
-            body["build"] = {"env": dict(spec.env)}
+        if spec.target is DeployTarget.fe:
+            # `framework: null` + no output dir tells Vercel to serve the bundle as-is rather than
+            # re-running a build it has no source for.
+            body["projectSettings"] = {"framework": None, "outputDirectory": None}
+            if spec.env:
+                # A Vite var is read at BUILD time, so the SPA needs it in both places.
+                body["env"] = dict(spec.env)
+                body["build"] = {"env": dict(spec.env)}
+        else:
+            # The backend's vercel.json (shipped in the uploaded source) declares the function, so
+            # framework detection must stay out of the way.
+            body["projectSettings"] = {"framework": None}
+            if spec.env:
+                # MONGODB_URI is read at REQUEST time and is a secret: runtime env only, never the
+                # build env, so it is not baked into a build log or artifact.
+                body["env"] = dict(spec.env)
 
         payload = await self._request("POST", "/v13/deployments", token, json_body=body)
-        return self._to_result(payload, project=spec.name)
+        return self._to_result(payload, project=spec.name, target=spec.target)
 
     async def set_env(
         self,
@@ -106,7 +124,7 @@ class VercelDeployProvider(BaseDeployProvider):
     ) -> DeployResult:
         token = await self._token(mode, user_id)
         payload = await self._request("GET", f"/v13/deployments/{ref.id}", token)
-        return self._to_result(payload, project=ref.project)
+        return self._to_result(payload, project=ref.project, target=ref.target)
 
     async def logs(
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
@@ -137,7 +155,9 @@ class VercelDeployProvider(BaseDeployProvider):
 
     # -- internals --------------------------------------------------------------------------
 
-    def _to_result(self, payload: Any, *, project: str | None) -> DeployResult:
+    def _to_result(
+        self, payload: Any, *, project: str | None, target: DeployTarget | None = None
+    ) -> DeployResult:
         if not isinstance(payload, dict):
             raise self._error(DeployErrorKind.fatal, "Malformed deployment response from vercel")
 
@@ -152,10 +172,15 @@ class VercelDeployProvider(BaseDeployProvider):
             host = alias[0]  # the stable production alias beats the per-deploy host
         url = f"https://{host}" if host and not str(host).startswith("http") else host
 
+        served = target or self.target
         return DeployResult(
-            ref=DeployRef(id=str(deployment_id), project=project or payload.get("name")),
+            ref=DeployRef(
+                id=str(deployment_id),
+                project=project or payload.get("name"),
+                target=served,
+            ),
             provider=self.key,
-            target=self.target,
+            target=served,
             status=state,
             url=str(url) if url else None,
             raw={"readyState": payload.get("readyState")},

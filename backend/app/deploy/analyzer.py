@@ -34,9 +34,11 @@ from app.sandbox.schemas import FileContent, FileNode
 
 INFRA_PLAN_KIND = "infra_plan"
 
-# Targets are fixed by D11 — the analyzer classifies the *shape*, not the vendor.
+# Targets follow D11 (amended in phase-58) — the analyzer classifies the *shape*, not the vendor.
+# The backend's actual vendor is resolved at deploy time from DEPLOY_BE_PROVIDER; this is the label
+# for the default route, and the recorded Deployment always carries the provider that really ran.
 TARGET_FE = "vercel"
-TARGET_BE = "render"
+TARGET_BE = "vercel"
 TARGET_DB = "atlas"
 
 # Where the fixed-stack skeleton (phase-22) puts things; the analyzer also tolerates a
