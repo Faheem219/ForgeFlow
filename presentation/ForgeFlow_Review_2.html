@@ -373,17 +373,17 @@
       <div class="tocrow card"><span class="tn">01</span><span class="tt">Introduction</span><span class="tp">03</span></div>
       <div class="tocrow card"><span class="tn">02</span><span class="tt">Motivation</span><span class="tp">04&ndash;05</span></div>
       <div class="tocrow card"><span class="tn">03</span><span class="tt">Status of Current Work</span><span class="tp">06</span></div>
-      <div class="tocrow card"><span class="tn">04</span><span class="tt">Research Gaps</span><span class="tp">07&ndash;10</span></div>
-      <div class="tocrow card"><span class="tn">05</span><span class="tt">Problem-to-Design Mapping as per the Gap Identified</span><span class="tp">11&ndash;12</span></div>
-      <div class="tocrow card"><span class="tn">06</span><span class="tt">System Architecture Diagram &amp; Database Connectivity</span><span class="tp">13&ndash;14</span></div>
-      <div class="tocrow card"><span class="tn">07</span><span class="tt">Identified Tools / Technologies</span><span class="tp">15&ndash;16</span></div>
-      <div class="tocrow card"><span class="tn">08</span><span class="tt">Plan of Next Work</span><span class="tp">17</span></div>
-      <div class="tocrow card"><span class="tn">09</span><span class="tt">Conclusion</span><span class="tp">18</span></div>
-      <div class="tocrow card"><span class="tn">10</span><span class="tt">References</span><span class="tp">19</span></div>
+      <div class="tocrow card"><span class="tn">04</span><span class="tt">Research Gaps</span><span class="tp">07&ndash;09</span></div>
+      <div class="tocrow card"><span class="tn">05</span><span class="tt">Problem-to-Design Mapping as per the Gap Identified</span><span class="tp">10&ndash;11</span></div>
+      <div class="tocrow card"><span class="tn">06</span><span class="tt">System Architecture Diagram &amp; Database Connectivity</span><span class="tp">12&ndash;13</span></div>
+      <div class="tocrow card"><span class="tn">07</span><span class="tt">Identified Tools / Technologies</span><span class="tp">14&ndash;15</span></div>
+      <div class="tocrow card"><span class="tn">08</span><span class="tt">Plan of Next Work</span><span class="tp">16</span></div>
+      <div class="tocrow card"><span class="tn">09</span><span class="tt">Conclusion</span><span class="tp">17</span></div>
+      <div class="tocrow card"><span class="tn">10</span><span class="tt">References</span><span class="tp">18</span></div>
     </div>
 
     <div class="callout"><span class="q">&ldquo;</span><p>Review 1 proved the pipeline exists end-to-end. Review 2 proves the gaps were closed on purpose — and where the design came from.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>02 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>02 / 18</span></footer>
   </div>
 </section>
 
@@ -457,7 +457,7 @@
     </div>
 
     <div class="callout"><span class="q">&ldquo;</span><p>Existing tools generate apps. ForgeFlow generates apps it can <em>prove</em> work — and then proves it again on the live URL.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>03 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>03 / 18</span></footer>
   </div>
 </section>
 
@@ -501,7 +501,7 @@
         <div class="statrow"><span class="v">45%</span><p>say debugging AI-generated code takes <b>longer than writing it themselves</b> <span class="ref">[3]</span></p></div>
       </div>
     </div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>04 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>04 / 18</span></footer>
   </div>
 </section>
 
@@ -541,7 +541,7 @@
       </div>
       <div class="dmg card">
         <span class="v">1.7&times;</span>
-        <p>more issues in AI-generated code than human-written code <span class="ref">[28]</span> — and <b>repeated &ldquo;make it more secure&rdquo; iterations can monotonically weaken security instead of strengthening it</b> <span class="ref">[5]</span></p>
+        <p>more issues in AI-generated code than human-written code <span class="ref">[28]</span>; <b>45% of it carries a security flaw</b> <span class="ref">[27]</span> — and <b>iterating &ldquo;make it more secure&rdquo; can weaken security further</b> <span class="ref">[5]</span></p>
       </div>
       <div class="dmg card">
         <span class="v">2,500<small>%</small></span>
@@ -550,7 +550,7 @@
     </div>
 
     <div class="callout"><span class="q">&ldquo;</span><p>Generation is solved. <b>Verification is not.</b> That gap is exactly where we built.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>05 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>05 / 18</span></footer>
   </div>
 </section>
 
@@ -599,165 +599,143 @@
     </div>
 
     <div class="callout" style="background:#eafaea; border-left-color:var(--good)"><span class="ic" style="color:var(--good)"><svg width="24" height="24"><use href="#i-check"/></svg></span><p><b>New since Review 1 — deployment-phase testing is complete:</b> the deployed URL is now re-run against the generated Playwright suite, and live failures re-enter the same bounded repair loop.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>06 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>06 / 18</span></footer>
   </div>
 </section>
 
 
-<!-- ================================================================ SLIDE 7 : RESEARCH GAPS 1/4 -->
+<!-- ================================================================ SLIDE 7 : RESEARCH GAPS 1/3 -->
 <section class="slide">
-  <div class="pad">
-    <header class="shead">
-      <div class="kick">Research Gaps (1/4)</div>
-      <h2>Agentic Generation &amp; Issue Resolution Are Mature — Deployment Success Is Not</h2>
+  <div class="pad" style="padding:34px 46px 26px">
+    <header class="shead" style="margin-bottom:11px">
+      <div class="kick">Research Gaps (1/3)</div>
+      <h2>Generation Is Mature — Deployment Success and Human Control Are Not</h2>
       <div class="rule"></div>
     </header>
 
-    <div style="display:grid; grid-template-columns:1.18fr 1fr; gap:22px; flex:1; min-height:0">
+    <div style="display:grid; grid-template-columns:1.06fr 1fr; gap:24px; flex:1; min-height:0">
       <div>
-        <p class="lit-h">Agentic code generation &amp; issue resolution</p>
-        <div class="litrow"><span class="who">Survey, 2025 <span class="ref">[12]</span></span><p>Agentic software issue resolution categorised across 150+ studies into benchmarks, techniques and empirical work.</p></div>
-        <div class="litrow"><span class="who">Agentless <span class="ref">[13]</span></span><p><b style="color:var(--ink)">Structured beats autonomous:</b> a simple, deterministic 3-phase pipeline matches or beats complex autonomous agents on issue resolution, at markedly lower budget.</p></div>
-        <div class="litrow"><span class="who">RepairAgent, ICSE 2025 <span class="ref">[14]</span></span><p>A fully autonomous LLM agent that dynamically plans and invokes repair tools — competitive real-world repair rates.</p></div>
-        <div class="litrow"><span class="who">Huang et al., IEEE TSE 2025 <span class="ref">[15]</span></span><p>Fine-tuning study: repair quality is highly sensitive to how the repair task is formulated and what context is given.</p></div>
-        <div class="conseq" style="margin-top:12px"><span class="ic"><svg><use href="#i-img"/></svg></span><p><b>Design2Code <span style="color:var(--indigo-dk)">[23]</span></b> (484 real webpages): multimodal models still lag on visual element recall and layout fidelity — validating our choice to keep design a <b>pluggable, human-refinable</b> stage, not a one-shot conversion.</p></div>
+        <p class="lit-h">Agentic generation &amp; issue resolution — a solved-enough problem</p>
+        <div class="litrow"><span class="who">LLM4SE survey <span class="ref">[1]</span></span><p>926 studies systemised across <b>112 SE tasks and 5 lifecycle phases</b> — adoption across the lifecycle is no longer in question.</p></div>
+        <div class="litrow"><span class="who">Issue-resolution survey <span class="ref">[12]</span></span><p>150+ primary studies categorised into benchmarks, techniques and empirical work.</p></div>
+        <div class="litrow"><span class="who">Agentless <span class="ref">[13]</span></span><p><b style="color:var(--ink)">Structured beats autonomous:</b> a deterministic 3-phase pipeline matches or beats complex agents at markedly lower budget.</p></div>
+        <div class="litrow"><span class="who">RepairAgent <span class="ref">[14]</span></span><p>Autonomous LLM agent that plans and invokes repair tools — competitive real-world repair rates.</p></div>
+        <div class="litrow"><span class="who">Huang et al., TSE <span class="ref">[15]</span></span><p>Repair quality is highly sensitive to <b style="color:var(--ink)">how the task is framed and what context is supplied</b>.</p></div>
+
+        <div class="conseq" style="margin-top:11px">
+          <span class="ic"><svg><use href="#i-box"/></svg></span>
+          <p><b>Design consequence:</b> ForgeFlow takes the <b>Agentless</b> lesson, not the autonomous-agent one — a fixed deterministic pipeline, with a 44-file skeleton <i>copied</i> rather than generated.</p>
+        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:12px">
-        <svg viewBox="0 0 520 150" style="width:100%; height:146px" role="img" aria-label="First-attempt infrastructure deployment success rates of 30.2 percent and 26.8 percent for two frontier models">
-          <text x="0" y="14" font-size="12.5" font-weight="700" fill="#1a1a1a">First-attempt deployment success <tspan fill="#C11B24" font-size="10.5" font-weight="750">[6]</tspan></text>
-          <g stroke="#e3e1da" stroke-width="1"><line x1="140" y1="26" x2="140" y2="112"/><line x1="266" y1="26" x2="266" y2="112"/><line x1="392" y1="26" x2="392" y2="112"/><line x1="518" y1="26" x2="518" y2="112"/></g>
-          <g font-size="10" fill="#898781" text-anchor="middle"><text x="140" y="126">0%</text><text x="266" y="126">33%</text><text x="392" y="126">66%</text><text x="518" y="126">100%</text></g>
-          <g font-size="11.5" fill="#1a1a1a" text-anchor="end">
-            <text x="132" y="52" font-weight="650">Model A</text>
-            <text x="132" y="96" font-weight="650">Model B</text>
+      <div style="display:flex; flex-direction:column; min-height:0">
+        <p class="lit-h">But the deployed artifact still fails</p>
+        <svg viewBox="0 0 520 128" style="width:100%; height:124px; flex:none" role="img" aria-label="First-attempt infrastructure deployment success rates of 30.2 percent and 26.8 percent for two frontier models">
+          <text x="0" y="12" font-size="11.6" font-weight="700" fill="#1a1a1a">First-attempt deployment success <tspan fill="#C11B24" font-size="10" font-weight="750">[6]</tspan></text>
+          <g stroke="#e3e1da" stroke-width="1"><line x1="128" y1="22" x2="128" y2="100"/><line x1="258" y1="22" x2="258" y2="100"/><line x1="388" y1="22" x2="388" y2="100"/><line x1="518" y1="22" x2="518" y2="100"/></g>
+          <g font-size="9.6" fill="#898781" text-anchor="middle"><text x="128" y="114">0%</text><text x="258" y="114">33%</text><text x="388" y="114">66%</text><text x="518" y="114">100%</text></g>
+          <g font-size="11" fill="#1a1a1a" text-anchor="end">
+            <text x="120" y="44" font-weight="650">Frontier model A</text>
+            <text x="120" y="86" font-weight="650">Frontier model B</text>
           </g>
-          <rect x="140" y="38" width="114" height="20" fill="#d03b3b"/><rect x="250" y="38" width="4" height="20" rx="2" fill="#d03b3b"/>
-          <text x="264" y="53" font-size="12" font-weight="800" fill="#1a1a1a">30.2%</text>
-          <rect x="140" y="82" width="101.5" height="20" fill="#d03b3b"/><rect x="237.5" y="82" width="4" height="20" rx="2" fill="#d03b3b"/>
-          <text x="252" y="97" font-size="12" font-weight="800" fill="#1a1a1a">26.8%</text>
+          <rect x="128" y="31" width="118" height="18" fill="#d03b3b"/><rect x="242" y="31" width="4" height="18" rx="2" fill="#d03b3b"/>
+          <text x="256" y="45" font-size="11.5" font-weight="800" fill="#1a1a1a">30.2%</text>
+          <rect x="128" y="73" width="105" height="18" fill="#d03b3b"/><rect x="229" y="73" width="4" height="18" rx="2" fill="#d03b3b"/>
+          <text x="243" y="87" font-size="11.5" font-weight="800" fill="#1a1a1a">26.8%</text>
         </svg>
-        <div class="quotebox">
-          <p>Repeatedly asking a model to make its own code more secure can <b style="font-style:normal">monotonically weaken</b> the code&rsquo;s security properties rather than strengthen them.</p>
-          <span class="attr">Shukla, Joshi &amp; Syed — IEEE ISTAS 2025 <span class="ref" style="vertical-align:baseline">[5]</span></span>
-        </div>
-        <div class="hero99" style="align-items:center">
-          <span class="v" style="font-size:40px">926</span>
-          <p>studies systemised across 112 SE tasks and 5 lifecycle phases — the scale of adoption is no longer in question <span class="ref">[1]</span></p>
-        </div>
+
+        <p class="lit-h" style="margin-top:12px">And developers will not cede control</p>
+        <div class="litrow"><span class="who">Misalignment at scale <span class="ref">[7]</span></span><p><b style="color:var(--ink)">20,574 real-world agent sessions</b> show pervasive developer&ndash;agent misalignment — actions diverge from intent.</p></div>
+        <div class="litrow"><span class="who">Professional practice <span class="ref">[8]</span></span><p>Experienced developers don&rsquo;t &ldquo;vibe&rdquo; — they constantly restrain, monitor and redirect agents.</p></div>
+        <div class="litrow"><span class="who">HULA <span class="ref">[21]</span><span class="ref">[22]</span></span><p>Deployed in Atlassian Jira: engineers keep control at every step. Open challenges named: the <b style="color:var(--ink)">cost of correctness testing</b> and LLM-evaluation variability.</p></div>
+        <div class="litrow"><span class="who">Design2Code <span class="ref">[23]</span></span><p>Multimodal design&rarr;code still lags on visual recall and layout fidelity — so design stays <b style="color:var(--ink)">pluggable and human-refinable</b>.</p></div>
       </div>
     </div>
 
-    <div class="callout"><span class="q">&ldquo;</span><p>Generation and issue resolution converged. Deployment success and security-under-iteration did not — <b>that is where products fail</b>.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>07 / 19</span></footer>
+    <div class="callout"><span class="q">&ldquo;</span><p>The field converged on generation. It did not converge on <b>deploying successfully, or on letting the human stay in charge</b>.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>07 / 18</span></footer>
   </div>
 </section>
 
-<!-- ================================================================ SLIDE 8 : RESEARCH GAPS 2/4 -->
+<!-- ================================================================ SLIDE 8 : RESEARCH GAPS 2/3 -->
 <section class="slide">
-  <div class="pad">
-    <header class="shead">
-      <div class="kick">Research Gaps (2/4)</div>
-      <h2>Self-Repair Has Diminishing Returns — and Professionals Do Not Cede Control</h2>
+  <div class="pad" style="padding:34px 46px 26px">
+    <header class="shead" style="margin-bottom:11px">
+      <div class="kick">Research Gaps (2/3)</div>
+      <h2>Repair Has Diminishing Returns — and Generated Tests Decay When Code Changes</h2>
       <div class="rule"></div>
     </header>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:26px; flex:1; min-height:0; align-content:center">
-      <div>
+    <div style="display:grid; grid-template-columns:1fr 1.12fr; gap:24px; flex:1; min-height:0">
+      <div style="display:flex; flex-direction:column; min-height:0">
         <p class="lit-h">The repair loop has an economics</p>
         <div class="quotebox">
           <p>The vast majority of the benefit of a repair loop is gained in the <b style="font-style:normal">first one to three iterations</b> — later iterations mostly consume tokens for little further gain.</p>
           <span class="attr">Kiecker et al. <span class="ref" style="vertical-align:baseline">[9]</span> &middot; Arimbur <span class="ref" style="vertical-align:baseline">[10]</span></span>
         </div>
-        <div class="litrow" style="margin-top:10px"><span class="who">Security cost <span class="ref">[5]</span></span><p>Iterating self-improvement is not just low-yield past a point — it can be actively harmful to code security.</p></div>
-        <div class="conseq" style="margin-top:12px">
+        <div class="litrow" style="margin-top:10px"><span class="who">Security cost <span class="ref">[5]</span></span><p>Iterating self-improvement is not merely low-yield past a point — repeated &ldquo;make it more secure&rdquo; rounds can <b style="color:var(--ink)">monotonically weaken</b> security.</p></div>
+        <div class="litrow"><span class="who">Build-code quality <span class="ref">[4]</span></span><p>A 2026 mining study finds agents systematically introduce maintainability and security smells into generated build code.</p></div>
+        <div class="litrow"><span class="who">Traceability <span class="ref">[20]</span></span><p>TraceLLM <i>recovers</i> requirement-to-artifact links after the fact; ForgeFlow builds the link in <b style="color:var(--ink)">by construction</b> via <span class="mono">criterion_id</span>.</p></div>
+
+        <div class="conseq" style="margin-top:11px">
           <span class="ic"><svg><use href="#i-loop"/></svg></span>
-          <p><b>Direct design consequence:</b> an unbounded repair loop is a cost sink and a safety risk, not a feature. ForgeFlow&rsquo;s iteration cap (default 5, set just above the 1&ndash;3-iteration knee), regression guard and stall guard are a <b>response to this literature</b> — not an arbitrary limit.</p>
+          <p><b>Design consequence:</b> an unbounded repair loop is a cost sink <i>and</i> a safety risk. Our iteration cap (default 5, just above the 1&ndash;3 knee), regression guard, stall guard and budget guard are a <b>response to this literature</b>.</p>
         </div>
       </div>
-      <div>
-        <p class="lit-h">Control is the second axis of failure</p>
-        <div class="litrow"><span class="who">Misalignment at scale <span class="ref">[7]</span></span><p>20,574 real-world coding-agent sessions show pervasive developer&ndash;agent misalignment — the agent&rsquo;s actions diverge from developer intent.</p></div>
-        <div class="litrow"><span class="who">Professional practice <span class="ref">[8]</span></span><p>Experienced developers don&rsquo;t &ldquo;vibe&rdquo; — they constantly restrain, monitor and direct agents rather than cede control.</p></div>
-        <p class="lit-h" style="margin-top:14px">Human-in-the-loop is the deployed industrial pattern</p>
-        <div class="litrow"><span class="who">HULA, ICSE-SEIP 2025 <span class="ref">[21]</span></span><p>Deployed inside Atlassian Jira — engineers keep control of planning and code at every step.</p></div>
-        <div class="litrow"><span class="who">HULA follow-up, MSR 2025 <span class="ref">[22]</span></span><p>Names the two open challenges: the <b style="color:var(--ink)">high cost of correctness testing</b> and the variability of LLM-based evaluation.</p></div>
-      </div>
-    </div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>08 / 19</span></footer>
-  </div>
-</section>
 
-<!-- ================================================================ SLIDE 9 : RESEARCH GAPS 3/4 -->
-<section class="slide">
-  <div class="pad">
-    <header class="shead">
-      <div class="kick">Research Gaps (3/4)</div>
-      <h2>The Strongest 2026 Evidence: Generated Tests Break Exactly When Code Changes</h2>
-      <div class="rule"></div>
-    </header>
+      <div style="display:flex; flex-direction:column; min-height:0">
+        <p class="lit-h">The strongest 2026 evidence — LLM tests under software evolution <span class="ref">[11]</span></p>
+        <div class="studybanner" style="margin-bottom:9px">
+          <span class="sb-chip">8 LLMs</span><span class="sb-chip">22,374 program variants</span><span class="sb-chip">&approx;346M tokens</span>
+        </div>
 
-    <div class="studybanner">
-      <span class="name">Haroon, Khan &amp; Gulzar — arXiv, Mar 2026 <span class="ref">[11]</span></span>
-      <span class="sb-chip">8 LLMs</span><span class="sb-chip">22,374 program variants</span><span class="sb-chip">&approx;346M tokens</span>
-      <span class="sb-chip">baseline: 79.3% line / 76.1% branch coverage, fully passing suites</span>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1.08fr 1fr; gap:22px; flex:1; min-height:0">
-      <div>
-        <svg viewBox="0 0 560 208" style="width:100%; height:200px" role="img" aria-label="After semantic-altering edits, pass rate falls from fully passing to 66.5 percent and branch coverage from 76.1 to 60.6 percent">
-          <g font-size="11.5" font-weight="650">
-            <rect x="308" y="4" width="11" height="11" rx="2" fill="#2a78d6"/><text x="324" y="14" fill="#52514e">baseline suite</text>
-            <rect x="424" y="4" width="11" height="11" rx="2" fill="#d03b3b"/><text x="440" y="14" fill="#52514e">after edit</text>
+        <svg viewBox="0 0 560 132" style="width:100%; height:128px; flex:none" role="img" aria-label="After semantic-altering edits the test-suite pass rate falls to 66.5 percent and branch coverage from 76.1 to 60.6 percent">
+          <g font-size="10.6" font-weight="650">
+            <rect x="300" y="1" width="10" height="10" rx="2" fill="#2a78d6"/><text x="315" y="10" fill="#52514e">baseline</text>
+            <rect x="392" y="1" width="10" height="10" rx="2" fill="#d03b3b"/><text x="407" y="10" fill="#52514e">after code edit</text>
           </g>
-          <g stroke="#e3e1da" stroke-width="1"><line x1="150" y1="24" x2="150" y2="176"/><line x1="245" y1="24" x2="245" y2="176"/><line x1="340" y1="24" x2="340" y2="176"/><line x1="435" y1="24" x2="435" y2="176"/><line x1="530" y1="24" x2="530" y2="176"/></g>
-          <text x="142" y="46" font-size="12" font-weight="700" fill="#1a1a1a" text-anchor="end">Test-suite</text>
-          <text x="142" y="60" font-size="11" fill="#52514e" text-anchor="end">pass rate</text>
-          <rect x="150" y="34" width="380" height="18" fill="#2a78d6"/><rect x="526" y="34" width="4" height="18" rx="2" fill="#2a78d6"/>
-          <text x="522" y="47" font-size="11" font-weight="750" fill="#fff" text-anchor="end">fully passing</text>
-          <rect x="150" y="56" width="252.7" height="18" fill="#d03b3b"/><rect x="398.7" y="56" width="4" height="18" rx="2" fill="#d03b3b"/>
-          <text x="410" y="70" font-size="12" font-weight="800" fill="#1a1a1a">66.5%</text>
-          <text x="142" y="116" font-size="12" font-weight="700" fill="#1a1a1a" text-anchor="end">Branch</text>
-          <text x="142" y="130" font-size="11" fill="#52514e" text-anchor="end">coverage</text>
-          <rect x="150" y="104" width="289.2" height="18" fill="#2a78d6"/><rect x="435.2" y="104" width="4" height="18" rx="2" fill="#2a78d6"/>
-          <text x="447" y="118" font-size="12" font-weight="650" fill="#1a1a1a">76.1%</text>
-          <rect x="150" y="126" width="230.3" height="18" fill="#d03b3b"/><rect x="376.3" y="126" width="4" height="18" rx="2" fill="#d03b3b"/>
-          <text x="388" y="140" font-size="12" font-weight="800" fill="#1a1a1a">60.6%</text>
-          <g font-size="9.5" fill="#898781" text-anchor="middle"><text x="150" y="190">0</text><text x="245" y="190">25%</text><text x="340" y="190">50%</text><text x="435" y="190">75%</text><text x="530" y="190">100%</text></g>
-          <text x="150" y="206" font-size="10.8" fill="#52514e">After <tspan font-weight="700" fill="#1a1a1a">semantic-altering</tspan> changes to the program under test <tspan fill="#C11B24" font-weight="700" font-size="9.5">[11]</tspan></text>
+          <g stroke="#e3e1da" stroke-width="1"><line x1="150" y1="18" x2="150" y2="112"/><line x1="245" y1="18" x2="245" y2="112"/><line x1="340" y1="18" x2="340" y2="112"/><line x1="435" y1="18" x2="435" y2="112"/><line x1="530" y1="18" x2="530" y2="112"/></g>
+          <text x="142" y="34" font-size="11" font-weight="700" fill="#1a1a1a" text-anchor="end">Test-suite</text>
+          <text x="142" y="46" font-size="10" fill="#52514e" text-anchor="end">pass rate</text>
+          <rect x="150" y="24" width="380" height="15" fill="#2a78d6"/><rect x="526" y="24" width="4" height="15" rx="2" fill="#2a78d6"/>
+          <text x="522" y="35" font-size="10" font-weight="750" fill="#fff" text-anchor="end">fully passing</text>
+          <rect x="150" y="43" width="252.7" height="15" fill="#d03b3b"/><rect x="398.7" y="43" width="4" height="15" rx="2" fill="#d03b3b"/>
+          <text x="410" y="55" font-size="11" font-weight="800" fill="#1a1a1a">66.5%</text>
+          <text x="142" y="82" font-size="11" font-weight="700" fill="#1a1a1a" text-anchor="end">Branch</text>
+          <text x="142" y="94" font-size="10" fill="#52514e" text-anchor="end">coverage</text>
+          <rect x="150" y="72" width="289.2" height="15" fill="#2a78d6"/><rect x="435.2" y="72" width="4" height="15" rx="2" fill="#2a78d6"/>
+          <text x="447" y="84" font-size="11" font-weight="650" fill="#1a1a1a">76.1%</text>
+          <rect x="150" y="91" width="230.3" height="15" fill="#d03b3b"/><rect x="376.3" y="91" width="4" height="15" rx="2" fill="#d03b3b"/>
+          <text x="388" y="103" font-size="11" font-weight="800" fill="#1a1a1a">60.6%</text>
+          <g font-size="9.2" fill="#898781" text-anchor="middle"><text x="150" y="126">0</text><text x="245" y="126">25%</text><text x="340" y="126">50%</text><text x="435" y="126">75%</text><text x="530" y="126">100%</text></g>
         </svg>
-        <div class="quotebox" style="margin-top:8px">
-          <p>Even <b style="font-style:normal">semantic-preserving</b> refactors drop the pass rate to 78.9%; test-suite match rate falls to 18.1% — models discard higher-coverage tests for weaker ones.</p>
-        </div>
-      </div>
 
-      <div style="display:flex; flex-direction:column; gap:12px">
-        <div class="hero99">
-          <span class="v">&gt;99%</span>
+        <div class="hero99" style="margin-top:8px; align-items:center">
+          <span class="v" style="font-size:46px">&gt;99%</span>
           <p>of the failing tests <b style="color:var(--ink)">pass on the original program</b> — &ldquo;residual alignment&rdquo;: the model tests the code it <em>remembers</em>, not the code it was <em>given</em>.</p>
         </div>
-        <div class="quotebox">
+
+        <div class="quotebox" style="margin-top:9px">
           <p>&ldquo;Computing a code diff and explicitly highlighting the modified regions could help guide the model&rsquo;s attention.&rdquo;</p>
           <span class="attr">— the authors&rsquo; recommended fix <span class="ref" style="vertical-align:baseline">[11]</span></span>
         </div>
-        <div class="litrow" style="padding-top:0"><span class="who">TraceLLM <span class="ref">[20]</span></span><p>Prompt-engineered LLM traceability can <em>recover</em> requirement-to-artifact links after the fact; ForgeFlow&rsquo;s <code style="font-size:11.5px">criterion_id</code> chain builds that link in <b style="color:var(--ink)">by construction</b> instead.</p></div>
-        <div class="conseq">
+
+        <div class="conseq" style="margin-top:9px">
           <span class="ic"><svg><use href="#i-loop"/></svg></span>
-          <p>This is <b>precisely ForgeFlow&rsquo;s diff-aware minimal repair context</b> — designed and built, independently corroborated by this study.</p>
+          <p>This is <b>precisely ForgeFlow&rsquo;s diff-aware minimal repair context</b> — designed and built, then independently corroborated by this study.</p>
         </div>
       </div>
     </div>
 
-    <div class="callout"><span class="q">&ldquo;</span><p>A March-2026 study, independently, tells you to do <b>the exact thing we built</b>.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>09 / 19</span></footer>
+    <div class="callout"><span class="q">&ldquo;</span><p>A March-2026 study, independently, tells you to do <b>the exact thing we built</b> — and to stop early.</p></div>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>08 / 18</span></footer>
   </div>
 </section>
-
 <!-- ================================================================ SLIDE 10 : RESEARCH GAPS 4/4 MATRIX -->
 <section class="slide">
   <div class="pad">
     <header class="shead">
-      <div class="kick">Research Gaps (4/4) — Capability Comparison</div>
+      <div class="kick">Research Gaps (3/3) — Capability Comparison</div>
       <h2>No Existing System Verifies, Deploys, Validates Live — and Stops</h2>
       <div class="rule"></div>
     </header>
@@ -818,7 +796,7 @@
       <span class="ic"><svg><use href="#i-scale"/></svg></span>
       <p>Research systems verify but do not deploy. Industry systems deploy but do not verify. <b>Neither validates the live artifact — and none bound the repair loop.</b></p>
     </div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>10 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>09 / 18</span></footer>
   </div>
 </section>
 
@@ -849,7 +827,7 @@
     </table>
 
     <div class="callout"><span class="q">&ldquo;</span><p>The negative commitment, not the positive one: ForgeFlow&rsquo;s differentiator is <b>knowing when to stop</b> — every gap above maps to a guard, a boundary, or a versioned artifact.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>11 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>10 / 18</span></footer>
   </div>
 </section>
 
@@ -887,7 +865,7 @@
     </table>
 
     <div class="dcap" style="margin-top:7px; font-size:11.6px; color:var(--ink2)"><b style="color:var(--ink)">Thirteen requirements, thirteen named design elements — all implemented.</b> The mapping is traceable in both directions via the <span class="mono">criterion_id</span> chain.</div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>12 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>11 / 18</span></footer>
   </div>
 </section>
 
@@ -1037,7 +1015,7 @@
     </svg>
 
     <div class="dcap">Fig. 1 — ForgeFlow system architecture. Every component shown is implemented; the dashed boundary is the security control <span class="ref" style="vertical-align:baseline">[24]</span>.</div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>13 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>12 / 18</span></footer>
   </div>
 </section>
 
@@ -1160,7 +1138,7 @@
     </svg>
 
     <div class="callout" style="margin-top:8px"><span class="q">&ldquo;</span><p><b>Deployment change since Review 1:</b> the backend previously ran on Render as a separate persistent process. It is now a <b>Vercel serverless function alongside the frontend</b> — one provider, one ordered deploy, one less cross-provider failure mode <span class="ref">[6]</span>.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>14 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>13 / 18</span></footer>
   </div>
 </section>
 
@@ -1191,7 +1169,7 @@
         <tr><td><b>Deploy topology UI</b></td><td>@xyflow/react (React Flow)</td><td>The deployment plan is a graph (DB &rarr; backend &rarr; frontend); rendering it as an interactive node graph with per-node status, logs and redeploy controls makes infrastructure legible to a non-expert.</td><td>Static diagram — cannot carry live node status</td></tr>
       </tbody>
     </table>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>15 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>14 / 18</span></footer>
   </div>
 </section>
 
@@ -1222,7 +1200,7 @@
         <tr><td><b>Quality gates</b></td><td>ruff + black + mypy &middot; ESLint + Prettier &middot; pytest</td><td>The control plane is <span class="mono">mypy</span>-clean with full type hints and no bare excepts; a platform that claims to verify generated code must hold itself to a stricter bar than the code it emits.</td><td>Lint-only CI — misses type regressions at agent boundaries</td></tr>
       </tbody>
     </table>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>16 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>15 / 18</span></footer>
   </div>
 </section>
 
@@ -1278,7 +1256,7 @@
     </div>
 
     <div class="callout"><span class="q">&ldquo;</span><p>The build — including deploy &amp; live-validate testing — is done. The next five months are about <b>proving it, breaking it, and hardening it</b> at scale.</p></div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>17 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>16 / 18</span></footer>
   </div>
 </section>
 
@@ -1305,7 +1283,7 @@
       <span class="q">&ldquo;</span>
       <p>Anyone can make an AI write an app. The hard part is knowing when it&rsquo;s actually <em>finished</em> — and that is what we built.</p>
     </div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>18 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>17 / 18</span></footer>
   </div>
 </section>
 
@@ -1348,7 +1326,7 @@
       <p><b>[28]</b> CodeRabbit, &ldquo;AI-Generated Code Quality: An Analysis of 470 Real-World Pull Requests,&rdquo; CodeRabbit, 2026. [Online]. Available: https://byteiota.com/ai-code-quality-crisis-84-adoption-29-trust-in-2026/</p>
       <p><b>[29]</b> Hostinger, &ldquo;Vibe Coding Statistics 2026: Adoption, Productivity, and Security Data,&rdquo; 2026, citing Gartner and Forrester forecasts. [Online]. Available: https://www.hostinger.com/blog/vibe-coding-statistics/</p>
     </div>
-    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>19 / 19</span></footer>
+    <footer class="foot"><span>ForgeFlow · B.Tech Project — Review 2 · Group 04</span><span>18 / 18</span></footer>
   </div>
 </section>
 
