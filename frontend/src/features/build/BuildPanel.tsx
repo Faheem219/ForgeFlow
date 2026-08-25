@@ -600,7 +600,8 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
       <Split
         id={layoutId(projectId, 'build-center')}
         direction="horizontal"
-        panelIds={['ide', 'preview']}
+        // Must match the panes actually rendered — the library keys saved layouts by this list.
+        panelIds={showPreview ? ['ide', 'preview'] : ['ide']}
         className="min-h-0 flex-1"
       >
         <Pane id="ide" minSize={25}>

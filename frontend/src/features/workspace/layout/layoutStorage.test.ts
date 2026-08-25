@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LAYOUT_STORAGE_PREFIX, layoutId, resetLayouts, safeStorage } from './layoutStorage';
+import {
+  LAYOUT_STORAGE_PREFIX,
+  LAYOUT_STORAGE_ROOT,
+  layoutId,
+  resetLayouts,
+  safeStorage,
+} from './layoutStorage';
 
 describe('layoutId', () => {
   it('scopes a layout to one project', () => {
@@ -13,6 +19,13 @@ describe('layoutId', () => {
 
   it('namespaces every key so nothing else in storage is touched', () => {
     expect(layoutId('p1', 'shell').startsWith(LAYOUT_STORAGE_PREFIX)).toBe(true);
+  });
+
+  // Sizes used to be written as bare numbers, which the panel library reads as *pixels* — a saved
+  // layout from before that fix describes a rail clamped to a 34px sliver. Restoring one would
+  // silently reinstate the bug, so the version segment has to keep those keys unreachable.
+  it('does not read layouts written before pane sizes were percentages', () => {
+    expect(layoutId('p1', 'shell')).not.toBe(`${LAYOUT_STORAGE_ROOT}:p1:shell`);
   });
 });
 
@@ -82,6 +95,16 @@ describe('resetLayouts', () => {
 
     expect(window.localStorage.getItem(layoutId('p2', 'shell'))).toBe('[2]');
     expect(window.localStorage.getItem('forgeflow:auth-token')).toBe('secret');
+  });
+
+  // A reset is the one moment we can tidy up: sweep the retired versions too, or they sit in
+  // storage forever.
+  it('also clears layouts left behind by an earlier storage version', () => {
+    window.localStorage.setItem(`${LAYOUT_STORAGE_ROOT}:p1:shell`, '[1]');
+
+    resetLayouts('p1');
+
+    expect(window.localStorage.getItem(`${LAYOUT_STORAGE_ROOT}:p1:shell`)).toBeNull();
   });
 
   it('is a no-op when there is nothing stored', () => {

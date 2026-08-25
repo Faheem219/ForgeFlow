@@ -148,6 +148,22 @@ export default function Workspace(): JSX.Element {
     },
   });
 
+  /*
+    The panel library keys a saved layout by the ids it is told are mounted, and warns that they
+    must match the Panels actually rendered. Passing one fixed list meant every combination of open
+    rails shared a single storage slot — so dragging a seam with the assistant hidden rewrote the
+    arrangement for when it was showing. Derive the list instead: each combination then remembers
+    its own sizes.
+  */
+  const columnIds = useMemo(() => {
+    const ids: string[] = [];
+    if (stagesOpen) ids.push('rail');
+    ids.push('main');
+    if (assistantOpen) ids.push('assistant');
+    return ids;
+  }, [stagesOpen, assistantOpen]);
+  const shellIds = useMemo(() => (terminalOpen ? ['body', 'terminal'] : ['body']), [terminalOpen]);
+
   const statusByStage = useMemo(() => {
     const map: Partial<Record<Stage, StageStatus>> = {};
     for (const s of stagesQuery.data ?? []) {
@@ -250,14 +266,14 @@ export default function Workspace(): JSX.Element {
         key={layoutNonce}
         id={layoutId(projectId, 'shell')}
         direction="vertical"
-        panelIds={['body', 'terminal']}
+        panelIds={shellIds}
         className="flex-1"
       >
         <Pane id="body" minSize={30}>
           <Split
             id={layoutId(projectId, 'columns')}
             direction="horizontal"
-            panelIds={['rail', 'main', 'assistant']}
+            panelIds={columnIds}
             className="flex-1 gap-0"
           >
             {stagesOpen ? (
