@@ -52,6 +52,9 @@ def _controller(typecheck_probes: list[StepProbe], *, scripted: ScriptedAgent):
     async def placeholder(project: object, ctx: object) -> list[str]:
         return []  # no placeholder left
 
+    async def demo_test(project: object, ctx: object) -> list[str]:
+        return []  # the skeleton's example tests were rewritten
+
     async def container_state(project_id: str) -> str:
         return "running"
 
@@ -65,6 +68,7 @@ def _controller(typecheck_probes: list[StepProbe], *, scripted: ScriptedAgent):
         typecheck=typecheck,
         boot=boot,
         placeholder=placeholder,
+        demo_test=demo_test,
         container_state=container_state,
         analyzer_factory=lambda written: StubAnalyzer(),
         repair_factory=repair_factory,
