@@ -42,6 +42,9 @@ from app.testing.synthetic import boot_failure, persist_synthetic_run, typecheck
 # phase-56 adds `phases_incomplete`.
 STOP_TYPECHECK = "typecheck_failed"
 STOP_PLACEHOLDER = "placeholder_left"
+#: phase-54's demo tests were never rewritten. Its own stop_reason because, unlike every
+#: other code-class failure, the repair loop is structurally unable to fix it.
+STOP_DEMO_TEST = "demo_test_left"
 STOP_BOOT = "boot_unhealthy"
 STOP_REPAIR = "repair_escalated"
 STOP_NO_TARGET = "no_repair_target"
@@ -68,6 +71,13 @@ _PLACEHOLDER_FILES = (
     "frontend/index.html",
 )
 _ROUTES_FILE = "frontend/src/routes.tsx"
+#: The other two files phase-54 requires codegen to REWRITE in place. They are split out from
+#: `_PLACEHOLDER_FILES` because they are *tests*: `agents/repair.py:is_test_file` bars the repair
+#: loop from patching them, so a stale one cannot be handed to the loop the way a stale page can.
+_DEMO_TEST_FILES = (
+    "frontend/src/App.test.tsx",
+    "frontend/e2e/home.spec.ts",
+)
 
 
 @dataclass
@@ -123,6 +133,7 @@ InstallStep = Callable[[Project, ToolContext], Awaitable[StepProbe | None]]
 TypecheckStep = Callable[[Project, ToolContext], Awaitable[StepProbe]]
 BootStep = Callable[[Project, ToolContext], Awaitable[BootProbe]]
 PlaceholderStep = Callable[[Project, ToolContext], Awaitable[list[str]]]
+DemoTestStep = Callable[[Project, ToolContext], Awaitable[list[str]]]
 ContainerState = Callable[[str], Awaitable[str]]
 AnalyzerFactory = Callable[[list[str]], Any]  # (written_files) -> ContextAnalyzer
 RepairFactory = Callable[[Any], RepairLoopController]  # (analyzer) -> loop
@@ -136,6 +147,7 @@ class BuildVerificationController:
         typecheck: TypecheckStep | None = None,
         boot: BootStep | None = None,
         placeholder: PlaceholderStep | None = None,
+        demo_test: DemoTestStep | None = None,
         container_state: ContainerState | None = None,
         analyzer_factory: AnalyzerFactory | None = None,
         repair_factory: RepairFactory | None = None,
@@ -144,6 +156,7 @@ class BuildVerificationController:
         self._typecheck = typecheck or _default_typecheck
         self._boot = boot or _default_boot
         self._placeholder = placeholder or _default_placeholder
+        self._demo_test = demo_test or _default_demo_test
         self._container_state = container_state or _default_container_state
         self._analyzer_factory = analyzer_factory or _default_analyzer_factory
         self._repair_factory = repair_factory or _default_repair_factory
@@ -264,6 +277,22 @@ class BuildVerificationController:
         placeholder_ok = not findings
         if findings:
             synthetic.append(_placeholder_result(findings))
+
+        # 4b) skeleton demo tests still asserting the placeholder --------------------------
+        #
+        # Short-circuited like an `environment` verdict — zero repair iterations, zero tokens —
+        # because the loop provably cannot win here, not merely because it is expensive:
+        #
+        #   * the placeholder gate above FAILS a build whose app still contains the demo copy;
+        #   * these tests ASSERT that same copy is on screen;
+        #   * `is_test_file` bars the loop from editing them to resolve the contradiction.
+        #
+        # So the loop patches pages that were never the problem, its suite re-run never gets to
+        # zero failures, and it escalates on no-progress having spent its whole budget. Naming the
+        # real culprit costs one file read.
+        stale_tests = await self._demo_test(project, ctx)
+        if stale_tests:
+            return await self._stop_demo_test(channel, stale_tests)
 
         # 5) repair (code-class failures only) ----------------------------------------------
         repaired = False
@@ -392,6 +421,25 @@ class BuildVerificationController:
         await self._emit_report(channel, report)
         return report
 
+    async def _stop_demo_test(self, channel: str, paths: list[str]) -> BuildVerifyReport:
+        """A stale skeleton demo test: stop here, forward nothing to the repair loop."""
+        listed = ", ".join(paths)
+        report = BuildVerifyReport(
+            ok=False,
+            stop_reason=STOP_DEMO_TEST,
+            message=(
+                "The skeleton's example test(s) still assert the placeholder demo page: "
+                f"{listed}. They cannot pass against a real app, and repair is not allowed to "
+                "edit test files."
+            ),
+            hint=(
+                "Rewrite " + listed + " to assert this app's own content (overwrite, never "
+                "delete — an empty test run is itself a failure), then build again."
+            ),
+        )
+        await self._emit_report(channel, report)
+        return report
+
     async def _step(self, channel: str, step: str) -> None:
         await emit(
             channel, EventType.build_verify, {"stage": "build", "step": step}, stage=Stage.build
@@ -416,6 +464,7 @@ def _stop(reason: str, message: str, hint: str = "") -> BuildVerifyReport:
 _GATE_MESSAGE = {
     STOP_TYPECHECK: "The generated code still does not typecheck.",
     STOP_PLACEHOLDER: "The skeleton demo placeholder still appears in the built app.",
+    STOP_DEMO_TEST: "A skeleton demo test still asserts the placeholder page.",
     STOP_BOOT: "The app did not boot cleanly — a dev server is not running.",
 }
 
@@ -531,6 +580,28 @@ async def _default_placeholder(project: Project, ctx: ToolContext) -> list[str]:
     return findings
 
 
+async def _default_demo_test(project: Project, ctx: ToolContext) -> list[str]:
+    """Skeleton demo tests that still assert the placeholder page.
+
+    Case-INSENSITIVE, unlike the source scan: these files reference the copy inside regex literals
+    (`/your app starts here/i`), so a case-sensitive `in` — which is what the source check uses and
+    what let this through — misses them entirely.
+    """
+    from app.core.errors import NotFoundError, UserError
+
+    needles = tuple(n.lower() for n in _PLACEHOLDER_STRINGS)
+    findings: list[str] = []
+    for path in _DEMO_TEST_FILES:
+        try:
+            content = (await ctx.workspace.read(project, path)).content
+        except (NotFoundError, UserError):
+            continue
+        lowered = content.lower()
+        if any(needle in lowered for needle in needles):
+            findings.append(path)
+    return findings
+
+
 async def _default_container_state(project_id: str) -> str:
     from app.sandbox.manager import get_manager
 
@@ -552,6 +623,7 @@ __all__ = [
     "STOP_BOOT",
     "STOP_BUDGET",
     "STOP_CANCELLED",
+    "STOP_DEMO_TEST",
     "STOP_ENV",
     "STOP_NO_TARGET",
     "STOP_PLACEHOLDER",
