@@ -12,6 +12,13 @@ see the phase-24 Design notes):
   request share ONE code path (the design note) — fewer surprises.
 - ``skip``    — opt out; the stage is marked ``skipped`` and deploy stays blocked until a build
   completes (the deploy hard-prereq).
+- ``proceed`` with ``payload.approve`` — a **human approval**. No codegen, no verification: the
+  person looked at the app and says it is good, and the stage goes ``complete``. The automated gate
+  below is deliberately strict (typecheck, placeholder, both dev servers, every planned phase), and
+  strict gates produce false negatives — a working app that trips one of them would otherwise be
+  stuck out of deploy forever, because the only other route to ``complete`` is another paid build
+  that may fail the same check again. The one thing an approval will not do is invent a build: it
+  requires a build report to exist, so "complete" never means an untouched skeleton.
 
 Codegen runs on its **own** ``Run`` (kind ``codegen:build``) so its token/₹ cost is a distinct,
 eval-readable unit, separate from the conductor's lightweight intent trace. Budget/provider errors
@@ -25,12 +32,12 @@ from typing import TYPE_CHECKING
 
 from app.agents.build_plan import PHASE_DONE
 from app.agents.build_scope import BuildScope
-from app.agents.codegen import BuildReport, CodegenAgent
+from app.agents.codegen import BUILD_REPORT_KIND, BuildReport, CodegenAgent
 from app.agents.tools.context import ToolContext
 from app.core.errors import UserError
 from app.db.models import Run
 from app.db.models.common import utcnow
-from app.db.models.enums import MessageRole, StageStatus
+from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.db.repos import RunRepo
 from app.orchestrator.schemas import Intent, IntentAction, OutboundMessage, StageResult
 from app.orchestrator.stages.build_verify import BuildVerificationController, BuildVerifyReport
@@ -53,6 +60,9 @@ class BuildStageHandler:
         self._runs = RunRepo()
 
     async def handle(self, intent: Intent, ctx: StageContext) -> StageResult:
+        if intent.is_approval:
+            return await self._approve(ctx)
+
         if intent.action is IntentAction.skip:
             return StageResult(
                 messages=[
@@ -132,6 +142,44 @@ class BuildStageHandler:
                         "stop_reason": stop_reason,
                         "files_changed": len(report.files_changed),
                         "run_id": str(run.id),
+                    },
+                }
+            ],
+        )
+
+    async def _approve(self, ctx: StageContext) -> StageResult:
+        """Mark the build complete on the user's say-so. No agent runs, nothing is charged."""
+        project_id = ctx.project.id
+        if project_id is None:  # pragma: no cover - a persisted project always carries an id
+            raise UserError("Project is not persisted")
+
+        latest = await ctx.artifacts.get_latest_of_kind(
+            project_id, Stage.build, ArtifactType.code_change, BUILD_REPORT_KIND
+        )
+        if latest is None:
+            raise UserError(
+                "There is no build to approve yet — run Build first, then approve the result."
+            )
+
+        return StageResult(
+            messages=[
+                OutboundMessage(
+                    role=MessageRole.assistant,
+                    content=(
+                        "Build approved by you — marked complete without re-running the agent. "
+                        "Deploy is unblocked."
+                    ),
+                )
+            ],
+            next_status=StageStatus.complete,
+            events=[
+                {
+                    "event": "progress",
+                    "payload": {
+                        "stage": "build",
+                        "status": str(StageStatus.complete),
+                        "verified": False,
+                        "approved_by": "user",
                     },
                 }
             ],

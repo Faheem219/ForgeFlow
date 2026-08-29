@@ -13,9 +13,13 @@ Flow for one intent:
 
 Intent → state-machine action mapping:
   - ``skip``     → ``skip``
+  - ``unskip``   → ``unskip`` (restore the status the stage held before it was skipped)
   - ``proceed``  → ``complete`` (accept the stage and advance; honors the hard prereqs)
   - ``refine``   → ``refine`` if the stage is already complete/skipped/stale (a jump-back that
                    stales downstream), else ``enter`` (start/continue an in-flight stage).
+
+``unskip`` is answered by step 6 alone — it is a pure state restore, so no stage handler runs and
+no artifact is produced (step 5 is skipped entirely).
 """
 
 from __future__ import annotations
@@ -57,6 +61,16 @@ logger = logging.getLogger(__name__)
 
 _REOPENABLE = {StageStatus.complete, StageStatus.skipped, StageStatus.stale}
 
+#: Statuses in the words the UI shows, so an un-skip reply names the same state the badge does.
+_STATUS_WORDS = {
+    StageStatus.empty: "not started",
+    StageStatus.in_progress: "in progress",
+    StageStatus.awaiting_user: "needs you",
+    StageStatus.complete: "complete",
+    StageStatus.skipped: "skipped",
+    StageStatus.stale: "stale",
+}
+
 #: Stages whose handler runs far longer than a request should be held open. Their work is detached
 #: so it survives the client that started it (a refresh, a proxy timeout) and is followed over the
 #: realtime channel instead.
@@ -70,9 +84,19 @@ BUILD_RUN_KINDS = ("conductor:build", "codegen:build")
 _DETACHED: set[asyncio.Task[None]] = set()
 
 
-def _runs_detached(stage: Stage, action: Action) -> bool:
-    """Whether this intent should be answered immediately and finished in the background."""
-    return stage in _DETACHED_STAGES and action is not Action.skip
+def _runs_detached(intent: Intent, action: Action) -> bool:
+    """Whether this intent should be answered immediately and finished in the background.
+
+    Only the actions that actually start an agent run qualify. The ones that merely move the stage
+    marker — skip, unskip, and a human *approval* of a build — do no work worth detaching, and
+    detaching them would make a synchronous answer look like a build in flight (and take the
+    concurrent-build lock with it).
+    """
+    if intent.stage not in _DETACHED_STAGES:
+        return False
+    if action not in (Action.enter, Action.complete, Action.refine):
+        return False
+    return not intent.is_approval
 
 
 async def reap_orphaned_runs() -> int:
@@ -110,6 +134,8 @@ async def drain_detached() -> None:
 def _resolve_action(action: IntentAction, current: StageStatus) -> Action:
     if action is IntentAction.skip:
         return Action.skip
+    if action is IntentAction.unskip:
+        return Action.unskip
     if action is IntentAction.proceed:
         return Action.complete
     # refine: a jump-back only makes sense once the stage has produced something.
@@ -144,7 +170,7 @@ class Conductor:
 
         # Refuse to start a second build on top of one already running: they share one workspace
         # and would race on the same files. The open `Run` is the durable lock.
-        if _runs_detached(intent.stage, action):
+        if _runs_detached(intent, action):
             active = await self._runs.active_for_project(intent.project_id, BUILD_RUN_KINDS)
             if active:
                 raise UserError(
@@ -163,7 +189,9 @@ class Conductor:
         #
         # Only for enter/complete: `refine` requires a complete/skipped/stale status, so writing
         # in_progress first would make the closing transition illegal.
-        marked_in_progress = action in (Action.enter, Action.complete)
+        # An approval does no work, so there is nothing for an in_progress marker to describe — and
+        # marking it would let a *rejected* approval (no build to approve) leave the stage moved.
+        marked_in_progress = action in (Action.enter, Action.complete) and not intent.is_approval
         if marked_in_progress:
             await self._stages.set_status(intent.project_id, intent.stage, StageStatus.in_progress)
             await self._emit_transition(intent, current, StageStatus.in_progress)
@@ -182,7 +210,7 @@ class Conductor:
         # the UI loses every trace of a build that is in fact still running. Detach it instead and
         # answer at once — the client follows over the realtime channel and can re-discover the run
         # from its `Run` document after a refresh. NOTE: the detached path owns closing `run`.
-        if _runs_detached(intent.stage, action):
+        if _runs_detached(intent, action):
             self._spawn(
                 self._execute_detached(
                     user_id, intent, ctx, action, run, marked_in_progress=marked_in_progress
@@ -223,6 +251,9 @@ class Conductor:
         marked_in_progress: bool,
     ) -> IntentResponse:
         """Dispatch to the stage handler, then persist everything it produced."""
+        if action is Action.unskip:
+            return await self._unskip(user_id, intent, current, run)
+
         try:
             result = await get_handler(intent.stage).handle(intent, ctx)
         except Exception as exc:
@@ -319,6 +350,46 @@ class Conductor:
             # Closing the Run is what flips "a build is running" off, so it must happen whatever
             # else did — otherwise the project is locked out of building forever.
             await self._close_run(run, intent, failure)
+
+    async def _unskip(
+        self,
+        user_id: PydanticObjectId,
+        intent: Intent,
+        current: StageStatus,
+        run: Run,
+    ) -> IntentResponse:
+        """Undo a skip: put the stage back to the status it held, with no handler run.
+
+        Deliberately *not* routed through a stage handler. Un-skipping is an undo, not new work:
+        re-entering the build stage would mean paying for a whole rebuild of an app that is already
+        on disk and already passed verification — which is exactly the trap an accidental skip used
+        to leave the user in.
+        """
+        outcome = await self._projects.transition_stage(
+            intent.project_id, user_id, intent.stage, Action.unskip
+        )
+        restored = (
+            f"restored to {_STATUS_WORDS[outcome.to_status]}"
+            if outcome.to_status is not StageStatus.empty
+            else "it had not been started before the skip, so it is back to not started"
+        )
+        message = await self._messages.append(
+            intent.project_id,
+            MessageRole.assistant,
+            f"{intent.stage.value.capitalize()} is no longer skipped — {restored}. "
+            "Nothing was re-run.",
+            stage=intent.stage,
+        )
+        return IntentResponse(
+            stage=intent.stage,
+            action=intent.action,
+            from_status=current,
+            to_status=outcome.to_status,
+            stale=list(outcome.stale),
+            messages=[MessageOut.from_message(message)],
+            artifacts=[],
+            run_id=str(run.id),
+        )
 
     # -- helpers -----------------------------------------------------------------------------
 

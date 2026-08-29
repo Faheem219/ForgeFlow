@@ -1,5 +1,5 @@
 """Build stage handler (phase-24): proceed/refine/skip over a mock codegen agent, downstream
-staleness on refine, boot-gated completion, and error surfacing."""
+staleness on refine, boot-gated completion, human approval, and error surfacing."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ import pytest
 from beanie import PydanticObjectId
 
 import app.orchestrator.stages as stages_mod
-from app.agents.codegen import BuildReport
+from app.agents.codegen import BUILD_REPORT_KIND, BuildReport
 from app.core.config import get_config
 from app.core.errors import UserError
 from app.db.models import Project, Run
-from app.db.models.enums import MessageRole, Stage, StageStatus
+from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.conductor import Conductor, drain_detached
@@ -220,6 +220,107 @@ async def test_skip_does_not_run_codegen() -> None:
     assert codegen.calls == []
     assert "skipped" in result.messages[0].content.lower()
     assert result.next_status is None  # the conductor maps skip → skipped
+
+
+# ------------------------------------------------------- human approval (the manual completion)
+
+
+async def _record_a_build(project_id: PydanticObjectId) -> None:
+    """Persist a build report, i.e. put the project in the state "a build has run"."""
+    await ArtifactService().create_version(
+        project_id,
+        Stage.build,
+        ArtifactType.code_change,
+        text='{"summary": "built"}',
+        meta={"kind": BUILD_REPORT_KIND},
+    )
+
+
+async def test_approve_completes_the_stage_without_running_codegen() -> None:
+    """The human half of the completion gate: the user has looked at the app and says it is fine,
+    so the stage completes with no agent run — and, crucially, nothing charged."""
+    project = await _project()
+    assert project.id is not None
+    await _record_a_build(project.id)
+    codegen = FakeCodegen()
+    verifier = FakeVerifier()
+
+    result = await BuildStageHandler(codegen, verifier).handle(  # type: ignore[arg-type]
+        Intent(
+            project_id=project.id,
+            stage=Stage.build,
+            action=IntentAction.proceed,
+            payload={"approve": True},
+        ),
+        await _ctx(project),
+    )
+
+    assert codegen.calls == []
+    assert verifier.calls == []
+    assert result.next_status is StageStatus.complete
+    assert "approved by you" in result.messages[0].content
+
+
+async def test_approve_completes_a_build_the_verifier_had_held() -> None:
+    """The case that motivates it: verification failed (or misfired), so `proceed` can never reach
+    `complete` on its own and deploy stays blocked no matter how many times it is re-run."""
+    project = await _project()
+    assert project.id is not None
+    await _record_a_build(project.id)
+    held = FakeVerifier(
+        BuildVerifyReport(ok=False, stop_reason=STOP_BOOT, message="A dev server is not running.")
+    )
+
+    result = await BuildStageHandler(FakeCodegen(), held).handle(  # type: ignore[arg-type]
+        Intent(
+            project_id=project.id,
+            stage=Stage.build,
+            action=IntentAction.proceed,
+            payload={"approve": True},
+        ),
+        await _ctx(project),
+    )
+
+    assert result.next_status is StageStatus.complete
+
+
+async def test_approve_rejected_when_no_build_has_ever_run() -> None:
+    """Approval accepts a build; it does not invent one. Otherwise `complete` — and with it
+    deploy's hard prereq — could be satisfied by an untouched skeleton."""
+    project = await _project()
+    assert project.id is not None
+    codegen = FakeCodegen()
+
+    with pytest.raises(UserError, match="no build to approve"):
+        await BuildStageHandler(codegen, FakeVerifier()).handle(  # type: ignore[arg-type]
+            Intent(
+                project_id=project.id,
+                stage=Stage.build,
+                action=IntentAction.proceed,
+                payload={"approve": True},
+            ),
+            await _ctx(project),
+        )
+    assert codegen.calls == []
+
+
+async def test_plain_proceed_still_builds_when_approve_is_absent() -> None:
+    """The payload flag is opt-in — an ordinary proceed must be unaffected by its existence."""
+    project = await _project()
+    assert project.id is not None
+    codegen = FakeCodegen()
+
+    await BuildStageHandler(codegen, FakeVerifier()).handle(  # type: ignore[arg-type]
+        Intent(
+            project_id=project.id,
+            stage=Stage.build,
+            action=IntentAction.proceed,
+            payload={"approve": False},
+        ),
+        await _ctx(project),
+    )
+
+    assert len(codegen.calls) == 1
 
 
 async def test_agent_errors_propagate_as_clear_messages() -> None:

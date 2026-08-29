@@ -72,4 +72,24 @@ describe('StageNavigator', () => {
     fireEvent.click(screen.getByTestId('stage-action-design-proceed'));
     expect(onAction).toHaveBeenCalledWith('design', 'proceed');
   });
+
+  it('offers un-skip in place of skip for a skipped stage', () => {
+    // Skipping is reversible: the server restores the status the stage held, so an accidental skip
+    // costs a click rather than a re-run of the stage.
+    const { onAction } = renderNav({ build: 'skipped' });
+    fireEvent.click(screen.getByTestId('stage-menu-build'));
+
+    expect(screen.queryByTestId('stage-action-build-skip')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('stage-action-build-unskip'));
+    expect(onAction).toHaveBeenCalledWith('build', 'unskip');
+  });
+
+  it('offers skip, not un-skip, for a stage that is not skipped', () => {
+    renderNav({ build: 'complete' });
+    fireEvent.click(screen.getByTestId('stage-menu-build'));
+
+    expect(screen.getByTestId('stage-action-build-skip')).toBeInTheDocument();
+    expect(screen.queryByTestId('stage-action-build-unskip')).toBeNull();
+  });
 });

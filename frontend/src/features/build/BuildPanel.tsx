@@ -26,6 +26,16 @@ import {
 } from './api';
 import { BUILD_STEPS, STEP_LABELS, useBuildActivity } from './useBuildActivity';
 
+/**
+ * Whether a build intent starts an actual agent run. `skip`/`unskip` only move the stage marker,
+ * and a `proceed` carrying `approve` is the user accepting the build that already exists — none of
+ * them generate code, so none of them should reset the live run view.
+ */
+function startsBuild(body: IntentRequest): boolean {
+  if (body.action === 'refine') return true;
+  return body.action === 'proceed' && !body.payload?.approve;
+}
+
 /** Open a generated file in the IDE from the live list (focus it if it is already open). */
 async function openGeneratedFile(projectId: string, path: string): Promise<void> {
   const store = useIdeStore.getState();
@@ -92,7 +102,7 @@ const PHASE_TONE: Record<string, string> = {
 
 /**
  * Build stage: the streamed IDE + preview are the hero (full width), with a compact, collapsible
- * build-report strip above them. Proceed/skip live in the header; incremental change requests go
+ * build-report strip above them. Build/approve/skip live in the header; incremental change requests go
  * through the shared Assistant conversation (which sends `refine` for the active stage), so there is
  * a single conversational surface rather than two. Drives the phase-24 build handler via the
  * conductor; the report renders from the persisted build_report artifact.
@@ -140,12 +150,17 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const setActiveStage = useWorkspaceStore((s) => s.setActiveStage);
   const prevStatusRef = useRef(persistedStatus);
   const hasLoadedRef = useRef(false);
+  // An un-skip restores the stage to whatever it was — often `complete`. That is a transition the
+  // effect below would otherwise read as "the build just finished", and bounce the user to Test
+  // one click after they asked to come back. Set per intent, so the next real build still advances.
+  const undoingSkipRef = useRef(false);
   useEffect(() => {
     if (stagesQuery.data === undefined) return; // still loading — nothing real to compare yet
     if (
       hasLoadedRef.current &&
       prevStatusRef.current !== 'complete' &&
-      persistedStatus === 'complete'
+      persistedStatus === 'complete' &&
+      !undoingSkipRef.current
     ) {
       const next = nextStage('build');
       if (next) setActiveStage(next);
@@ -177,8 +192,11 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
 
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
-    // A new run starts a fresh file list rather than appending to the previous build's.
-    onMutate: () => setRunKey((k) => k + 1),
+    onMutate: (body) => {
+      undoingSkipRef.current = body.action === 'unskip';
+      // A new run starts a fresh file list rather than appending to the previous build's.
+      if (startsBuild(body)) setRunKey((k) => k + 1);
+    },
     onSuccess: (_data, body) => {
       void queryClient.invalidateQueries({ queryKey: ['build-reports', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
@@ -325,15 +343,45 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           >
             {showPreview ? 'Hide preview' : 'Preview'}
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            data-testid="build-skip"
-            onClick={() => intent.mutate({ stage: 'build', action: 'skip' })}
-          >
-            Skip
-          </Button>
+          {/* Approving is the human half of the completion gate: the automated one is strict, and
+              when it holds a build the user can see is fine, this is what unblocks deploy without
+              paying for another run. Hidden once the stage is already complete. */}
+          {hasBuild && status !== 'complete' ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              data-testid="build-approve"
+              title="Mark the build complete yourself — no agent run. Unblocks deploy."
+              onClick={() =>
+                intent.mutate({ stage: 'build', action: 'proceed', payload: { approve: true } })
+              }
+            >
+              Approve
+            </Button>
+          ) : null}
+          {status === 'skipped' ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              data-testid="build-unskip"
+              title="Undo the skip and restore the stage to what it was. Nothing is re-run."
+              onClick={() => intent.mutate({ stage: 'build', action: 'unskip' })}
+            >
+              Un-skip
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              data-testid="build-skip"
+              onClick={() => intent.mutate({ stage: 'build', action: 'skip' })}
+            >
+              Skip
+            </Button>
+          )}
           <Button
             size="sm"
             disabled={busy}

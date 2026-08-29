@@ -74,6 +74,13 @@ Makes the codegen engine (`phase-23`) a first-class, steerable stage honoring D1
   distinct `Run` (kind `codegen:build`); `skip` marks the stage skipped. A **healthy boot →
   `complete`** (so deploy's hard-prereq is satisfiable), a broken boot → `awaiting_user`. Budget/
   provider errors propagate to the conductor → the API error envelope + `budget.halt` event.
+- **Human approval (added 2026-08-29, user-requested).** `proceed` with `payload.approve` marks an
+  existing build `complete` without running codegen or verification, and the Build panel offers it
+  whenever a build exists and the stage is not already complete. The completion gate (phase-55/56)
+  is strict by design, so its false negatives used to be terminal: `complete` was reachable only
+  through the gate, deploy's hard prereq only through `complete`, and the sole retry was another
+  paid build liable to fail the same check. Approval requires a persisted `build_report`, so it can
+  accept a build but never conjure one.
 - **Change requests:** `CodegenAgent.run` gained an additive `instruction` kwarg (threaded into the
   plan + implement prompts) so a `refine` regenerates incrementally; the conductor's `refine` action
   over a complete build marks downstream (test/deploy/validate) `stale` automatically. Initial build

@@ -211,13 +211,19 @@ class ProjectService:
         project = await self.get_owned(project_id, user_id)
         current = await self._stages.list_for_project(project_id)
         snapshot = {state.stage: state.status for state in current}
+        # What an `unskip` of this stage would restore (recorded by the `skip` that hid it).
+        restore_point = next(
+            (state.previous_status for state in current if state.stage is stage), None
+        )
 
         try:
-            result = apply_transition(snapshot, stage, action)
+            result = apply_transition(snapshot, stage, action, restore_point=restore_point)
         except ValueError as exc:
             raise UserError(str(exc)) from exc
 
-        await self._stages.set_status(project_id, result.stage, result.to_status)
+        await self._stages.set_status(
+            project_id, result.stage, result.to_status, previous_status=result.restore_point
+        )
         for stale_stage in result.stale:
             await self._stages.set_status(project_id, stale_stage, StageStatus.stale)
 

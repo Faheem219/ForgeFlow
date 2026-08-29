@@ -84,10 +84,22 @@ class StageStateRepo(BaseRepo[StageState]):
         return await StageState.find({"project_id": project_id}).to_list()
 
     async def set_status(
-        self, project_id: PydanticObjectId, stage: Stage, status: StageStatus
+        self,
+        project_id: PydanticObjectId,
+        stage: Stage,
+        status: StageStatus,
+        *,
+        previous_status: StageStatus | None = None,
     ) -> StageState:
+        """Write a stage's status, and with it the restore point an ``unskip`` would put back.
+
+        ``previous_status`` is written unconditionally, so the default clears it: any caller that
+        moves a stage without naming a restore point is by definition leaving nothing to restore.
+        Only a ``skip`` records one.
+        """
         state = await self.get_or_create(project_id, stage)
         state.status = status
+        state.previous_status = previous_status
         state.updated_at = utcnow()
         await state.save()
         return state

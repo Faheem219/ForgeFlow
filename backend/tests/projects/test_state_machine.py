@@ -103,6 +103,84 @@ def test_skip_is_not_gated_by_hard_prereqs() -> None:
     assert can_transition({}, Stage.validate, Action.skip).allowed is True
 
 
+# ---------------------------------------------------------------------- unskip (undo a skip)
+
+
+def test_skip_records_the_status_it_hid_as_the_restore_point() -> None:
+    states = {Stage.build: StageStatus.complete}
+    result = apply_transition(states, Stage.build, Action.skip)
+    assert result.to_status is StageStatus.skipped
+    assert result.restore_point is StageStatus.complete
+
+
+def test_unskip_restores_the_recorded_status() -> None:
+    """The scenario this exists for: a complete build skipped by accident comes back complete —
+    without a rebuild, which is the only other route to `complete` for that stage."""
+    states = {Stage.build: StageStatus.skipped}
+    result = apply_transition(
+        states, Stage.build, Action.unskip, restore_point=StageStatus.complete
+    )
+    assert result.to_status is StageStatus.complete
+    assert result.stale == ()  # an undo invalidates nothing downstream
+
+
+def test_unskip_with_no_restore_point_goes_back_to_empty() -> None:
+    states = {Stage.design: StageStatus.skipped}
+    result = apply_transition(states, Stage.design, Action.unskip)
+    assert result.to_status is StageStatus.empty
+
+
+def test_unskip_restores_in_progress_as_awaiting_user() -> None:
+    """Nothing is still running, so `in_progress` would promise work nobody is doing."""
+    states = {Stage.build: StageStatus.skipped}
+    result = apply_transition(
+        states, Stage.build, Action.unskip, restore_point=StageStatus.in_progress
+    )
+    assert result.to_status is StageStatus.awaiting_user
+
+
+def test_unskip_rejected_unless_the_stage_is_skipped() -> None:
+    for status in (
+        StageStatus.empty,
+        StageStatus.in_progress,
+        StageStatus.awaiting_user,
+        StageStatus.complete,
+        StageStatus.stale,
+    ):
+        result = can_transition({Stage.build: status}, Stage.build, Action.unskip)
+        assert result.allowed is False
+        assert result.reason is not None and "skipped" in result.reason
+
+
+def test_unskip_is_not_gated_by_hard_prereqs() -> None:
+    """Undoing an opt-out restores a snapshot the project already held; it cannot need a prereq."""
+    states = {Stage.deploy: StageStatus.skipped}
+    assert can_transition(states, Stage.deploy, Action.unskip).allowed is True
+
+
+def test_unskip_clears_the_restore_point_it_consumed() -> None:
+    states = {Stage.build: StageStatus.skipped}
+    result = apply_transition(
+        states, Stage.build, Action.unskip, restore_point=StageStatus.complete
+    )
+    assert result.restore_point is None
+
+
+def test_re_skipping_keeps_the_original_restore_point() -> None:
+    """Otherwise the second skip records `skipped`, and the undo restores… skipped."""
+    states = {Stage.build: StageStatus.skipped}
+    result = apply_transition(states, Stage.build, Action.skip, restore_point=StageStatus.complete)
+    assert result.restore_point is StageStatus.complete
+
+
+@pytest.mark.parametrize("action", [Action.enter, Action.complete, Action.refine])
+def test_every_other_transition_clears_the_restore_point(action: Action) -> None:
+    """Once a stage has moved on under its own steam there is nothing left to restore."""
+    states = {Stage.build: StageStatus.complete}
+    result = apply_transition(states, Stage.build, action, restore_point=StageStatus.complete)
+    assert result.restore_point is None
+
+
 # ---------------------------------------------------------------------- complete
 
 
@@ -261,3 +339,8 @@ def test_apply_transition_raises_on_illegal_transition() -> None:
 def test_apply_transition_raises_on_illegal_refine() -> None:
     with pytest.raises(ValueError):
         apply_transition({}, Stage.design, Action.refine)
+
+
+def test_apply_transition_raises_on_unskip_of_a_stage_that_is_not_skipped() -> None:
+    with pytest.raises(ValueError, match="skipped"):
+        apply_transition({Stage.build: StageStatus.complete}, Stage.build, Action.unskip)

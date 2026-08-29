@@ -78,11 +78,17 @@ class ArtifactDiffResponse(BaseModel):
 
 
 class IntentAction(StrEnum):
-    """The three UI affordances (§8): iterate, accept-and-advance, opt out."""
+    """The UI affordances (§8): iterate, accept-and-advance, opt out — and undo the opt-out.
+
+    ``unskip`` is the inverse of ``skip``: it restores the status the stage held before it was
+    skipped, without re-running the stage. The conductor answers it itself (no stage handler runs),
+    so an accidental skip costs a click to undo rather than a full agent run.
+    """
 
     refine = "refine"
     proceed = "proceed"
     skip = "skip"
+    unskip = "unskip"
 
 
 class IntentRequest(BaseModel):
@@ -112,6 +118,18 @@ class Intent(BaseModel):
             message=body.message,
             payload=body.payload,
         )
+
+    @property
+    def is_approval(self) -> bool:
+        """A human *accepting* the stage as it stands, rather than asking for more work.
+
+        Carried on the payload rather than as its own :class:`IntentAction` because it is a variant
+        of "accept this stage" (``proceed``), not a further affordance — the same shape as the build
+        stage's other payload options (``fresh``, ``scope``). Defined once here because two readers
+        must agree: the conductor (which must not detach it as a build, or charge it) and the stage
+        handler (which must not run the agent for it).
+        """
+        return self.action is IntentAction.proceed and bool(self.payload.get("approve"))
 
 
 class OutboundMessage(BaseModel):

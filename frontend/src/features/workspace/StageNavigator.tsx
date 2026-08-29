@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, MoreHorizontal, Play, SkipForward, Wand2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Play, RotateCcw, SkipForward, Wand2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -24,11 +24,25 @@ interface StageNavigatorProps {
   busy?: boolean;
 }
 
-const ACTIONS: Array<{ action: IntentAction; label: string; icon: LucideIcon }> = [
-  { action: 'refine', label: 'Refine', icon: Wand2 },
-  { action: 'proceed', label: 'Proceed', icon: Play },
-  { action: 'skip', label: 'Skip', icon: SkipForward },
-];
+interface StageAction {
+  action: IntentAction;
+  label: string;
+  icon: LucideIcon;
+}
+
+const REFINE: StageAction = { action: 'refine', label: 'Refine', icon: Wand2 };
+const PROCEED: StageAction = { action: 'proceed', label: 'Proceed', icon: Play };
+const SKIP: StageAction = { action: 'skip', label: 'Skip', icon: SkipForward };
+const UNSKIP: StageAction = { action: 'unskip', label: 'Un-skip', icon: RotateCcw };
+
+/**
+ * The menu for one stage. A skipped stage offers `Un-skip` in place of `Skip`: skipping is
+ * reversible, and the server restores the status the stage held (so an accidentally-skipped,
+ * already-complete build comes back complete rather than needing a rebuild).
+ */
+function actionsFor(status: StageStatus): StageAction[] {
+  return status === 'skipped' ? [REFINE, PROCEED, UNSKIP] : [REFINE, PROCEED, SKIP];
+}
 
 /** Status → tint for the stage's icon well, so progress reads down the rail at a glance. */
 const WELL_TINTS: Record<StageStatus, string> = {
@@ -144,7 +158,7 @@ function StageRow({
             transition={{ duration: DURATION.fast, ease: EASE }}
             className="absolute right-0 z-10 mt-1 w-36 origin-top-right rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
           >
-            {ACTIONS.map(({ action, label, icon: ActionIcon }) => (
+            {actionsFor(status).map(({ action, label, icon: ActionIcon }) => (
               <button
                 key={action}
                 type="button"

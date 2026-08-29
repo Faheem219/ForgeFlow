@@ -18,6 +18,9 @@ class StageState(Document):
     project_id: PydanticObjectId
     stage: Stage
     status: StageStatus = StageStatus.empty
+    #: The status this stage held when it was skipped — what `unskip` restores it to. Written only
+    #: by a `skip`; every other status write clears it. `None` on rows predating restore points.
+    previous_status: StageStatus | None = None
     artifacts: list[PydanticObjectId] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=utcnow)
 

@@ -372,6 +372,95 @@ describe('BuildPanel', () => {
     );
   });
 
+  // ------------------------------------------------- human overrides: approve, and undo a skip
+
+  it('approves the build by hand when verification is holding it', async () => {
+    // The stuck case: a build the user can see works, held out of `complete` by the gate — and so
+    // out of deploy, with no route back except another (paid, possibly identical) build.
+    state.buildStatus = 'awaiting_user';
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-approve'));
+
+    await waitFor(() =>
+      expect(state.intentCalls.at(-1)).toMatchObject({
+        stage: 'build',
+        action: 'proceed',
+        payload: { approve: true },
+      }),
+    );
+  });
+
+  it('offers no approval when the stage is already complete', async () => {
+    installFetch(state); // beforeEach: buildStatus 'complete'
+    renderPanel();
+
+    await screen.findByTestId('build-status');
+    expect(screen.queryByTestId('build-approve')).toBeNull();
+  });
+
+  it('offers no approval before any build has run', async () => {
+    // Approval accepts a build; with none on disk there is nothing to accept.
+    state.buildStatus = 'empty';
+    state.reports = [];
+    installFetch(state);
+    renderPanel();
+
+    await screen.findByTestId('build-empty');
+    expect(screen.queryByTestId('build-approve')).toBeNull();
+  });
+
+  it('offers Un-skip in place of Skip once the stage is skipped', async () => {
+    state.buildStatus = 'skipped';
+    installFetch(state);
+    renderPanel();
+
+    expect(await screen.findByTestId('build-unskip')).toBeInTheDocument();
+    expect(screen.queryByTestId('build-skip')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('build-unskip'));
+    await waitFor(() =>
+      expect(state.intentCalls.at(-1)).toMatchObject({ stage: 'build', action: 'unskip' }),
+    );
+  });
+
+  it('stays on Build after an un-skip restores it to complete', async () => {
+    // The restore looks exactly like a build finishing (-> 'complete'), and the panel advances on
+    // that. Here it must not: the user clicked undo to come back, not to be sent onward.
+    state.buildStatus = 'skipped';
+    installFetch(state);
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-unskip'));
+    await waitFor(() => expect(state.intentCalls.at(-1)).toMatchObject({ action: 'unskip' }));
+
+    // Re-baseline the shared event ring first, so this event is new to the panel's cursor
+    // whatever earlier tests left behind (see the file-streaming test for the same two-act dance).
+    state.buildStatus = 'complete';
+    act(() => {
+      useRealtimeStore.setState({ channel: PROJECT, events: [] });
+    });
+    act(() => {
+      useRealtimeStore.setState((st) => ({
+        events: [
+          ...st.events,
+          {
+            event: 'stage.transition',
+            project_id: PROJECT,
+            stage: 'build',
+            payload: { stage: 'build' },
+            seq: 1,
+            ts: '',
+          },
+        ],
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('build-status')).toHaveTextContent('Complete'));
+    expect(useWorkspaceStore.getState().activeStage).not.toBe('test');
+  });
+
   it('does not show a stop reason on a complete build', async () => {
     state.reportDetail = {
       ...reportArtifact(),

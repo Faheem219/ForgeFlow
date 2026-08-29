@@ -5,7 +5,11 @@ export type Stage = 'design' | 'requirements' | 'build' | 'test' | 'deploy' | 'v
 export type StageStatus =
   'empty' | 'in_progress' | 'awaiting_user' | 'complete' | 'skipped' | 'stale';
 
-export type IntentAction = 'refine' | 'proceed' | 'skip';
+/**
+ * `unskip` is the inverse of `skip` — it restores the status a stage held before it was skipped,
+ * without re-running the stage (backend app/orchestrator/conductor.py).
+ */
+export type IntentAction = 'refine' | 'proceed' | 'skip' | 'unskip';
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 

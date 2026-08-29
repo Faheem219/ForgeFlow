@@ -26,7 +26,7 @@ The "conductor" of §8/domain glossary — the single place that owns transition
 
 ## Detailed tasks
 
-1. **Intent schema (`app/orchestrator/schemas.py`).** `Intent = {project_id, stage, action: refine|proceed|skip, message?, payload?}`; `StageResult = {messages[], artifacts[], next_status, events[]}`.
+1. **Intent schema (`app/orchestrator/schemas.py`).** `Intent = {project_id, stage, action: refine|proceed|skip|unskip, message?, payload?}` (`unskip` added 2026-08-29 — the conductor answers it itself, restoring the status the `skip` recorded, with no handler dispatch); `StageResult = {messages[], artifacts[], next_status, events[]}`.
 2. **StageHandler interface (`app/orchestrator/stages/base.py`).** `class StageHandler(Protocol): async def handle(intent, ctx) -> StageResult`. `ctx` bundles project, stage state, repos, `emit`, agent client (later), sandbox handle (later), config resolver.
 3. **Conductor (`app/orchestrator/conductor.py`).**
    - Validate the transition via `state_machine.can_transition` **before** dispatch; reject illegal ones with `UserError`.

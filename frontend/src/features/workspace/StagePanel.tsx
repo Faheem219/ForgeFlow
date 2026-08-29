@@ -27,6 +27,7 @@ const ACTION_LABELS: Record<IntentAction, string> = {
   refine: 'Refine',
   proceed: 'Proceed',
   skip: 'Skip',
+  unskip: 'Un-skip',
 };
 
 /**
@@ -64,18 +65,20 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
       }
       actions={
         <div className="flex gap-2">
-          {(['refine', 'proceed', 'skip'] as IntentAction[]).map((action) => (
-            <Button
-              key={action}
-              size="sm"
-              variant={action === 'proceed' ? 'primary' : 'secondary'}
-              disabled={isActing}
-              data-testid={`panel-action-${action}`}
-              onClick={() => runAction(action)}
-            >
-              {ACTION_LABELS[action]}
-            </Button>
-          ))}
+          {(['refine', 'proceed', status === 'skipped' ? 'unskip' : 'skip'] as IntentAction[]).map(
+            (action) => (
+              <Button
+                key={action}
+                size="sm"
+                variant={action === 'proceed' ? 'primary' : 'secondary'}
+                disabled={isActing}
+                data-testid={`panel-action-${action}`}
+                onClick={() => runAction(action)}
+              >
+                {ACTION_LABELS[action]}
+              </Button>
+            ),
+          )}
         </div>
       }
     >
