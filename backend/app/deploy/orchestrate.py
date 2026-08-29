@@ -31,7 +31,7 @@ from beanie import PydanticObjectId
 from app.core.config import get_config
 from app.core.errors import ProviderError, UserError
 from app.db.blobs import BlobStore, get_blob_store
-from app.db.models import Deployment, Project
+from app.db.models import Deployment, DeploymentRef, Project
 from app.db.models.enums import DeployMode, Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.deploy.analyzer import BackendPlan, FrontendPlan, InfraAnalyzer, InfraPlan
@@ -109,6 +109,9 @@ class DeployOrchestrator:
         db_target: str | None = None
         if plan.db is not None:
             await self._step(channel, "db", "provisioning")
+            # Before ANY provider call: a database the deployed app cannot reach must cost an error
+            # message, not two billed deployments that come up and then time out on every query.
+            await self._db.assert_deployable(project)
             info = await self._db.provision(project)
             mongodb_uri = await self._db.get_app_mongodb_uri(project)
             db_target = str(info.mode)
@@ -123,7 +126,7 @@ class DeployOrchestrator:
             await self._step(channel, "be", "deploying")
             try:
                 be_result = await self._deploy_backend(
-                    project, plan.be, mongodb_uri, mode=mode, user_id=user_id
+                    project, plan.be, mongodb_uri, mode=mode, user_id=user_id, log=log
                 )
                 be_url = be_result.url
                 log.append(f"be: {be_result.status} {be_url or ''}".strip())
@@ -149,7 +152,7 @@ class DeployOrchestrator:
             await self._step(channel, "fe", "building")
             try:
                 fe_result = await self._deploy_frontend(
-                    project, plan.fe, be_url, mode=mode, user_id=user_id
+                    project, plan.fe, be_url, mode=mode, user_id=user_id, log=log
                 )
                 log.append(f"fe: {fe_result.status} {fe_result.url or ''}".strip())
                 await self._step(channel, "fe", str(fe_result.status), url=fe_result.url)
@@ -172,6 +175,7 @@ class DeployOrchestrator:
             ),
             db_target=db_target,
             urls=urls,
+            refs=_refs(be_result, fe_result),
             status=status,
             topology_snapshot=_topology(plan, be_result, fe_result, db_target, status),
             logs_ref=await self._store_log(log),
@@ -204,6 +208,7 @@ class DeployOrchestrator:
         *,
         mode: DeployMode,
         user_id: PydanticObjectId | None,
+        log: list[str],
     ) -> DeployResult:
         provider = self._provider_factory(DeployTarget.be)
         env = {"NODE_ENV": "production"}
@@ -227,7 +232,9 @@ class DeployOrchestrator:
             region=str(config.get("deploy_region")) or None,
         )
         result = await provider.deploy(spec, mode=mode, user_id=user_id)
-        return await self._await_live(provider, result, mode=mode, user_id=user_id)
+        result = await self._await_live(provider, result, mode=mode, user_id=user_id)
+        await self._mirror_env(provider, result, env, mode=mode, user_id=user_id, log=log)
+        return result
 
     async def _deploy_frontend(
         self,
@@ -237,6 +244,7 @@ class DeployOrchestrator:
         *,
         mode: DeployMode,
         user_id: PydanticObjectId | None,
+        log: list[str],
     ) -> DeployResult:
         # VITE_API_BASE_URL is a build-time var → it must be present when the SPA is compiled.
         build_env = {"NODE_ENV": "production"}
@@ -250,7 +258,9 @@ class DeployOrchestrator:
             name=_service_name(project, "web"), target=DeployTarget.fe, env=env, files=files
         )
         result = await provider.deploy(spec, mode=mode, user_id=user_id)
-        return await self._await_live(provider, result, mode=mode, user_id=user_id)
+        result = await self._await_live(provider, result, mode=mode, user_id=user_id)
+        await self._mirror_env(provider, result, env, mode=mode, user_id=user_id, log=log)
+        return result
 
     async def _await_live(
         self,
@@ -266,6 +276,42 @@ class DeployOrchestrator:
             await self._sleep(_POLL_INTERVAL_S)
             result = await provider.status(result.ref, mode=mode, user_id=user_id)
         return result
+
+    async def _mirror_env(
+        self,
+        provider: DeployProvider,
+        result: DeployResult,
+        env: dict[str, str],
+        *,
+        mode: DeployMode,
+        user_id: PydanticObjectId | None,
+        log: list[str],
+    ) -> None:
+        """Copy this deploy's env onto the provider **project**, not just the deployment.
+
+        The inline env in the creation body is what makes *this* deployment correct, and it stays.
+        But Vercel scopes it to that immutable deployment: it never shows in the project's
+        environment-variable settings, and a redeploy triggered from the provider's own dashboard
+        inherits *project* env — of which there was none, so the backend came up with no
+        ``MONGODB_URI``. The project-scoped copy is what makes the dashboard honest and every later
+        deployment work. They answer different questions; the cost of both is one idempotent upsert.
+
+        **Fail soft.** The deployment is already live and correct by the time this runs, so a
+        rejected env write is recorded and moved past — never allowed to turn a good deploy into a
+        failed one.
+        """
+        if not env:
+            return
+        try:
+            await provider.set_env(result.ref, env, mode=mode, user_id=user_id)
+            log.append(f"env: {result.target} project vars set ({', '.join(sorted(env))})")
+        except Exception as exc:  # noqa: BLE001 - cosmetic follow-up; never fails the deploy
+            log.append(f"env: {result.target} project vars NOT set — {exc}")
+            logger.warning(
+                "could not mirror env to the provider project",
+                extra={"target": str(result.target), "provider": result.provider},
+                exc_info=True,
+            )
 
     async def _step(self, channel: str, step: str, status: str, **payload: Any) -> None:
         await self._emit(
@@ -301,6 +347,18 @@ def _urls(be: DeployResult | None, fe: DeployResult | None) -> dict[str, str]:
     if fe is not None and fe.url:
         urls["fe"] = fe.url
     return urls
+
+
+def _refs(be: DeployResult | None, fe: DeployResult | None) -> dict[str, DeploymentRef]:
+    """Provider handles per target — what logs and teardown key off after the deploy returns."""
+    refs: dict[str, DeploymentRef] = {}
+    for result in (be, fe):
+        if result is None:
+            continue
+        refs[str(result.target)] = DeploymentRef(
+            provider=result.provider, id=result.ref.id, project=result.ref.project
+        )
+    return refs
 
 
 def _is_live(result: DeployResult | None, error: ProviderError | None) -> bool:

@@ -21,6 +21,7 @@ from app.deploy.providers.base import (
     DeploySpec,
     DeployState,
     DeployTarget,
+    LogLine,
 )
 from app.deploy.providers.errors import DeployErrorKind, deploy_error
 from app.projects.service import ProjectService
@@ -65,14 +66,23 @@ class FakeDeployProvider:
         *,
         fail: bool = False,
         status: DeployState = DeployState.live,
+        env_fails: bool = False,
+        destroy_fails: bool = False,
+        log_lines: list[str] | None = None,
     ) -> None:
         self.key = key
         self.target = target
         self._url = url
         self._fail = fail
         self._status = status
+        self._env_fails = env_fails
+        self._destroy_fails = destroy_fails
+        self._log_lines = log_lines or []
         self.deploy_specs: list[DeploySpec] = []
+        #: One entry per ``set_env`` call: the ref it targeted and the env it wrote (phase-62).
         self.env_calls: list[dict[str, str]] = []
+        self.env_refs: list[DeployRef] = []
+        self.destroy_refs: list[DeployRef] = []
         self.status_calls = 0
 
     async def deploy(
@@ -116,16 +126,26 @@ class FakeDeployProvider:
         mode: DeployMode,
         user_id: PydanticObjectId | None = None,
     ) -> None:
+        self.env_refs.append(ref)
+        if self._env_fails:
+            # A provider that accepted the deployment and then refused the project-env write. The
+            # deployment is already live at this point, so it must survive this (phase-62).
+            raise deploy_error(
+                self.key, DeployErrorKind.fatal, f"{self.key} rejected the env write"
+            )
         self.env_calls.append(dict(env))
 
     async def logs(
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
-    ) -> list[Any]:
-        return []
+    ) -> list[LogLine]:
+        return [LogLine(message=line) for line in self._log_lines]
 
     async def destroy(
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
     ) -> bool:
+        self.destroy_refs.append(ref)
+        if self._destroy_fails:
+            raise deploy_error(self.key, DeployErrorKind.fatal, f"{self.key} refused the destroy")
         return True
 
 

@@ -107,7 +107,9 @@ describe('graph', () => {
 describe('secret-safe env summary', () => {
   it('names the keys a node is configured with, taken from the wiring edges', () => {
     expect(envKeysFor('be', DEFAULT_SNAPSHOT)).toEqual(['MONGODB_URI', 'NODE_ENV']);
-    expect(envKeysFor('fe', DEFAULT_SNAPSHOT)).toEqual(['VITE_API_BASE_URL', 'NODE_ENV']);
+    // The SPA is a static bundle: its NODE_ENV is a build input in the sandbox, never a variable on
+    // the host, so listing it would claim a provider var that is not there (phase-62).
+    expect(envKeysFor('fe', DEFAULT_SNAPSHOT)).toEqual(['VITE_API_BASE_URL']);
     // The database is wired *into* the backend; it receives nothing itself.
     expect(envKeysFor('db', DEFAULT_SNAPSHOT)).toEqual([]);
   });

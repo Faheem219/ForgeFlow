@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)
 
 _MONGO_SCHEMES = ("mongodb://", "mongodb+srv://")
 
+#: Hosts that exist only on the machine (or docker network) the control plane runs on. A deployed
+#: function resolving any of these reaches *itself*, not the database.
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal"})
+
 #: Drops a database on a cluster. Injected so the destructive path is testable without a live one.
 Dropper = Callable[[str, str], Awaitable[None]]
 
@@ -75,6 +79,56 @@ def _db_name_from_uri(uri: str) -> str | None:
         return None
     db = rest[slash + 1 :]
     return db or None
+
+
+def _hosts_of(uri: str) -> list[str]:
+    """The hostnames in a Mongo URI's authority, credentials and ports stripped."""
+    for scheme in _MONGO_SCHEMES:
+        if uri.startswith(scheme):
+            rest = uri[len(scheme) :]
+            break
+    else:
+        return []
+    authority = rest.split("/", 1)[0].split("?", 1)[0]
+    if "@" in authority:  # drop user:pass@
+        authority = authority.rsplit("@", 1)[1]
+    hosts: list[str] = []
+    for part in authority.split(","):
+        host = part.strip()
+        if host.startswith("["):  # bracketed IPv6
+            host = host[1 : host.find("]")] if "]" in host else host[1:]
+        elif ":" in host:
+            host = host.rsplit(":", 1)[0]
+        if host:
+            hosts.append(host.lower())
+    return hosts
+
+
+def unreachable_from_internet(uri: str) -> str | None:
+    """Why a **deployed** app could never reach ``uri``, or ``None`` if it looks routable.
+
+    A deployed function runs in someone else's datacentre. Two shapes can never work from there and
+    both are easy to end up with while developing on a laptop:
+
+    - a loopback/host-local address — the function resolves it to *itself*;
+    - a bare docker service name (``forgeflow-appdb``, no dot) — meaningful only on the compose
+      network, and correct for the *sandbox* (see :meth:`get_sandbox_mongodb_uri`), which is exactly
+      why the two settings are easy to confuse.
+
+    Both produce the same misleading symptom: the backend boots cleanly and then every query dies
+    with mongoose's *"buffering timed out after 10000ms"*, which reads as a code bug and sends the
+    user into the repair loop chasing nothing. Cheap string inspection only — no DNS, no connection
+    attempt — because this runs on the deploy path and must not add latency or a new failure mode.
+    """
+    hosts = _hosts_of(uri)
+    if not hosts:
+        return None
+    for host in hosts:
+        if host in _LOCAL_HOSTS:
+            return f"{host} is local to this machine"
+        if "." not in host:
+            return f"{host} is a private hostname that only resolves on this docker network"
+    return None
 
 
 def _compose_uri(base: str, db_name: str) -> str:
@@ -137,6 +191,29 @@ class DbProvisioner:
         if not base:
             raise SystemError("No MongoDB cluster is configured for generated apps")
         return _compose_uri(base, project.app_db_name)
+
+    async def assert_deployable(self, project: Project) -> None:
+        """Refuse a **platform** database a deployed app could never reach.
+
+        Called on the deploy path before any provider is touched, so a misconfigured
+        ``APP_DB_CLUSTER_URI`` costs an error message rather than two billed deployments that come
+        up and then time out. A **BYO** URI is exempt: the user supplied it, it is theirs to get
+        right, and it may legitimately be reachable in ways this cannot see.
+        """
+        byo = await self._byo_uri(project)
+        if byo:
+            return
+        base = await self._platform_base()
+        if not base:
+            return  # get_app_mongodb_uri raises the real error for this
+        reason = unreachable_from_internet(base)
+        if reason is not None:
+            raise UserError(
+                "The database this project would deploy against is not reachable from the "
+                f"internet — {reason}. Set APP_DB_CLUSTER_URI to a publicly reachable cluster "
+                "(e.g. MongoDB Atlas); the deployed backend runs on Vercel, not on this machine. "
+                "APP_DB_SANDBOX_URI stays local — that one is for the sandbox preview."
+            )
 
     async def get_sandbox_mongodb_uri(self, project: Project) -> str:
         """The app's ``MONGODB_URI`` **as a sandbox must address it** (secret — inject only).

@@ -29,10 +29,12 @@ Backend and frontend run on your machine; `mongodb-community` is the control-pla
 ```bash
 MONGODB_URI=mongodb://localhost:27017                  # brew mongo = control plane
 APP_DB_CLUSTER_URI=mongodb://localhost:27018           # generated-app DB, as the HOST sees it
-APP_DB_SANDBOX_URI=mongodb://forgeflow-appdb:27017     # the SAME DB, as a SANDBOX sees it
+APP_DB_SANDBOX_URI=mongodb://forgeflow-appdb:27017     # the same DB, as a SANDBOX sees it
 ```
 
 > Both app-DB lines are required. Generated apps cannot use brew mongo: sandboxes sit on an `internal` Docker network with no route to your host, so `localhost` there is the sandbox itself. `make host-deps` starts that DB as a container.
+>
+> **Once you deploy, these stop being the same database** — and that is intended. `APP_DB_CLUSTER_URI` becomes an Atlas URI (see [Deploy](#deploy)), because that is what a Vercel function can reach; `APP_DB_SANDBOX_URI` stays on the local `appdb`, because a sandbox has no internet. So the **preview** app and the **deployed** app read different data. Pointing the sandbox at Atlas does not fix it: the sandbox cannot reach Atlas either, and the generated app would just time out.
 
 **Run:**
 
@@ -107,7 +109,11 @@ Secrets set via `/admin` are encrypted and never readable again. To get an admin
 Two things are needed, and both are just config:
 
 - **`VERCEL_TOKEN`** — deploys the frontend *and* the backend (phase-58). Both ship as inline file uploads: the sandbox runs `pnpm build` and the `dist` files go up for the SPA; the backend's source plus its `vercel.json` go up and Vercel builds it into a function. No git host, no repo, no second credential.
-- **`APP_DB_CLUSTER_URI`** — must be an **Atlas** URI, not `localhost:27018`, since the deployed backend has to reach it. A BYO `mongodb+srv://` URI in the credential vault (Settings → Provider credentials) works too. Allow Vercel's egress on the cluster (`0.0.0.0/0` on a shared tier).
+- **`APP_DB_CLUSTER_URI`** — must be an **Atlas** URI, not `localhost:27018`, since the deployed backend has to reach it. A BYO `mongodb+srv://` URI in the credential vault (Settings → Provider credentials) works too. Allow Vercel's egress on the cluster (`0.0.0.0/0` on a shared tier). Since phase-62 a deploy **refuses to start** against a localhost or bare-docker-service URI rather than shipping a function that boots and then times out on every query.
+
+**Bring your own accounts.** Selecting *Bring your own* in the Deploy stage now lists the credentials that mode needs (Vercel token; MongoDB URI is optional) as Stored or Missing, with Deploy disabled until the required ones exist. Add them in Settings → Provider credentials.
+
+**Deleting a deployment.** The Deploy stage has a **Delete** action: it destroys both Vercel deployments, returns the stage to *Not started* and marks Validate stale. It never touches the database — dropping data stays an explicit choice when deleting the whole project. Deleting a project now tears its deployments down too.
 
 Everything up to and including **test + self-healing repair** runs entirely offline once the sandbox image is built.
 
@@ -158,6 +164,8 @@ Routes: `/` dashboard · `/projects/:id` workspace · `/eval` benchmarks · `/ad
 |---|---|
 | `sandbox reconcile skipped — Docker unavailable` | daemon not reachable — start Colima/Docker Desktop; in compose mode check the socket mount ([§2](#2-section-b--everything-in-docker-compose)) |
 | Generated app: `buffering timed out after 10000ms` | `APP_DB_SANDBOX_URI` unset or `appdb` not running — `make host-deps` |
+| Deploy refuses: *"not reachable from the internet"* | `APP_DB_CLUSTER_URI` is a localhost/docker address; set it to your Atlas URI (`APP_DB_SANDBOX_URI` stays local) |
+| Vercel dashboard shows no environment variables | pre-phase-62 deployment — redeploy; env is now mirrored to the Vercel *project*, not just the deployment |
 | Preview URL refuses to connect | proxy not running — `make proxy` |
 | `Sandbox runtime unavailable` | `make sandbox-build`; if stale, `make sandbox-reap-all` then retry |
 | API boot: `ValidationError … budget_cap_inr…` | stale `.env` with inline comments — `cp .env.example .env`, re-add your keys |

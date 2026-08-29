@@ -69,6 +69,7 @@ class ProjectDeleteResponse(BaseModel):
     id: str
     sandbox_removed: bool
     app_db_dropped: bool
+    deployments_destroyed: int = 0
     documents_removed: int
     warnings: list[str]
 
@@ -78,6 +79,7 @@ class ProjectDeleteResponse(BaseModel):
             id=project_id,
             sandbox_removed=report.sandbox_removed,
             app_db_dropped=report.app_db_dropped,
+            deployments_destroyed=report.deployments_destroyed,
             documents_removed=report.documents_removed,
             warnings=report.warnings,
         )

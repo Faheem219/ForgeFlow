@@ -142,6 +142,10 @@ class DeployProvider(Protocol):
 
     key: str
     target: DeployTarget
+    #: Which vault credential this vendor authenticates with. Part of the contract, not an
+    #: implementation detail: a caller that has to ask "what would a BYO deploy need?" (phase-62's
+    #: readiness check) can only answer it from the provider that will actually run.
+    credential_kind: CredentialKind
 
     async def deploy(
         self, spec: DeploySpec, *, mode: DeployMode, user_id: PydanticObjectId | None = None

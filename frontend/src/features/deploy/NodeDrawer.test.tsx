@@ -58,11 +58,28 @@ function renderDrawer(
   return { onRedeploy, onClose };
 }
 
+/** What the provider-logs endpoint returns for this test run; per-test overridable. */
+let providerPayload: Record<string, unknown>;
+
+/** Route by URL: the drawer now reads two different logs, and they must not be confused. */
+function installFetch(): void {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = String(input);
+    if (/\/logs\/(fe|be|db)$/.test(url)) return Promise.resolve(json(providerPayload));
+    return Promise.resolve(json({ deployment_id: 'd1', log: LOG }));
+  });
+}
+
 describe('NodeDrawer', () => {
   beforeEach(() => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
-      Promise.resolve(json({ deployment_id: 'd1', log: LOG })),
-    );
+    providerPayload = {
+      deployment_id: 'd1',
+      target: 'be',
+      provider: 'vercel',
+      lines: [{ message: 'Build completed', ts: '1' }],
+      error: null,
+    };
+    installFetch();
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -89,13 +106,76 @@ describe('NodeDrawer', () => {
     await screen.findByTestId('drawer-logs');
   });
 
-  it("streams only this node's log lines", async () => {
+  it("streams only this node's lines from the pipeline log", async () => {
     renderDrawer();
+    fireEvent.click(screen.getByTestId('drawer-log-source-pipeline'));
 
     const logs = await screen.findByTestId('drawer-logs');
     expect(logs).toHaveTextContent('be: live https://api.onrender.com');
     expect(logs).not.toHaveTextContent('fe: live');
     expect(logs).not.toHaveTextContent('db: provisioned');
+  });
+
+  // ------------------------------------------------------------------ provider logs (phase-62)
+
+  it("shows the provider's own build log by default", async () => {
+    // The complaint this answers: the tab said "Logs" on a Vercel node and showed ForgeFlow's
+    // step list, which is a different thing entirely.
+    renderDrawer();
+
+    const logs = await screen.findByTestId('drawer-logs');
+    expect(logs).toHaveTextContent('Build completed');
+    expect(logs).not.toHaveTextContent('be: live');
+  });
+
+  it('switches between the provider log and the pipeline log', async () => {
+    renderDrawer();
+    expect(await screen.findByTestId('drawer-logs')).toHaveTextContent('Build completed');
+
+    fireEvent.click(screen.getByTestId('drawer-log-source-pipeline'));
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-logs')).toHaveTextContent('be: live https://api'),
+    );
+
+    fireEvent.click(screen.getByTestId('drawer-log-source-provider'));
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-logs')).toHaveTextContent('Build completed'),
+    );
+  });
+
+  it("shows the provider's reason when it has no log to give", async () => {
+    // A record written before deployment refs were persisted — normal, not an error.
+    providerPayload = {
+      deployment_id: 'd1',
+      target: 'be',
+      provider: null,
+      lines: [],
+      error: 'This deployment predates provider log support. Redeploy to get provider logs.',
+    };
+    renderDrawer();
+
+    expect(await screen.findByTestId('drawer-provider-log-error')).toHaveTextContent('Redeploy');
+    // …and the pipeline log is still one click away.
+    fireEvent.click(screen.getByTestId('drawer-log-source-pipeline'));
+    await waitFor(() =>
+      expect(screen.getByTestId('drawer-logs')).toHaveTextContent('be: live https://api'),
+    );
+  });
+
+  it('offers no provider log for the database node', async () => {
+    // The database is not a provider deployment — there is no build log to switch to.
+    renderDrawer({
+      ...BE_NODE,
+      id: 'db',
+      kind: 'database',
+      provider: 'platform',
+      label: 'Database',
+      liveUrl: null,
+      envKeys: [],
+    });
+
+    expect(screen.queryByTestId('drawer-log-source-provider')).toBeNull();
+    expect(await screen.findByTestId('drawer-logs')).toHaveTextContent('db: provisioned');
   });
 
   it('redeploys from the drawer', async () => {

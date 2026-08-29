@@ -162,12 +162,17 @@ export interface TopologyNodeView extends TopologyNodeDto {
 /**
  * The env keys a node receives, read off the wiring edges: an edge `a → b` labelled `KEY` means
  * *`a` is configured with `KEY` pointing at `b`*. Only key names exist client-side.
+ *
+ * `NODE_ENV` is listed for the **backend** only. The backend is a Node function and reads it at
+ * request time, so it is a real deployed variable. The frontend is a static bundle: its `NODE_ENV`
+ * is consumed by the Vite build inside ForgeFlow's sandbox and never reaches the host — listing it
+ * here would claim a provider variable that does not exist (phase-62).
  */
 export function envKeysFor(nodeId: TopologyNodeId, snapshot: TopologySnapshotDto): string[] {
   const keys = (snapshot.edges ?? [])
     .filter((edge) => edge.source === nodeId && edge.label)
     .map((edge) => edge.label as string);
-  if (nodeId === 'fe' || nodeId === 'be') {
+  if (nodeId === 'be') {
     keys.push('NODE_ENV');
   }
   return keys;

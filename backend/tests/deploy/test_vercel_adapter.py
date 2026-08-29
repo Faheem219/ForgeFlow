@@ -129,6 +129,35 @@ async def test_set_env_upserts_project_scoped_production_vars(platform_token: st
     }
 
 
+async def test_a_secret_shaped_var_is_stored_encrypted(platform_token: str) -> None:
+    """``MONGODB_URI`` carries cluster credentials. ``plain`` would leave a connection string
+    readable in Vercel's settings store and returnable from its API; ``encrypted`` still lists the
+    key in the dashboard (the visibility the project-scoped copy exists for) without that."""
+    api = FakeDeployApi({("POST", "/v10/projects"): (200, {"key": "ok"})})
+    ref = DeployRef(id="dpl_abc123", project="forgeflow-api")
+
+    await provider(api).set_env(
+        ref, {"MONGODB_URI": "mongodb+srv://u:p@c.mongodb.net/db"}, mode=DeployMode.seamless
+    )
+
+    assert api.body_of("POST", "/v10/projects")["type"] == "encrypted"
+
+
+async def test_each_var_is_typed_independently(platform_token: str) -> None:
+    """One upsert per key, so a secret and a non-secret in the same map get different treatment."""
+    api = FakeDeployApi({("POST", "/v10/projects"): (200, {"key": "ok"})})
+    ref = DeployRef(id="dpl_abc123", project="forgeflow-api")
+
+    await provider(api).set_env(
+        ref,
+        {"MONGODB_URI": "mongodb+srv://u:p@c.mongodb.net/db", "NODE_ENV": "production"},
+        mode=DeployMode.seamless,
+    )
+
+    bodies = {b["key"]: b["type"] for b in api.bodies if isinstance(b, dict) and "key" in b}
+    assert bodies == {"MONGODB_URI": "encrypted", "NODE_ENV": "plain"}
+
+
 async def test_set_env_without_a_project_is_a_config_error(platform_token: str) -> None:
     api = FakeDeployApi()
 

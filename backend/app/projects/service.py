@@ -55,6 +55,8 @@ class DeleteReport:
 
     sandbox_removed: bool = False
     app_db_dropped: bool = False
+    #: Provider deployments taken down (phase-62), across every deployment record of the project.
+    deployments_destroyed: int = 0
     documents_removed: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -146,6 +148,11 @@ class ProjectService:
         report = DeleteReport()
 
         # -- external resources (best effort) ----------------------------------------------
+        # Deployments first: they are the only externally *reachable* thing this project owns, and
+        # until phase-62 nothing ever destroyed them — a deleted project kept serving (and billing)
+        # its live URLs with nothing in ForgeFlow left pointing at them.
+        report.deployments_destroyed = await self._destroy_deployments(project_id, user_id, report)
+
         try:
             from app.sandbox.manager import get_manager
 
@@ -200,6 +207,40 @@ class ProjectService:
     ) -> list[StageState]:
         await self.get_owned(project_id, user_id)
         return await self._stages.list_for_project(project_id)
+
+    async def _destroy_deployments(
+        self,
+        project_id: PydanticObjectId,
+        user_id: PydanticObjectId,
+        report: DeleteReport,
+    ) -> int:
+        """Take down every live deployment this project owns. Fail-soft, like the other legs."""
+        from app.db.models import STATUS_DELETED
+        from app.deploy.teardown import DeploymentTeardown
+
+        destroyed = 0
+        try:
+            records = await Deployment.find({"project_id": project_id}).to_list()
+        except Exception as exc:  # noqa: BLE001 - a read failure must not block the delete
+            report.warnings.append(f"deployments: {exc}")
+            return 0
+
+        teardown = DeploymentTeardown()
+        for record in records:
+            if record.status == STATUS_DELETED or not record.refs:
+                continue
+            try:
+                result = await teardown.destroy(record, user_id=user_id)
+            except Exception as exc:  # noqa: BLE001 - same rationale as the sandbox leg
+                report.warnings.append(f"deployment {record.id}: {exc}")
+                logger.warning(
+                    "project delete: deployment teardown failed",
+                    extra={"project_id": str(project_id), "deployment_id": str(record.id)},
+                )
+                continue
+            destroyed += len(result.destroyed)
+            report.warnings.extend(f"deployment {record.id} — {w}" for w in result.warnings)
+        return destroyed
 
     async def transition_stage(
         self,

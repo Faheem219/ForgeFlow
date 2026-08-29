@@ -20,7 +20,7 @@ from tests.deploy.orchestrate_fakes import (
     static_plan_source,
 )
 
-pytestmark = pytest.mark.usefixtures("mongo_db", "fernet_key", "blob_env")
+pytestmark = pytest.mark.usefixtures("mongo_db", "fernet_key", "blob_env", "deployable_db")
 
 _BE_URL = "https://api.onrender.com"
 _FE_URL = "https://web.vercel.app"

@@ -2,23 +2,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
-import { Badge, Button } from '../../components/ui';
+import { Badge, Button, Modal } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import type {
+  CredentialKind,
   DeployMode,
   IntentRequest,
   Stage,
   StageStatus,
   TopologyNodeId,
 } from '../../lib/types';
+import { listCredentials } from '../settings/api';
 import { listStages, submitIntent } from '../workspace/api';
 import { nextStage, STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
 import { NodeDrawer } from './NodeDrawer';
 import { Topology } from './Topology';
-import { getLatestDeployment } from './api';
+import { deleteDeployment, getDeployConfig, getLatestDeployment } from './api';
 import {
   applyDeployEvent,
   initialLiveState,
@@ -32,7 +34,17 @@ const OVERALL_TONES = {
   degraded: 'warning',
   failed: 'danger',
   pending: 'neutral',
+  deleted: 'neutral',
 } as const;
+
+/** Provider-credential names as a person would say them, for the BYO readiness rows. */
+const CREDENTIAL_LABELS: Record<CredentialKind, string> = {
+  vercel: 'Vercel token',
+  render: 'Render token',
+  mongo_uri: 'MongoDB URI',
+  stitch: 'Stitch',
+  figma: 'Figma',
+};
 
 const MODES: { value: DeployMode; label: string; hint: string }[] = [
   { value: 'seamless', label: 'Seamless', hint: "Deploy with ForgeFlow's provider accounts." },
@@ -123,17 +135,94 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
     },
   });
 
+  // --- BYO readiness -------------------------------------------------------------------------
+  // Which credentials a BYO deploy needs is a server fact: the backend provider is configurable, so
+  // asking a Render-backed instance for a Vercel token would be wrong in exactly the case this
+  // check exists to catch. Only fetched while BYO is selected — seamless uses platform credentials
+  // and none of this is the user's business there.
+  const isByo = mode === 'byo';
+  const configQuery = useQuery({
+    queryKey: ['deploy-config', projectId],
+    queryFn: () => getDeployConfig(projectId),
+    enabled: isByo,
+  });
+  const credentialsQuery = useQuery({
+    queryKey: ['credentials'],
+    queryFn: listCredentials,
+    enabled: isByo,
+  });
+
+  const readiness = useMemo(() => {
+    const config = configQuery.data;
+    if (!config) return null;
+    // Anything that is not a list of credentials means "we could not tell" — show every row as
+    // unknown-but-present rather than letting a malformed response take the whole panel down.
+    const credentials = Array.isArray(credentialsQuery.data) ? credentialsQuery.data : [];
+    const stored = new Map(credentials.filter((c) => c.scope === 'byo').map((c) => [c.kind, c]));
+    const row = (kind: CredentialKind, required: boolean) => ({
+      kind,
+      required,
+      last4: stored.get(kind)?.last4 ?? null,
+      present: stored.has(kind),
+    });
+    // Same posture for the config itself: a malformed payload yields an empty strip, never a crash
+    // — this panel is the one place a user goes to find out why a deploy will not start.
+    const required = config.byo_required_credentials ?? [];
+    const optional = config.byo_optional_credentials ?? [];
+    const rows = [...required.map((k) => row(k, true)), ...optional.map((k) => row(k, false))];
+    return { rows, missing: rows.filter((r) => r.required && !r.present) };
+  }, [configQuery.data, credentialsQuery.data]);
+
+  // Only a *successful* read can say a credential is missing. Loading or a failed fetch means "we
+  // do not know", and the panel must not answer an unknown by blocking the button — the server's
+  // own check is the real enforcement, and it gives a precise error.
+  const credentialsKnown = configQuery.isSuccess && credentialsQuery.isSuccess;
+  const missingCredentials = isByo && credentialsKnown ? (readiness?.missing ?? []) : [];
+
   const deployDisabledReason = missingPrereq
     ? `Deploy needs a completed ${missingPrereq} first.`
-    : null;
+    : missingCredentials.length > 0
+      ? `Add your ${missingCredentials
+          .map((c) => CREDENTIAL_LABELS[c.kind])
+          .join(' and ')} in Settings to deploy into your own account.`
+      : null;
   const busy = intent.isPending || live.running;
 
   function runDeploy(): void {
     intent.mutate({ stage: 'deploy', action: 'proceed', payload: { mode } });
   }
 
+  // --- teardown ------------------------------------------------------------------------------
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => deleteDeployment(projectId),
+    onSuccess: (report) => {
+      setConfirmDelete(false);
+      setSelected(null);
+      void queryClient.invalidateQueries({ queryKey: ['deployment-latest', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['deploy-logs', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
+      // Anything the provider refused is named rather than swallowed — it has to be cleaned up by
+      // hand, and the user is the only one who can do it.
+      if (report.warnings.length > 0) {
+        toast({
+          title: 'Deployment deleted, with warnings',
+          description: report.warnings.join(' · '),
+          variant: 'warning',
+        });
+      } else {
+        toast({ title: 'Deployment deleted', variant: 'success' });
+      }
+    },
+    onError: (err) => {
+      const description = err instanceof ApiError ? err.message : 'Could not delete the deployment';
+      toast({ title: 'Delete failed', description, variant: 'error' });
+    },
+  });
+
   const overall = live.overall ?? deployment?.status ?? null;
-  const hasDeployed = Boolean(deployment);
+  // A deleted record is history, not a live deployment: the panel must offer Deploy, not Redeploy.
+  const hasDeployed = Boolean(deployment) && deployment?.status !== 'deleted';
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -177,6 +266,18 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           >
             Skip
           </Button>
+          {hasDeployed ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy || remove.isPending}
+              data-testid="deploy-delete"
+              title="Take the deployment down at the provider. Your data is not touched."
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete
+            </Button>
+          ) : null}
           <Button
             size="sm"
             disabled={Boolean(deployDisabledReason) || busy}
@@ -188,6 +289,49 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           </Button>
         </div>
       </header>
+
+      {/* BYO needs the user's own credentials, and the server can only tell them so *after* they
+          press Deploy and a pipeline has started. This says it before. */}
+      {isByo && readiness ? (
+        <section
+          className="shrink-0 rounded-xl border border-edge bg-surface px-3 py-2"
+          data-testid="byo-readiness"
+        >
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-fg-muted">
+              Deploying into your own accounts
+            </span>
+            <a href="/settings" className="text-[11px] text-brand-text hover:underline">
+              Manage in Settings
+            </a>
+          </div>
+          <ul className="space-y-1">
+            {readiness.rows.map((row) => (
+              <li
+                key={row.kind}
+                data-testid={`byo-credential-${row.kind}`}
+                data-present={row.present}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="text-fg-muted">
+                  {CREDENTIAL_LABELS[row.kind]}
+                  {row.required ? null : <span className="ml-1 text-fg-faint">(optional)</span>}
+                </span>
+                {row.present ? (
+                  <Badge tone="success">Stored{row.last4 ? ` ····${row.last4}` : ''}</Badge>
+                ) : (
+                  <Badge tone={row.required ? 'warning' : 'neutral'}>Missing</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+          {readiness.rows.some((r) => !r.required && !r.present) ? (
+            <p className="mt-1.5 text-[11px] text-fg-faint">
+              Without your own MongoDB URI the app uses ForgeFlow&apos;s per-project database.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {deployDisabledReason ? (
         <p
@@ -209,6 +353,47 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           <AgentWorking label="Deploying" />
         </section>
       ) : null}
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this deployment?"
+      >
+        <div className="space-y-3 text-sm text-fg-muted">
+          <p>
+            The live sites are destroyed at the provider and the URLs stop working:
+            {Object.values(deployment?.urls ?? {}).length > 0 ? (
+              <span className="mt-1 block font-mono text-xs text-fg-subtle">
+                {Object.values(deployment?.urls ?? {}).join('\n')}
+              </span>
+            ) : null}
+          </p>
+          <p>
+            <span className="text-fg">Your data is not touched.</span> The project database and
+            everything in it survive — this removes the hosting only, and you can deploy again at
+            any time.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setConfirmDelete(false)}
+              data-testid="deploy-delete-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={remove.isPending}
+              data-testid="deploy-delete-confirm"
+              onClick={() => remove.mutate()}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete deployment'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2fr_1fr]">
         <div className="min-h-0 overflow-hidden rounded-xl border border-edge bg-surface">

@@ -34,6 +34,26 @@ def fernet_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     reset_vault()
 
 
+#: An Atlas-shaped cluster URI. Not a real cluster — nothing connects to it — but publicly routable
+#: in shape, which is what the deploy path now insists on (phase-62).
+DEPLOYABLE_CLUSTER_URI = "mongodb+srv://user:pw@cluster0.abcde.mongodb.net"
+
+
+@pytest.fixture
+def deployable_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """A cluster URI a *deployed* app could actually reach (phase-62).
+
+    The suite's own Mongo is on localhost, and since phase-62 the orchestrator refuses to deploy
+    against a database that only resolves on this machine — a deployed function given a loopback
+    address boots and then times out every query. Any test that runs a real deploy therefore has to
+    say which cluster the deployed app would use, exactly as a real operator does.
+    """
+    monkeypatch.setenv("APP_DB_CLUSTER_URI", DEPLOYABLE_CLUSTER_URI)
+    reset_config()
+    yield
+    reset_config()
+
+
 @pytest.fixture
 def blob_env(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> Iterator[None]:
     """Filesystem blobs so deploy logs never touch the shared meta DB (phase-37)."""

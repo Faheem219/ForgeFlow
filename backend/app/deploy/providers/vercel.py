@@ -46,6 +46,23 @@ _STATES: dict[str, DeployState] = {
 }
 
 
+#: Name shapes that carry a credential. ``encrypted`` values are still listed (and revealable) in
+#: the dashboard — which is the visibility the project-scoped copy exists for — but the API will not
+#: read them back, so a connection string never sits in plaintext in Vercel's settings store.
+_SECRET_SUFFIXES = ("_URI", "_URL_SECRET", "_SECRET", "_TOKEN", "_KEY", "_PASSWORD", "_DSN")
+
+
+def _env_type(key: str) -> str:
+    """``encrypted`` for secret-shaped names, ``plain`` for the rest.
+
+    Plain is deliberate for the others: ``NODE_ENV`` and ``VITE_API_BASE_URL`` are not secrets (the
+    latter is compiled into the SPA and readable by anyone with devtools), and a readable value in
+    the dashboard is more useful than a hidden one.
+    """
+    upper = key.upper()
+    return "encrypted" if any(upper.endswith(suffix) for suffix in _SECRET_SUFFIXES) else "plain"
+
+
 class VercelDeployProvider(BaseDeployProvider):
     key = "vercel"
     #: Primary target — what a result reports when a ref carries no target of its own.
@@ -98,7 +115,12 @@ class VercelDeployProvider(BaseDeployProvider):
         mode: DeployMode,
         user_id: PydanticObjectId | None = None,
     ) -> None:
-        """Upsert project-scoped production env vars (e.g. ``VITE_API_BASE_URL``)."""
+        """Upsert **project-scoped** production env vars (e.g. ``VITE_API_BASE_URL``).
+
+        Project scope is the point: env passed in a deployment's creation body belongs to that one
+        immutable deployment and never appears in the project's settings, so it is invisible to the
+        account owner and absent from any deployment the provider's own dashboard creates later.
+        """
         project = ref.project
         if not project:
             raise self._error(
@@ -113,7 +135,7 @@ class VercelDeployProvider(BaseDeployProvider):
                 json_body={
                     "key": key,
                     "value": value,
-                    "type": "plain",
+                    "type": _env_type(key),
                     "target": ["production"],
                 },
                 params={"upsert": "true"},

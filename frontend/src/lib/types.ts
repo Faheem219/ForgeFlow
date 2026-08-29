@@ -316,7 +316,7 @@ export interface CredentialDto {
 export type DeployMode = 'seamless' | 'byo';
 
 /** Overall deployment health: everything live, some target down, or nothing usable. */
-export type DeploymentStatus = 'live' | 'degraded' | 'failed' | 'pending';
+export type DeploymentStatus = 'live' | 'degraded' | 'failed' | 'pending' | 'deleted';
 
 export type TopologyNodeId = 'fe' | 'be' | 'db';
 
@@ -361,6 +361,43 @@ export interface DeploymentDto {
 export interface DeployLogsDto {
   deployment_id: string;
   log: string;
+}
+
+/** One line of a provider's own build log (phase-62). */
+export interface ProviderLogLineDto {
+  message: string;
+  ts: string | null;
+}
+
+/**
+ * A target's log as the **provider** tells it (backend GET .../logs/{target}).
+ *
+ * Total by design: a node with no provider deployment, a record predating ref persistence, a
+ * revoked token and a deployment deleted in the provider's dashboard all come back as an empty
+ * `lines` plus an `error` sentence — never a failed request, because a log fetch must not be able
+ * to break the topology panel.
+ */
+export interface ProviderLogsDto {
+  deployment_id: string;
+  target: string;
+  provider: string | null;
+  lines: ProviderLogLineDto[];
+  error: string | null;
+}
+
+/** Deploy-shape facts the UI cannot infer (phase-62): which credentials a BYO deploy needs. */
+export interface DeployConfigDto {
+  be_provider: string;
+  byo_required_credentials: CredentialKind[];
+  byo_optional_credentials: CredentialKind[];
+}
+
+/** Outcome of taking a deployment down. `warnings` name provider resources that outlived it. */
+export interface DeployDeleteDto {
+  deployment_id: string;
+  destroyed: string[];
+  record_deleted: boolean;
+  warnings: string[];
 }
 
 // --- Live validation (phase-40) ---

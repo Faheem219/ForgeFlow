@@ -102,6 +102,113 @@ async def test_delete_cascades_project_scoped_documents() -> None:
     assert await Run.find({"project_id": project.id}).count() == 0
 
 
+async def test_delete_tears_down_the_projects_deployments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Until phase-62 a deleted project kept serving — and billing — its live URLs, with nothing in
+    ForgeFlow left pointing at them."""
+    from app.db.models import Deployment, DeploymentRef
+    from app.db.models.enums import DeployMode
+    from app.deploy import teardown as teardown_mod
+
+    destroyed: list[str] = []
+
+    class StubProvider:
+        async def destroy(self, ref: object, **_: object) -> bool:
+            destroyed.append(getattr(ref, "id", ""))
+            return True
+
+    monkeypatch.setattr(teardown_mod, "provider_for", lambda _target: StubProvider())
+
+    owner = PydanticObjectId()
+    project = await ProjectService().create_project(owner, "deployed")
+    assert project.id is not None
+    await Deployment(
+        project_id=project.id,
+        mode=DeployMode.seamless,
+        urls={"be": "https://api", "fe": "https://web"},
+        refs={
+            "be": DeploymentRef(provider="vercel", id="dpl_be", project="api"),
+            "fe": DeploymentRef(provider="vercel", id="dpl_fe", project="web"),
+        },
+        status="live",
+    ).insert()
+
+    report = await ProjectService().delete(project.id, owner)
+
+    assert sorted(destroyed) == ["dpl_be", "dpl_fe"]
+    assert report.deployments_destroyed == 2
+    # The record itself goes with the rest of the project metadata (CASCADE_MODELS).
+    assert await Deployment.find({"project_id": project.id}).count() == 0
+
+
+async def test_delete_reports_a_deployment_it_could_not_reclaim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-soft like the sandbox and app-DB legs: an unreachable provider must not leave the user
+    with a project they cannot remove, but must not vanish silently either."""
+    from app.db.models import Deployment, DeploymentRef
+    from app.db.models.enums import DeployMode
+    from app.deploy import teardown as teardown_mod
+
+    class RefusingProvider:
+        async def destroy(self, ref: object, **_: object) -> bool:
+            raise RuntimeError("vercel is unreachable")
+
+    monkeypatch.setattr(teardown_mod, "provider_for", lambda _target: RefusingProvider())
+
+    owner = PydanticObjectId()
+    project = await ProjectService().create_project(owner, "stubborn")
+    assert project.id is not None
+    await Deployment(
+        project_id=project.id,
+        mode=DeployMode.seamless,
+        urls={"be": "https://api"},
+        refs={"be": DeploymentRef(provider="vercel", id="dpl_be", project="api")},
+        status="live",
+    ).insert()
+
+    report = await ProjectService().delete(project.id, owner)
+
+    # The project is still gone…
+    with pytest.raises(NotFoundError):
+        await ProjectService().get_owned(project.id, owner)
+    # …and what outlived it is named.
+    assert report.deployments_destroyed == 0
+    assert any("vercel is unreachable" in w for w in report.warnings)
+
+
+async def test_delete_skips_deployments_with_nothing_to_reclaim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A record written before refs were persisted, or one already deleted, has no provider call."""
+    from app.db.models import STATUS_DELETED, Deployment
+    from app.db.models.enums import DeployMode
+    from app.deploy import teardown as teardown_mod
+
+    calls: list[str] = []
+
+    class Spy:
+        async def destroy(self, ref: object, **_: object) -> bool:  # pragma: no cover
+            calls.append("called")
+            return True
+
+    monkeypatch.setattr(teardown_mod, "provider_for", lambda _target: Spy())
+
+    owner = PydanticObjectId()
+    project = await ProjectService().create_project(owner, "legacy")
+    assert project.id is not None
+    await Deployment(project_id=project.id, mode=DeployMode.seamless, status="live").insert()
+    await Deployment(
+        project_id=project.id, mode=DeployMode.seamless, status=STATUS_DELETED
+    ).insert()
+
+    report = await ProjectService().delete(project.id, owner)
+
+    assert calls == []
+    assert report.deployments_destroyed == 0
+
+
 async def test_transition_stage_rejects_illegal_hard_prereq() -> None:
     owner = PydanticObjectId()
     project = await ProjectService().create_project(owner, "p")
