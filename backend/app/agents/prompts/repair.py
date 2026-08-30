@@ -24,7 +24,10 @@ REPAIR_SYSTEM_EXTRA = (
     "- Do NOT break tests that currently pass. Prefer the narrowest change that satisfies the "
     "acceptance criterion.\n"
     "- Touch as few files as possible, and only files listed as EDITABLE below. If the fix truly "
-    "requires a file you were not given, do not guess — say so plainly in your summary instead.\n"
+    "requires a file you were not given, do NOT guess its contents and do NOT give up: call "
+    "`request_file` with a path you have actually seen (in an import statement of a file above, or "
+    "in a stack) — it returns that file and makes it editable, within a small per-attempt budget. "
+    "Only if that still leaves you stuck, say so plainly in your summary.\n"
     "- The diff since the last passing commit is the strongest clue: a regression usually lives "
     "there.\n"
     "- `write_file` takes the FULL new contents of the file, not a patch fragment.\n"
@@ -69,10 +72,19 @@ def _format_files(context: RepairContext, editable: set[str]) -> str:
     return "\n\n".join(blocks) or "(no files supplied)"
 
 
-def repair_user_prompt(context: RepairContext, editable: set[str], iteration: int) -> str:
+def repair_user_prompt(
+    context: RepairContext, editable: set[str], iteration: int, *, request_budget: int = 0
+) -> str:
     """Render the minimal context into the patch request."""
     diff = context.diff or "(no diff available — repair from the failures alone)"
     editable_list = ", ".join(sorted(editable)) if editable else "(none)"
+    hatch = (
+        f"\nIf the fix belongs in a file that is not listed, call `request_file` with its path "
+        f"(up to {request_budget} this attempt) — the imports in the files above name the paths "
+        f"you can ask for."
+        if request_budget > 0
+        else ""
+    )
     trimmed = (
         "\n\nNote — the context was trimmed to fit its budget:\n"
         + "\n".join(f"- {t}" for t in context.trimmed)
@@ -85,7 +97,7 @@ def repair_user_prompt(context: RepairContext, editable: set[str], iteration: in
         f"## Acceptance criteria at stake\n{_format_criteria(context)}\n\n"
         f"## Diff since the last passing commit\n{diff}\n\n"
         f"## Files\n{_format_files(context, editable)}\n\n"
-        f"## Editable files\nYou may ONLY write to: {editable_list}"
+        f"## Editable files\nYou may ONLY write to: {editable_list}{hatch}"
         f"{trimmed}\n\n"
         "Make the smallest change that turns the failing tests green without breaking the others."
     )

@@ -25,12 +25,15 @@ def configure_loop(
     *,
     max_iterations: int | None = None,
     stall_threshold: int | None = None,
+    max_noop: int | None = None,
 ) -> None:
     """Override the config-resolved loop bounds (admin > env > default)."""
     if max_iterations is not None:
         monkeypatch.setenv("REPAIR_MAX_ITERATIONS", str(max_iterations))
     if stall_threshold is not None:
         monkeypatch.setenv("REPAIR_STALL_THRESHOLD", str(stall_threshold))
+    if max_noop is not None:
+        monkeypatch.setenv("REPAIR_MAX_NOOP_ATTEMPTS", str(max_noop))
     reset_config()
 
 
@@ -68,14 +71,19 @@ async def make_test_run(project: Project, results: list[TestResult]) -> TestRun:
 
 
 async def make_attempt(
-    project: Project, run: Run, iteration: int, *, resulting_run: TestRun | None = None
+    project: Project,
+    run: Run,
+    iteration: int,
+    *,
+    resulting_run: TestRun | None = None,
+    target_files: list[str] | None = None,
 ) -> RepairAttempt:
     assert project.id is not None
     return await RepairAttempt(
         project_id=project.id,
         run_id=run.id,
         iteration=iteration,
-        target_files=[SRC],
+        target_files=[SRC] if target_files is None else target_files,
         diff_ref=f"fs:diff-{iteration}",
         # The real agent links the attempt to the run it produced; the fake must too, or the
         # audit trail it stands in for is only half there.
@@ -92,21 +100,28 @@ async def scripted_result(
     passing_names: list[str] | None = None,
     newly_failing: list[str] | None = None,
     newly_passing: list[str] | None = None,
+    files_written: list[str] | None = None,
+    summary: str | None = None,
 ) -> RepairResult:
-    """A RepairResult whose re-run leaves exactly ``failing_names`` red."""
+    """A RepairResult whose re-run leaves exactly ``failing_names`` red.
+
+    ``files_written=[]`` models the phase-63 no-op attempt: the agent had something it *could*
+    patch and wrote nothing, because the fix lay outside the context it was given.
+    """
     results = [failing(n) for n in failing_names] + [passing(n) for n in (passing_names or [])]
     after = await make_test_run(project, results)
-    attempt = await make_attempt(project, run, iteration, resulting_run=after)
+    written = [SRC] if files_written is None else files_written
+    attempt = await make_attempt(project, run, iteration, resulting_run=after, target_files=written)
     return RepairResult(
         attempt=attempt,
         test_run=after,
         newly_failing=[key(n) for n in (newly_failing or [])],
         newly_passing=[key(n) for n in (newly_passing or [])],
-        files_written=[SRC],
+        files_written=written,
         commit=f"sha{iteration}",
         # The pre-attempt anchor the loop resets to when a patch turns out to be pure damage.
         before_sha=f"sha{iteration - 1}",
-        summary=f"attempt {iteration}",
+        summary=summary if summary is not None else f"attempt {iteration}",
         green=not failing_names,
     )
 

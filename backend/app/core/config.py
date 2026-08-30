@@ -332,6 +332,16 @@ class Settings(BaseSettings):
     repair_context_max_chars: int = 24_000  # whole-context cap
     repair_context_max_file_chars: int = 8_000  # per-file cap before truncation
     repair_context_diff_max_chars: int = 8_000  # cap on the since-last-passing diff
+    # Reachability (phase-63). A failing spec's *imports* name the code under test far better than
+    # the directory it happens to sit in; the walk is bounded before the char budget applies.
+    repair_import_max_depth: int = 3  # how far the import walk follows a failing spec (0 = off)
+    repair_import_max_files: int = 24  # hard cap on sources one walk may discover
+    # The bounded escape hatch: when the fix genuinely lives in a file the analyzer did not reach,
+    # the agent may name it. Still never a test file, and every grant is recorded on the context.
+    repair_request_file_max: int = 3  # files the agent may request per attempt (0 = off)
+    # An attempt that writes nothing re-poses a byte-identical question next iteration, so the loop
+    # allows one retry (sampling variance) and then escalates with the agent's own explanation.
+    repair_max_noop_attempts: int = 2
 
     # --- Build verification & self-heal (phase-55) ---
     # After codegen, the build is verified (install → typecheck → boot → placeholder check) and

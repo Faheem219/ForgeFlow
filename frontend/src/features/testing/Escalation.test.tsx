@@ -82,12 +82,12 @@ function installFetch(state: MockState): void {
   );
 }
 
-function renderEscalation(onResumed = vi.fn()) {
+function renderEscalation(onResumed = vi.fn(), escalation: RepairEscalation = ESCALATION) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  render(<Escalation projectId={PROJECT} escalation={ESCALATION} onResumed={onResumed} />, {
+  render(<Escalation projectId={PROJECT} escalation={escalation} onResumed={onResumed} />, {
     wrapper,
   });
   return onResumed;
@@ -114,6 +114,25 @@ describe('Escalation', () => {
     // The diffs already tried, so the user doesn't repeat them.
     expect(screen.getByTestId('escalation-diffs')).toHaveTextContent('#1');
     expect(screen.getByTestId('escalation-diffs')).toHaveTextContent('#2');
+  });
+
+  it("names the no-patch stop and shows the agent's own explanation", () => {
+    // phase-63: the loop stopped because the fix lay outside the files the agent was given.
+    installFetch(state);
+    renderEscalation(vi.fn(), {
+      ...ESCALATION,
+      reason: 'no_patch',
+      summary:
+        'I stopped after 2 attempt(s) because I could not fix it from the files I was given. ' +
+        'The fix has to live in the component that renders the form.',
+    });
+
+    expect(screen.getByTestId('escalation-reason')).toHaveTextContent(
+      "Couldn't fix it from the files it was given",
+    );
+    expect(screen.getByTestId('escalation-summary')).toHaveTextContent(
+      'the component that renders the form',
+    );
   });
 
   it('submits guidance through the resume contract the controller named', async () => {

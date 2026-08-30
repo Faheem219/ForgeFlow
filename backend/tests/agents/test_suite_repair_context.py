@@ -34,6 +34,11 @@ SAME_STEM = "backend/src/features/todos/todos.ts"
 ELSEWHERE = "backend/src/features/billing/invoices.service.ts"
 E2E = "frontend/e2e/home.spec.ts"
 PAGE = "frontend/src/pages/HomePage.tsx"
+# The reported case (2026-08-30): the generated frontend spec sits one directory away from the
+# component it renders, so nothing beside it can contain the bug.
+APP_SPEC = "frontend/src/App.test.tsx"
+MAIN = "frontend/src/main.tsx"
+ROUTES = "frontend/src/routes.tsx"
 
 
 @dataclass
@@ -161,7 +166,7 @@ async def test_an_assertion_failure_still_yields_something_to_patch() -> None:
     context = await _analyze(ws, _StubRun([_assertion_failure("rejects empty", SPEC)]))
 
     assert editable_paths(context) == [CONTROLLER]
-    assert any("beside the failing tests" in note for note in context.notes)
+    assert any("Widened the repair target set" in note for note in context.notes)
 
 
 async def test_the_test_file_is_never_editable() -> None:
@@ -247,3 +252,89 @@ async def test_a_broken_workspace_listing_escalates_cleanly_instead_of_raising()
     context = await _analyze(ws, _StubRun([_assertion_failure("rejects empty", SPEC)]))
 
     assert editable_paths(context) == []  # the loop reports "nothing safe to patch", not a 500
+
+
+# --------------------------------------------------------------------- reachability (phase-63)
+
+
+async def test_a_frontend_spec_reaches_the_component_it_renders_not_just_its_neighbours() -> None:
+    """The reported failure: the agent was handed `main.tsx`, which renders no form at all.
+
+    `frontend/src/App.test.tsx` has no same-stem sibling and its only folder neighbours are the
+    app shell. The one piece of evidence naming the subject is the spec's own import.
+    """
+    ws = _FakeWorkspace(
+        files={
+            APP_SPEC: "import { HomePage } from './pages/HomePage'",
+            MAIN: "import { router } from './routes'",
+            ROUTES: "import { HomePage } from './pages/HomePage'",
+            PAGE: "export function HomePage() { return <form aria-label='Add a new task' /> }",
+        }
+    )
+
+    context = await _analyze(ws, _StubRun([_assertion_failure("one label", APP_SPEC)]))
+
+    editable = editable_paths(context)
+    assert PAGE in editable  # before phase-63 this was unreachable
+    assert editable[0] == PAGE  # …and it outranks the shell files beside the spec
+    assert any("import" in note for note in context.notes)
+
+
+async def test_the_same_stem_sibling_still_outranks_an_import() -> None:
+    """Backend behaviour is preserved: `todos.test.ts` still points at `todos.ts` first."""
+    ws = _FakeWorkspace(
+        files={
+            SPEC: "import { create } from './todos.service'",
+            SAME_STEM: "same stem",
+            SERVICE: "service",
+            CONTROLLER: "controller",
+        }
+    )
+
+    context = await _analyze(ws, _StubRun([_assertion_failure("rejects empty", SPEC)]))
+
+    # same-stem → direct import → the rest of the folder.
+    assert editable_paths(context) == [SAME_STEM, SERVICE, CONTROLLER]
+
+
+async def test_a_package_import_never_drags_node_modules_into_the_context() -> None:
+    ws = _FakeWorkspace(
+        files={
+            APP_SPEC: "import { render } from '@testing-library/react'\nimport './pages/HomePage'",
+            PAGE: "page",
+            "node_modules/@testing-library/react/index.js": "vendor",
+        }
+    )
+
+    context = await _analyze(ws, _StubRun([_assertion_failure("renders", APP_SPEC)]))
+
+    assert all("node_modules" not in path for path in context.file_paths())
+
+
+async def test_a_test_still_uncovered_after_the_first_tier_reaches_the_later_ones() -> None:
+    """Aggravator to the reported bug: the tiers used to be gated on the *run* having nothing.
+
+    One failure finds a companion, so the run-level editable set is non-empty. The other — an e2e
+    spec with no sibling and no resolvable import — must still fall through to the suite-source
+    tier, or it can never be repaired however many iterations it is given.
+    """
+    ws = _FakeWorkspace(files={SPEC: "spec", CONTROLLER: "source", E2E: "spec", PAGE: "page"})
+    run = _StubRun([_assertion_failure("backend", SPEC), _assertion_failure("home renders", E2E)])
+
+    context = await _analyze(ws, run)
+
+    assert set(editable_paths(context)) == {CONTROLLER, PAGE}
+    assert any("source tree" in note for note in context.notes)
+
+
+async def test_the_import_walk_can_be_switched_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rollback path in the phase plan: depth 0 returns pre-phase-63 behaviour."""
+    monkeypatch.setenv("REPAIR_IMPORT_MAX_DEPTH", "0")
+    reset_config()
+    ws = _FakeWorkspace(
+        files={APP_SPEC: "import { HomePage } from './pages/HomePage'", MAIN: "shell", PAGE: "page"}
+    )
+
+    context = await _analyze(ws, _StubRun([_assertion_failure("one label", APP_SPEC)]))
+
+    assert editable_paths(context) == [MAIN]  # the old, wrong answer — proving the knob works
