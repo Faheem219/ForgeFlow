@@ -9,6 +9,7 @@ testable without Docker (a fake exec + a workspace pre-seeded with reporter JSON
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -37,6 +38,8 @@ from app.testing.models import (
     summarize,
 )
 from app.testing.parsers import extract_referenced_files, parse
+
+logger = logging.getLogger(__name__)
 
 # Where each reporter writes its JSON (relative to the package cwd the command runs in).
 _VITEST_REPORT = "vitest-report.json"
@@ -143,12 +146,13 @@ class TestRunner:
         channel = str(project_id)
         timeout = float(get_config().get("test_runner_timeout_s"))
 
+        backend_env = await self._backend_env(project)
+
         results: list[TestResult] = []
         stdout_chunks: list[bytes] = []
         for inv in _plan_invocations(scope, name_filter):
-            outcome = await self._exec.run(
-                project, inv.cmd, cwd=inv.cwd, env=inv.env, timeout=timeout
-            )
+            env = {**backend_env, **(inv.env or {})} if inv.cwd == _BE_DIR else inv.env
+            outcome = await self._exec.run(project, inv.cmd, cwd=inv.cwd, env=env, timeout=timeout)
             stdout = await self._read_blob(outcome.output_ref)
             stdout_chunks.append(
                 f"=== {inv.framework} (exit {outcome.exit_code}) ===\n".encode() + stdout
@@ -176,6 +180,25 @@ class TestRunner:
 
         await self._emit_results(channel, results, run_doc, summary.green)
         return run_doc
+
+    async def _backend_env(self, project: Project) -> dict[str, str]:
+        """Env for the backend suites — the piece the skeleton's config actually reads.
+
+        Only the backend gets it: a Vite frontend can receive nothing but ``VITE_``-prefixed vars,
+        and Playwright drives the preview servers, which carry their own env already.
+
+        **Fail soft.** A project whose tests mock Mongoose has always run green with no database
+        configured at all, and turning a missing ``APP_DB_*`` setting into a red test stage would
+        break those for no gain. A suite that really needs Mongo fails on its own, loudly.
+        """
+        # Lazily imported to keep the testing layer decoupled from the deploy layer.
+        from app.deploy.db_provision import DbProvisioner
+
+        try:
+            return {"MONGODB_URI": await DbProvisioner().get_sandbox_test_mongodb_uri(project)}
+        except Exception:  # noqa: BLE001 - never fails a run that did not need a database
+            logger.warning("could not resolve a test-stage MONGODB_URI", exc_info=True)
+            return {}
 
     # -- per-invocation ------------------------------------------------------------------
 

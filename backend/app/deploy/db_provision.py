@@ -131,6 +131,16 @@ def unreachable_from_internet(uri: str) -> str | None:
     return None
 
 
+def db_name_for_test_stage(app_db_name: str) -> str:
+    """The database the *test* stage uses — a sibling of the app's own, never the app's own.
+
+    Generated backend suites routinely clear collections between cases, so a test run pointed at
+    the database the preview is serving would quietly destroy whatever the user built up in their
+    app. One database over costs nothing and cannot.
+    """
+    return f"{app_db_name}_test"
+
+
 def _compose_uri(base: str, db_name: str) -> str:
     """Point ``base`` (a cluster URI, no database) at ``db_name``, preserving any query string."""
     base = base.strip()
@@ -233,6 +243,35 @@ class DbProvisioner:
         if not sandbox_base:
             return await self.get_app_mongodb_uri(project)
         return _compose_uri(_validate_uri(sandbox_base), project.app_db_name)
+
+    async def get_sandbox_test_mongodb_uri(self, project: Project) -> str:
+        """The ``MONGODB_URI`` the **test stage** injects (secret — inject only).
+
+        Same cluster and same sandbox route as :meth:`get_sandbox_mongodb_uri` — so a suite that
+        genuinely talks to Mongo works instead of hanging until mongoose's buffering timeout — but
+        pointed at :func:`db_name_for_test_stage`, one database over from the app's own. Without
+        a URI at all the skeleton falls back to ``mongodb://localhost:27017/forgeflow_app``,
+        which inside a sandbox is the sandbox itself, where nothing is listening.
+
+        A BYO URI is redirected too. ForgeFlow never manages a BYO database, and that is exactly
+        why it must not let a test run wipe one: the sibling is created lazily on first write and
+        is the user's to drop.
+        """
+        byo = await self._byo_uri(project)
+        if byo:
+            uri = _validate_uri(byo.strip())
+            named = _db_name_from_uri(uri) or project.app_db_name
+            return _compose_uri(uri, db_name_for_test_stage(named))
+
+        sandbox_base = str(get_config().get("app_db_sandbox_uri")).strip()
+        if not sandbox_base:
+            base = await self._platform_base()
+            if not base:
+                raise SystemError("No MongoDB cluster is configured for generated apps")
+            return _compose_uri(base, db_name_for_test_stage(project.app_db_name))
+        return _compose_uri(
+            _validate_uri(sandbox_base), db_name_for_test_stage(project.app_db_name)
+        )
 
     async def _platform_base(self) -> str:
         """Cluster base for platform DBs: vault override > APP_DB_CLUSTER_URI > MONGODB_URI."""

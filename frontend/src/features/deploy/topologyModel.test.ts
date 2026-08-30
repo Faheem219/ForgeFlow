@@ -60,6 +60,41 @@ describe('hydration', () => {
   });
 });
 
+describe('a deleted deployment', () => {
+  // Teardown clears the URLs and marks every node `deleted`, so the record describes nothing that
+  // exists. Keeping its shape froze the graph: a deploy that shipped no frontend (because the
+  // analyzer failed to detect one) left the frontend node missing for good, long after the
+  // deployment itself was gone.
+  const DELETED: DeploymentDto = {
+    ...DEGRADED,
+    status: 'deleted',
+    urls: {},
+    topology_snapshot: {
+      nodes: [
+        { id: 'be', kind: 'backend', provider: 'vercel', url: null, status: 'deleted' },
+        { id: 'db', kind: 'database', provider: 'platform', url: null, status: 'deleted' },
+      ],
+      edges: [{ source: 'be', target: 'db', label: 'MONGODB_URI' }],
+    },
+  };
+
+  it('draws the shape a deploy would create, not the one that was torn down', () => {
+    expect(snapshotOf(DELETED)).toBe(DEFAULT_SNAPSHOT);
+    expect(DEFAULT_SNAPSHOT.nodes.map((n) => n.id)).toContain('fe');
+  });
+
+  it('shows every node as not deployed', () => {
+    const state = initialLiveState(DELETED);
+    expect(state.statuses).toEqual({ fe: 'idle', be: 'idle', db: 'idle' });
+    expect(state.urls).toEqual({});
+  });
+
+  it('leaves the overall verdict to the record, so the panel can still badge it deleted', () => {
+    // `DeployPanel` reads `live.overall ?? deployment.status`; a null here keeps that badge honest.
+    expect(initialLiveState(DELETED).overall).toBeNull();
+  });
+});
+
 describe('deploy.status fold', () => {
   it('marks the previous verdict stale as soon as a new deploy starts', () => {
     const after = applyDeployEvent(initialLiveState(DEGRADED), { step: 'be', status: 'deploying' });

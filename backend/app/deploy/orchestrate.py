@@ -120,7 +120,7 @@ class DeployOrchestrator:
 
         # 2) Backend (before the frontend, which needs its URL).
         be_result: DeployResult | None = None
-        be_error: ProviderError | None = None
+        be_error: Exception | None = None
         be_url: str | None = None
         if plan.be is not None:
             await self._step(channel, "be", "deploying")
@@ -131,7 +131,10 @@ class DeployOrchestrator:
                 be_url = be_result.url
                 log.append(f"be: {be_result.status} {be_url or ''}".strip())
                 await self._step(channel, "be", str(be_result.status), url=be_url)
-            except ProviderError as exc:
+            except (ProviderError, UserError) as exc:
+                # UserError too: the source reader rejects an empty backend dir / a missing
+                # vercel.json, and letting that escape would abandon the deploy *after* the DB was
+                # provisioned, with no Deployment written to show for it.
                 be_error = exc
                 log.append(f"be: FAILED — {exc}")
                 await self._step(channel, "be", "failed", error=str(exc))
@@ -142,8 +145,15 @@ class DeployOrchestrator:
         # frontend wired to that backend produces a live SPA calling an API that is not there.
         # This is the same definition _overall_status uses, so the two can no longer disagree.
         fe_result: DeployResult | None = None
-        fe_error: ProviderError | None = None
+        fe_error: Exception | None = None
         backend_ok = plan.be is None or _is_live(be_result, be_error)
+        if plan.fe is None:
+            # A backend-only project is legal, so this is not an error — but it is never something
+            # the user should have to infer from a frontend node quietly missing off the graph.
+            # Say it, in the log and on the wire, whatever the reason the analyzer found none.
+            reason = "no frontend was detected in the workspace, so none was deployed"
+            log.append(f"fe: skipped — {reason}")
+            await self._step(channel, "fe", "skipped", error=reason)
         if plan.fe is not None and not backend_ok:
             reason = "the backend did not come up, so there is nothing to point the frontend at"
             log.append(f"fe: skipped — {reason}")
@@ -156,7 +166,10 @@ class DeployOrchestrator:
                 )
                 log.append(f"fe: {fe_result.status} {fe_result.url or ''}".strip())
                 await self._step(channel, "fe", str(fe_result.status), url=fe_result.url)
-            except ProviderError as exc:
+            except (ProviderError, UserError) as exc:
+                # UserError is how a failed *build* arrives (the SPA is compiled here, not at the
+                # provider). It degrades the deploy exactly like a provider failure would: the
+                # backend is already live and billed, so the Deployment must still be recorded.
                 fe_error = exc
                 log.append(f"fe: FAILED — {exc}")
                 await self._step(channel, "fe", "failed", error=str(exc))
@@ -361,16 +374,16 @@ def _refs(be: DeployResult | None, fe: DeployResult | None) -> dict[str, Deploym
     return refs
 
 
-def _is_live(result: DeployResult | None, error: ProviderError | None) -> bool:
+def _is_live(result: DeployResult | None, error: Exception | None) -> bool:
     return error is None and result is not None and result.status is DeployState.live
 
 
 def _overall_status(
     plan: InfraPlan,
     be: DeployResult | None,
-    be_error: ProviderError | None,
+    be_error: Exception | None,
     fe: DeployResult | None,
-    fe_error: ProviderError | None,
+    fe_error: Exception | None,
 ) -> str:
     # A backend that never came up leaves nothing usable → failed.
     if plan.be is not None and not _is_live(be, be_error):
@@ -428,23 +441,77 @@ def _topology(
 
 
 async def _analyze(project: Project) -> InfraPlan:
-    """Default plan source: classify the workspace without persisting a new plan version."""
+    """Default plan source: classify the workspace without persisting a new plan version.
+
+    The workspace is opened **before** the analysis rather than lazily by its first file read. A
+    sandbox idle-reaped overnight is started by whichever call touches it first, and that call is
+    the frontend's ``package.json`` — so a cold-start hiccup used to surface as "this project has
+    no frontend", and the deploy then shipped a backend-only app and called it live.
+    """
+    from app.sandbox.workspace import WorkspaceService
+
+    await WorkspaceService().ensure_workspace(project)
     return await InfraAnalyzer().analyze(project, persist=False)
 
 
-class _WorkspaceFrontendBuilder:
-    """Production FE builder: run the plan's build in the sandbox, read the output dir back."""
+#: How much of a failed build's output rides along in the error the user sees. Enough to carry a
+#: compiler error and its frame, short enough to stay readable in the stage conversation.
+_BUILD_LOG_TAIL_CHARS = 2000
 
-    async def __call__(  # pragma: no cover - needs the Docker sandbox toolchain
+
+async def _exec_output(outcome: Any) -> str:
+    """A finished command's captured output, or ``""`` when none was (or could be) stored."""
+    ref = getattr(outcome, "output_ref", None)
+    if not ref:
+        return ""
+    try:
+        return (await get_blob_store().get(ref)).decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 - a missing log must not mask the failure it describes
+        logger.warning("could not read build output for a failed deploy step", exc_info=True)
+        return ""
+
+
+def _build_step_failed(cmd: str, outcome: Any, output: str) -> str:
+    """The user-facing message for a build command that did not succeed — with its output."""
+    detail = "timed out" if outcome.timed_out else f"exited {outcome.exit_code}"
+    message = f"The frontend build failed: `{cmd}` {detail}."
+    tail = output.strip()[-_BUILD_LOG_TAIL_CHARS:].strip()
+    return f"{message}\n\n{tail}" if tail else message
+
+
+class _WorkspaceFrontendBuilder:
+    """Production FE builder: run the plan's build in the sandbox, read the output dir back.
+
+    Both collaborators are injectable for the same reason every other one in this module is: the
+    ordering and the failure handling are the parts that go wrong, and they should be provable
+    without a Docker daemon or a Node toolchain.
+    """
+
+    def __init__(self, workspace: Any | None = None, exec_service: Any | None = None) -> None:
+        self._workspace = workspace
+        self._exec = exec_service
+
+    async def __call__(
         self, project: Project, fe: FrontendPlan, build_env: dict[str, str]
     ) -> dict[str, str]:
         from app.sandbox.exec import get_exec_service
         from app.sandbox.workspace import WorkspaceService
 
-        workspace = WorkspaceService()
-        exec_service = get_exec_service()
-        for cmd in (fe.install_cmd, fe.build_cmd):
-            await exec_service.run(project, shlex.split(cmd), cwd=fe.dir, env=build_env)
+        workspace = self._workspace or WorkspaceService()
+        exec_service = self._exec or get_exec_service()
+        # The install must NOT see NODE_ENV=production. pnpm reads that as `--prod` and sets out to
+        # remove devDependencies — where vite and typescript live, i.e. everything the build is
+        # about to need. It announces "the modules directories will be removed and reinstalled from
+        # scratch", and a sandbox exec has no stdin, so it answers its own prompt with EOF and exits
+        # **0** having installed nothing. The build still gets it: that is the flag vite bakes in.
+        install_env = {k: v for k, v in build_env.items() if k != "NODE_ENV"}
+        for cmd, env in ((fe.install_cmd, install_env), (fe.build_cmd, build_env)):
+            # The exit code is the only thing separating "the SPA compiled" from "vite threw". Drop
+            # it and a failed build arrives at the upload step as an empty output directory, to be
+            # reported as "produced no output" — which describes the symptom and hides the cause.
+            outcome = await exec_service.run(project, shlex.split(cmd), cwd=fe.dir, env=env)
+            if outcome.timed_out or outcome.exit_code != 0:
+                raise UserError(_build_step_failed(cmd, outcome, await _exec_output(outcome)))
 
         out_dir = f"{fe.dir}/{fe.output_dir}".strip("/")
         prefix = out_dir + "/"
@@ -452,11 +519,23 @@ class _WorkspaceFrontendBuilder:
         for node in await workspace.tree(project, out_dir, depth=None):
             if node.type != "file":
                 continue
-            content = await workspace.read(project, node.path)
+            try:
+                content = await workspace.read(project, node.path)
+            except UserError as exc:
+                # A bundle ships as text (``DeploySpec.files``), so an image or font in the build
+                # output cannot go up. Name the file: the generic message sent the last user
+                # looking for a build error that was never there.
+                raise UserError(
+                    f"'{node.path}' cannot be uploaded with the frontend bundle — {exc}. "
+                    "Binary assets in the build output are not supported yet."
+                ) from exc
             rel = node.path[len(prefix) :] if node.path.startswith(prefix) else node.path
             files[rel] = content.content
         if not files:
-            raise UserError("Frontend build produced no output to deploy")
+            raise UserError(
+                f"`{fe.build_cmd}` succeeded but wrote nothing to '{out_dir}' — check that the "
+                "build actually outputs there."
+            )
         return files
 
 

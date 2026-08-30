@@ -26,7 +26,7 @@ from typing import Any, Protocol
 from beanie import PydanticObjectId
 
 from app.core.config import get_config
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, UserError
 from app.db.models import Project
 from app.db.models.enums import ArtifactType, Stage
 from app.orchestrator.artifacts import ArtifactService
@@ -366,11 +366,21 @@ class InfraAnalyzer:
         return int(get_config().get("preview_be_port"))
 
     async def _read_text(self, project: Project, path: str) -> str | None:
+        """The file's text, or ``None`` when the workspace genuinely has nothing usable there.
+
+        Only *file-level* verdicts become ``None``: absent (``NotFoundError``), or present but
+        unusable as config — too large, not UTF-8 (``UserError``). Anything else is the sandbox
+        failing, not an answer about the file, and it propagates.
+
+        This distinction is load-bearing. Swallowing every exception made a Docker hiccup on the
+        first read indistinguishable from "there is no frontend here", and the deploy went on to
+        ship a backend-only app and report it live (the missing node in the topology was the only
+        hint). A cold sandbox now fails the analysis loudly, which is retryable; a wrong plan is
+        not.
+        """
         try:
             return (await self._workspace.read(project, path)).content
-        except NotFoundError:
-            return None
-        except Exception:  # unreadable file must not sink the analysis
+        except (NotFoundError, UserError):
             return None
 
     async def _read_json(self, project: Project, path: str) -> dict[str, Any] | None:

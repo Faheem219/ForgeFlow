@@ -91,9 +91,23 @@ export interface LiveDeployState {
 
 const IDLE_STATUSES: Record<TopologyNodeId, NodeStatus> = { fe: 'idle', be: 'idle', db: 'idle' };
 
+/**
+ * Whether a record describes nothing that is actually deployed.
+ *
+ * A torn-down deployment is history, not a topology: teardown clears every URL and marks every node
+ * `deleted`. `DeployPanel` already reads one this way for its buttons (it offers Deploy, not
+ * Redeploy), and the graph has to agree. Drawing a retired record's shape pins the graph to
+ * whatever that deploy happened to contain — so a deploy that shipped no frontend leaves a
+ * permanently frontend-less graph, which reads as the node having been lost rather than as the
+ * deployment being gone.
+ */
+function isRetired(deployment: DeploymentDto | null | undefined): boolean {
+  return !deployment || deployment.status === 'deleted';
+}
+
 /** Seed the graph from the last deployment (or an all-idle default before the first one). */
 export function initialLiveState(deployment: DeploymentDto | null | undefined): LiveDeployState {
-  if (!deployment) {
+  if (isRetired(deployment) || !deployment) {
     return { statuses: { ...IDLE_STATUSES }, urls: {}, errors: {}, overall: null, running: false };
   }
   const statuses = { ...IDLE_STATUSES };
@@ -238,9 +252,9 @@ export function buildFlowGraph(
   return { nodes, edges };
 }
 
-/** The snapshot to draw: the last deployment's shape, else the fixed-stack default. */
+/** The snapshot to draw: a *live* deployment's shape, else the fixed-stack default. */
 export function snapshotOf(deployment: DeploymentDto | null | undefined): TopologySnapshotDto {
-  const snapshot = deployment?.topology_snapshot;
+  const snapshot = isRetired(deployment) ? undefined : deployment?.topology_snapshot;
   return snapshot && snapshot.nodes?.length ? snapshot : DEFAULT_SNAPSHOT;
 }
 
