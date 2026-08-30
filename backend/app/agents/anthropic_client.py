@@ -27,6 +27,7 @@ import random
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from beanie import PydanticObjectId
 
@@ -683,8 +684,32 @@ def _provider_message(exc: BaseException, *, produced: bool, repair: Repair | No
     )
 
 
+#: Host suffix identifying OpenRouter. Matched against the *host* of the configured base URL, not
+#: anywhere in the string: a proxy whose path or query happens to mention OpenRouter is not
+#: OpenRouter, and sending it a field it does not know is exactly the breakage this guards against.
+_OPENROUTER_HOST_SUFFIX = "openrouter.ai"
+
+
+def is_openrouter(base_url: str) -> bool:
+    """Whether ``base_url`` (the configured ``OPENAI_BASE_URL``) points at OpenRouter.
+
+    Pure and total: anything unparseable is simply *not* OpenRouter, so a malformed setting can
+    only cost the routing preference, never a call.
+    """
+    text = (base_url or "").strip()
+    if not text or text == "default":  # `run()`'s placeholder for "SDK default endpoint"
+        return False
+    # A base URL configured without a scheme ("openrouter.ai/api/v1") still has a host.
+    candidate = text if "//" in text else f"//{text}"
+    try:
+        host = (urlsplit(candidate).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == _OPENROUTER_HOST_SUFFIX or host.endswith(f".{_OPENROUTER_HOST_SUFFIX}")
+
+
 def build_openai_params(
-    request: MessageRequest, *, repairs: Iterable[Repair] = ()
+    request: MessageRequest, *, repairs: Iterable[Repair] = (), endpoint: str = ""
 ) -> dict[str, Any]:
     """Translate the loop's Anthropic-shaped request into Chat Completions params.
 
@@ -692,6 +717,11 @@ def build_openai_params(
     compatibility adaptations for this (endpoint, model) — seeded from the known-families table and
     learned from the provider's own errors (phase-57). They are applied last, so the canonical body
     is always built the same way and every provider-specific difference lives in one place.
+
+    ``endpoint`` is the configured base URL. It is used for one thing: OpenRouter accepts a
+    ``provider`` routing preference, and we ask it to sort candidate upstreams by price, cheapest
+    first (cost discipline, golden rule 7). Every other endpoint gets a body byte-identical to the
+    one it got before this existed — the field is added only when the *host* is OpenRouter's.
     """
     params: dict[str, Any] = {
         "model": request.model,
@@ -706,6 +736,21 @@ def build_openai_params(
     }
     if request.tools:
         params["tools"] = _to_openai_tools(request.tools)
+    if is_openrouter(endpoint):
+        # OpenRouter fronts several upstreams per model id and takes a routing preference in a
+        # top-level `provider` object; `sort: "price"` means "prioritise lowest price" — cheapest
+        # first (https://openrouter.ai/docs/features/provider-routing). `allow_fallbacks` stays at
+        # its default `true`, so a cheap upstream being down still falls through to the next rather
+        # than failing the call, and OpenRouter already restricts tool-bearing requests to upstreams
+        # that support tool use — which the codegen loop depends on.
+        #
+        # It travels in `extra_body`, not as a top-level kwarg: the OpenAI SDK's `create()` has a
+        # closed signature (no **kwargs), so `provider=...` would raise TypeError before any
+        # request; `extra_body` is its documented escape hatch and is merged into the JSON body, so
+        # the bytes on the wire are exactly OpenRouter's documented shape.
+        extra_body = dict(params.get("extra_body") or {})
+        extra_body["provider"] = {"sort": "price"}
+        params["extra_body"] = extra_body
     return apply_repairs(params, repairs)
 
 
@@ -773,7 +818,7 @@ class OpenAITransport:
         # Seed rules spare a wasted first call on known families; learned repairs are authoritative
         # over them, because they came from this endpoint's own answer.
         repairs = _merge_repairs(seed_repairs(model), self._memo.get(endpoint, model))
-        params = build_openai_params(request, repairs=repairs)
+        params = build_openai_params(request, repairs=repairs, endpoint=endpoint)
 
         learning = bool(config.get("openai_param_learning"))
         repair_cap = int(config.get("openai_max_param_repairs"))

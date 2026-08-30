@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     # Blank → the OpenAI SDK default (https://api.openai.com/v1). Set to any compatible base URL,
     # e.g. http://localhost:11434/v1 (Ollama) or https://openrouter.ai/api/v1.
+    # When (and only when) this points at OpenRouter, the transport adds OpenRouter's `provider`
+    # routing preference to sort upstreams by price — see build_openai_params in
+    # app/agents/anthropic_client.py. Every other endpoint gets an unchanged body.
     openai_base_url: str = ""
     openai_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
 
