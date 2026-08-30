@@ -14,6 +14,7 @@ const REASON_LABELS: Record<string, string> = {
   cap_reached: 'Hit the iteration cap',
   budget: 'Budget cap reached',
   blocked: 'Nothing safe to patch',
+  no_patch: "Couldn't fix it from the files it was given",
   cancelled: 'Cancelled',
 };
 

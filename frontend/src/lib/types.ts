@@ -171,6 +171,8 @@ export interface RepairMetrics {
   final_failing: number;
   failing_by_iteration: number[];
   regressions_introduced: number;
+  /** Attempts that wrote no file at all (phase-63); absent on reports stored before it. */
+  noop_attempts?: number;
   iterations: number;
   tokens_spent: number;
   cost_inr: number;

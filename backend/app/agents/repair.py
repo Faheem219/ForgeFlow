@@ -26,20 +26,29 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from pydantic import BaseModel, Field
+
 from app.agents.anthropic_client import AnthropicClient
 from app.agents.models import TaskKind
 from app.agents.prompts import system_prompt
 from app.agents.prompts.repair import REPAIR_SYSTEM_EXTRA, repair_user_prompt
-from app.agents.repair_context import RepairContext, RepairContextAnalyzer
+from app.agents.repair_context import (
+    ContextFile,
+    RepairContext,
+    RepairContextAnalyzer,
+    truncate_head,
+)
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import ALL_TOOLS
-from app.agents.tools.registry import ToolDispatch, ToolRegistry, tool_err
-from app.core.errors import UserError
+from app.agents.tools.registry import Tool, ToolDispatch, ToolRegistry, tool_err, tool_ok
+from app.core.config import get_config
+from app.core.errors import NotFoundError, UserError
 from app.db.blobs import BlobStore, get_blob_store
 from app.db.models import Project, RepairAttempt, Run, TestRun
 from app.db.models.enums import Stage
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
+from app.sandbox.paths import require_rel_path
 from app.sandbox.schemas import FileContent, GitInfo
 from app.testing.models import (
     FRAMEWORK_JEST,
@@ -53,7 +62,15 @@ from app.testing.models import (
 
 # The patch step gets FS-read + FS-write + commit. No list_dir (no repo browsing), no run_tests
 # (the re-run is deterministic, below), no preview/install — minimal surface, minimal blast radius.
+# `request_file` (phase-63) is added per attempt, since it closes over that attempt's context.
 _PATCH_TOOL_NAMES = frozenset({"read_file", "write_file", "git_commit"})
+
+_REQUEST_FILE_DESCRIPTION = (
+    "Pull ONE more source file into this repair attempt when the fix clearly belongs in a file you "
+    "were not given — name a path you have actually seen (in an import statement of a file above, "
+    "or in a stack). Returns the file's contents and makes it editable. Bounded per attempt; test "
+    "files are never granted."
+)
 
 _TEST_SUFFIXES = (".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx")
 
@@ -66,6 +83,11 @@ def is_test_file(path: str) -> bool:
 
 def _repair_registry() -> ToolRegistry:
     return ToolRegistry([t for t in ALL_TOOLS if t.name in _PATCH_TOOL_NAMES])
+
+
+class RequestFileArgs(BaseModel):
+    path: str = Field(min_length=1, description="Workspace-relative path of the source file")
+    reason: str = Field(default="", description="One line: why the fix belongs in this file")
 
 
 class SuiteRunner(Protocol):
@@ -110,6 +132,7 @@ class RepairResult:
     still_failing: list[str] = field(default_factory=list)
     files_written: list[str] = field(default_factory=list)
     blocked_writes: list[str] = field(default_factory=list)  # minimality guard rejections
+    requested_files: list[str] = field(default_factory=list)  # granted via `request_file`
     diff: str = ""
     diff_ref: str | None = None
     commit: str | None = None
@@ -127,6 +150,7 @@ class RepairResult:
             "still_failing": self.still_failing,
             "files_written": self.files_written,
             "blocked_writes": self.blocked_writes,
+            "requested_files": self.requested_files,
             "commit": self.commit,
             "green": self.green,
             "summary": self.summary,
@@ -142,6 +166,7 @@ class _PatchTracker:
     writable: set[str] = field(default_factory=set)
     files_written: list[str] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
+    granted: list[str] = field(default_factory=list)  # files pulled in via `request_file`
     last_commit: str | None = None
 
     def observe(self, name: str, args: dict[str, Any], result_json: str) -> None:
@@ -232,7 +257,16 @@ class RepairAgent:
         # -- patch (Sonnet, guarded tool surface) ----------------------------------------
         tracker = _PatchTracker(writable=set(editable))
         readable = {f.path for f in context.target_files}
-        dispatch = self._make_dispatch(ctx, tracker, readable)
+        # The bounded escape hatch (phase-63): the analyzer resolves what a test exercises, but a
+        # subject that is registered rather than imported can still elude it. The agent may name
+        # such a file — capped, justified, recorded, and never a test.
+        budget = max(0, int(get_config().get("repair_request_file_max")))
+        registry = self._registry
+        if budget:
+            registry = ToolRegistry(
+                [*registry.tools(), self._request_file_tool(context, tracker, readable, budget)]
+            )
+        dispatch = self._make_dispatch(ctx, tracker, readable, registry)
 
         await self._emit(channel, "patch")
         patch = await self._client.run_tool_loop(
@@ -241,13 +275,23 @@ class RepairAgent:
             run=run,
             system=system_prompt(REPAIR_SYSTEM_EXTRA),
             messages=[
-                {"role": "user", "content": repair_user_prompt(context, editable, iteration)}
+                {
+                    "role": "user",
+                    "content": repair_user_prompt(
+                        context, editable, iteration, request_budget=budget
+                    ),
+                }
             ],
-            tools=self._registry.anthropic_tools(),
+            tools=registry.anthropic_tools(),
             tool_dispatch=dispatch,
             channel=channel,
         )
         summary = patch.text.strip()
+
+        # An attempt that widened its own context re-persists it, so the stored blob is what the
+        # model actually saw — a granted file must never be invisible in the trail.
+        if tracker.granted:
+            await self._analyzer.persist(test_run, context, persist=True)
 
         # Always commit (a no-op when the model already did) so every attempt is a git anchor.
         commit_sha, _ = await self._workspace.commit(
@@ -288,6 +332,7 @@ class RepairAgent:
             still_failing=delta.still_failing,
             files_written=sorted(tracker.files_written),
             blocked_writes=sorted(set(tracker.blocked)),
+            requested_files=list(tracker.granted),
             diff=diff,
             diff_ref=diff_ref,
             commit=commit_sha,
@@ -305,8 +350,74 @@ class RepairAgent:
 
     # -- pieces ---------------------------------------------------------------------------
 
+    def _request_file_tool(
+        self, context: RepairContext, tracker: _PatchTracker, readable: set[str], budget: int
+    ) -> Tool:
+        """One bounded grant of a file the analyzer did not reach (phase-63).
+
+        Built per attempt because it closes over *that* attempt's context and guard sets. Every
+        grant is appended to ``context.target_files``, so the persisted context blob records
+        exactly what the attempt widened — a widened repair is auditable, never invisible.
+        """
+        # Imported lazily: `suite_context` imports this module for `is_test_file`.
+        from app.agents.suite_context import is_source_path
+
+        async def handler(ctx: ToolContext, args: RequestFileArgs) -> str:
+            path = require_rel_path(args.path)  # tool-level guardrail: workspace-relative only
+            if is_test_file(path):
+                return tool_err(
+                    f"Refusing to grant {path}: it is a test file — tests are the specification, "
+                    "read-only during repair."
+                )
+            if not is_source_path(path):
+                return tool_err(f"Refusing to grant {path}: it is not a source file to patch.")
+            if path in readable:
+                tracker.writable.add(path)
+                return tool_err(
+                    f"{path} is already in your context.", editable=sorted(tracker.writable)
+                )
+            if len(tracker.granted) >= budget:
+                return tool_err(
+                    f"Request limit reached ({budget} file(s) per attempt). Fix what you have, or "
+                    "explain in your summary which file the fix needs.",
+                    granted=list(tracker.granted),
+                )
+            try:
+                found = await ctx.workspace.read(ctx.project, path)
+            except NotFoundError:
+                return tool_err(
+                    f"{path} is not in the workspace. Name a path you have seen in an import "
+                    "statement or a stack."
+                )
+
+            cap = int(get_config().get("repair_context_max_file_chars"))
+            content, truncated = truncate_head(found.content, cap)
+            context.target_files.append(
+                ContextFile(path=path, content=content, truncated=truncated)
+            )
+            context.notes.append(
+                f"Agent requested {path}"
+                + (f" — {args.reason.strip()}" if args.reason.strip() else "")
+            )
+            tracker.granted.append(path)
+            tracker.writable.add(path)
+            readable.add(path)
+            return tool_ok(path=path, content=content, truncated=truncated, editable=True)
+
+        return Tool(
+            "request_file",
+            _REQUEST_FILE_DESCRIPTION,
+            RequestFileArgs,
+            handler,
+            guardrails=f"Source files only, never a test; at most {budget} per attempt.",
+        )
+
     def _make_dispatch(
-        self, ctx: ToolContext, tracker: _PatchTracker, readable: set[str]
+        self,
+        ctx: ToolContext,
+        tracker: _PatchTracker,
+        readable: set[str],
+        registry: ToolRegistry,
     ) -> ToolDispatch:
         """Wrap the registry with the minimality guard: writes only inside the editable set."""
 
@@ -317,7 +428,10 @@ class RepairAgent:
                 reason = (
                     "it is a test file — tests are the specification, read-only during repair"
                     if is_test_file(path)
-                    else "it is outside the minimal repair context"
+                    else (
+                        "it is outside the minimal repair context — call `request_file` with that "
+                        "path if the fix belongs there"
+                    )
                 )
                 return tool_err(
                     f"Refusing to write {path}: {reason}.",
@@ -326,10 +440,11 @@ class RepairAgent:
             if name == "read_file" and isinstance(path, str) and path not in readable:
                 tracker.blocked.append(path)
                 return tool_err(
-                    f"Refusing to read {path}: it is outside the minimal repair context.",
+                    f"Refusing to read {path}: it is outside the minimal repair context. "
+                    "If the fix needs it, call `request_file` with that path.",
                     available=sorted(readable),
                 )
-            result = await self._registry.dispatch(ctx, name, raw_args)
+            result = await registry.dispatch(ctx, name, raw_args)
             tracker.observe(name, raw_args, result)
             return result
 

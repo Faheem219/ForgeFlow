@@ -11,6 +11,9 @@ The loop stops on the **first** of:
 - **regression guard** — patches introduced regressions twice;
 - **stall** — the failing-test set failed to shrink for ``repair_stall_threshold`` consecutive
   iterations (an oscillating set that stays the same size counts as not shrinking);
+- **no patch** — ``repair_max_noop_attempts`` consecutive attempts wrote no file at all: the
+  context is assembled deterministically, so asking again poses the identical question. The
+  agent's own explanation of what it needed is what the human is shown (phase-63);
 - **cap** — ``repair_max_iterations`` reached;
 - **budget / cancellation / nothing-safe-to-patch** — halted for a reason worth telling a human.
 
@@ -57,6 +60,9 @@ REASON_CAP = "cap_reached"
 REASON_BUDGET = "budget"
 REASON_BLOCKED = "blocked"
 REASON_CANCELLED = "cancelled"
+# The agent had files it could patch and wrote nothing — it could not fix the failure from the
+# context it was given (phase-63). Distinct from `blocked`, where there was nothing editable at all.
+REASON_NO_PATCH = "no_patch"
 
 REPAIR_REPORT_KIND = "repair_report"
 
@@ -77,6 +83,7 @@ _REASON_TEXT = {
     REASON_CAP: "I hit the iteration cap",
     REASON_BUDGET: "the budget cap halted the run",
     REASON_BLOCKED: "there was nothing safe for me to patch",
+    REASON_NO_PATCH: "I could not fix it from the files I was given",
     REASON_CANCELLED: "the run was cancelled",
 }
 
@@ -91,6 +98,8 @@ class ConvergenceMetrics:
     initial_failing: int = 0
     failing_by_iteration: list[int] = field(default_factory=list)
     regressions_introduced: int = 0
+    #: Attempts that wrote no file at all — the loop spent a model call and changed nothing.
+    noop_attempts: int = 0
     iterations: int = 0
     tokens_spent: int = 0
     cost_inr: float = 0.0
@@ -106,6 +115,7 @@ class ConvergenceMetrics:
             "final_failing": self.final_failing,
             "failing_by_iteration": self.failing_by_iteration,
             "regressions_introduced": self.regressions_introduced,
+            "noop_attempts": self.noop_attempts,
             "iterations": self.iterations,
             "tokens_spent": self.tokens_spent,
             "cost_inr": round(self.cost_inr, 6),
@@ -236,6 +246,7 @@ class RepairLoopController:
             max_iterations = int(config.get("repair_max_iterations"))
         stall_threshold = int(config.get("repair_stall_threshold"))
         max_regressions = int(config.get("repair_max_regressions"))
+        max_noop = int(config.get("repair_max_noop_attempts"))
 
         run = run or await self._runs.insert(Run(project_id=project_id, kind="repair:loop"))
         ctx = ctx or ToolContext.build(project, run, channel=channel)
@@ -247,6 +258,7 @@ class RepairLoopController:
         escalation: Escalation | None = None
         stall = 0
         regressions = 0
+        noop = 0
 
         if not failing:
             # Nothing to do — a green run in means a green run out (safe + idempotent).
@@ -302,6 +314,14 @@ class RepairLoopController:
             if regressed:
                 regressions += 1
                 metrics.regressions_introduced = regressions
+            # An attempt that wrote nothing is not ordinary no-progress: the context is assembled
+            # deterministically from the failing run, so the next iteration poses a byte-identical
+            # question. One retry absorbs sampling variance; more only spends MODEL_CODEGEN tokens.
+            if result.files_written:
+                noop = 0
+            else:
+                noop += 1
+                metrics.noop_attempts += 1
 
             result.attempt.outcome = _attempt_outcome(result.green, shrank, regressed)
             await result.attempt.save()
@@ -340,6 +360,14 @@ class RepairLoopController:
             # signal than simply not converging, and it names the problem more precisely.
             if regressions >= max_regressions:
                 escalation = self._escalate(REASON_REGRESSED, "", current, attempts, metrics)
+                break
+
+            # Before the stall guard: "I could not fix it from what you gave me" — with the
+            # agent's own words — names the problem far more precisely than "it stopped shrinking".
+            if noop >= max_noop:
+                escalation = self._escalate(
+                    REASON_NO_PATCH, result.summary, current, attempts, metrics
+                )
                 break
 
             stall = 0 if shrank else stall + 1
@@ -519,6 +547,16 @@ def failing_keys(test_run: TestRun) -> set[str]:
     return {test_key(r) for r in failing_results(test_run)}
 
 
+#: How much of the agent's own explanation the escalation carries — enough to name the file it
+#: needed, not the whole transcript.
+_MAX_DETAIL_CHARS = 600
+
+
+def _clip(text: str, cap: int) -> str:
+    text = text.strip()
+    return text if len(text) <= cap else text[:cap].rstrip() + "…"
+
+
 def _stuck_summary(
     reason: str,
     detail: str,
@@ -542,7 +580,7 @@ def _stuck_summary(
     if metrics.regressions_introduced:
         parts.append(f"{metrics.regressions_introduced} attempt(s) broke previously-passing tests.")
     if detail:
-        parts.append(detail)
+        parts.append(_clip(detail, _MAX_DETAIL_CHARS))
     parts.append("Tell me what to change and I'll rebuild from your guidance.")
     return " ".join(parts)
 
@@ -556,6 +594,7 @@ __all__ = [
     "REASON_BUDGET",
     "REASON_CANCELLED",
     "REASON_CAP",
+    "REASON_NO_PATCH",
     "REASON_REGRESSED",
     "REASON_STALLED",
     "REPAIR_REPORT_KIND",

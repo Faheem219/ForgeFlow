@@ -226,7 +226,7 @@ class RepairContextAnalyzer:
             context.notes.append("Could not compute the diff since last-passing.")
             return ""
         cap = int(get_config().get("repair_context_diff_max_chars"))
-        diff, truncated = _truncate(raw, cap)
+        diff, truncated = truncate_head(raw, cap)
         if truncated:
             context.trimmed.append(f"diff truncated to {cap} chars (was {len(raw)})")
         return diff
@@ -252,36 +252,47 @@ class RepairContextAnalyzer:
             context.notes.append("No acceptance text for criteria: " + ", ".join(sorted(missing)))
         return snippets
 
-    async def add_files(self, project: Project, context: RepairContext, ranked: list[str]) -> None:
+    async def add_files(
+        self,
+        project: Project,
+        context: RepairContext,
+        ranked: list[str],
+        *,
+        contents: dict[str, str] | None = None,
+    ) -> None:
         """Read ranked files into the context until the whole-context cap is reached.
 
         Public (phase-55) so the build-repair widening analyzer can top up an empty editable set
         through the same budget-respecting path — widening can never become "feed the whole repo".
+
+        ``contents`` (phase-63) supplies already-read sources: the import walk reads a file to
+        follow its imports, so passing its cache spares the sandbox a second read of the same file.
         """
         config = get_config()
         total_cap = int(config.get("repair_context_max_chars"))
         file_cap = int(config.get("repair_context_max_file_chars"))
         used = context.size()  # failing tests + diff + snippets are the core; files fill the rest
+        cache = contents or {}
 
         for path in ranked:
-            try:
-                found = await self._workspace.read(project, path)
-            except NotFoundError:
-                context.notes.append(f"Referenced file not in the workspace: {path}")
-                continue
-            except Exception:
-                context.notes.append(f"Could not read {path}")
-                continue
+            raw = cache.get(path)
+            if raw is None:
+                try:
+                    raw = (await self._workspace.read(project, path)).content
+                except NotFoundError:
+                    context.notes.append(f"Referenced file not in the workspace: {path}")
+                    continue
+                except Exception:
+                    context.notes.append(f"Could not read {path}")
+                    continue
 
-            content, truncated = _truncate(found.content, file_cap)
+            content, truncated = truncate_head(raw, file_cap)
             entry = ContextFile(path=path, content=content, truncated=truncated)
             if used + entry.size() > total_cap:
                 context.trimmed.append(f"{path} dropped (context budget {total_cap} chars)")
                 continue
             if truncated:
-                context.trimmed.append(
-                    f"{path} truncated to {file_cap} chars (was {len(found.content)})"
-                )
+                context.trimmed.append(f"{path} truncated to {file_cap} chars (was {len(raw)})")
             context.target_files.append(entry)
             used += entry.size()
 
@@ -358,7 +369,7 @@ def _rank_paths(failing: list[FailingTest]) -> list[str]:
     return sorted(counts, key=lambda p: (-counts[p], first_seen[p]))
 
 
-def _truncate(text: str, cap: int) -> tuple[str, bool]:
+def truncate_head(text: str, cap: int) -> tuple[str, bool]:
     """Keep the head of ``text`` within ``cap`` chars; returns ``(text, was_truncated)``."""
     if cap <= 0 or len(text) <= cap:
         return text, False

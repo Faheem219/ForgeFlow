@@ -70,6 +70,10 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._tools)
 
+    def tools(self) -> list[Tool]:
+        """The registered tools, in registration order (a caller may extend them per call)."""
+        return list(self._tools.values())
+
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
