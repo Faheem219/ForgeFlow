@@ -102,8 +102,10 @@ def _reset_state() -> Iterator[None]:
 async def mongo_db() -> AsyncIterator[AsyncIOMotorDatabase[dict[str, Any]]]:
     """Disposable per-test database. Skips the test if MongoDB is unreachable."""
     uri = get_config().get("mongodb_uri")
+    # `tz_aware=True` mirrors production (app/db/mongo.py) so tests see the same aware datetimes
+    # the API actually serializes.
     client: AsyncIOMotorClient[dict[str, Any]] = AsyncIOMotorClient(
-        uri, serverSelectionTimeoutMS=1500
+        uri, serverSelectionTimeoutMS=1500, tz_aware=True
     )
     try:
         await client.admin.command("ping")

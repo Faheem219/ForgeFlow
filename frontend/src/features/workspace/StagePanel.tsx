@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 
 import { Badge, Button, EmptyState, Panel, Spinner } from '../../components/ui';
+import { formatDateTimeIST } from '../../lib/datetime';
 import type { IntentAction, Stage } from '../../lib/types';
 import { STAGE_LABELS, STATUS_LABELS, STATUS_TONES } from './stageMeta';
 import { useStage } from './useStage';
@@ -102,9 +103,7 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
                   <span className="text-fg">
                     {a.type} <span className="text-fg-subtle">v{a.version}</span>
                   </span>
-                  <span className="text-xs text-fg-subtle">
-                    {new Date(a.created_at).toLocaleString()}
-                  </span>
+                  <span className="text-xs text-fg-subtle">{formatDateTimeIST(a.created_at)}</span>
                 </li>
               ))}
             </ul>

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 
 import { Badge, EmptyState, Skeleton } from '../../components/ui';
+import { formatDateTimeIST } from '../../lib/datetime';
 import { listAudit } from './api';
 import type { ConfigAudit } from './types';
 
@@ -16,9 +17,7 @@ function Row({ entry }: { entry: ConfigAudit }): JSX.Element {
       <div className="flex flex-wrap items-center gap-2">
         <code className="text-fg">{entry.key}</code>
         <Badge tone={entry.action === 'delete' ? 'warning' : 'brand'}>{entry.action}</Badge>
-        <span className="text-xs text-fg-subtle">
-          {new Date(entry.created_at).toLocaleString()}
-        </span>
+        <span className="text-xs text-fg-subtle">{formatDateTimeIST(entry.created_at)}</span>
       </div>
       <p className="mt-1 font-mono text-xs text-fg-muted">
         <span className="text-danger">{value(entry.before)}</span>

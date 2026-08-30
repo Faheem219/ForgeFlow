@@ -395,12 +395,19 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
         </div>
       </Modal>
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2fr_1fr]">
-        <div className="min-h-0 overflow-hidden rounded-xl border border-edge bg-surface">
+      {/* `minmax(0,…)` rather than a bare `2fr_1fr`, and `min-w-0` on both children.
+          A grid track's automatic minimum size is its content's min-content width, and a provider
+          build log has lines hundreds of characters long — so the drawer column grew to fit its
+          widest line and squeezed the topology down to nothing. The map disappeared entirely and
+          the logs it was replaced by were themselves clipped at the panel edge. Capping both
+          tracks at zero minimum makes the fractions authoritative and moves the overflow inside
+          the log box, which is the one element equipped to scroll it. */}
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-h-0 min-w-0 overflow-hidden rounded-xl border border-edge bg-surface">
           <Topology snapshot={snapshot} state={live} onSelect={setSelected} />
         </div>
 
-        <div className="min-h-0">
+        <div className="min-h-0 min-w-0">
           {selectedView ? (
             <NodeDrawer
               projectId={projectId}

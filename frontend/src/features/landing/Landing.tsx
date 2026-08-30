@@ -711,6 +711,130 @@ function Features(): JSX.Element {
   );
 }
 
+/**
+ * A miniature of what each stage actually produces, drawn with plain divs.
+ *
+ * The panels are as tall as a pinned viewport allows, and until now they held an icon, a heading
+ * and two lines of copy — so the middle of every card was several hundred pixels of nothing, which
+ * read as the section demanding space it had no use for. Filling it with a *claim* (a stat, a
+ * flourish) would have been decoration; filling it with the stage's own artifact is the argument
+ * the section is making. Deliberately schematic rather than a screenshot: it has to stay legible
+ * at a glance while sliding past, and it must never go stale against the real UI.
+ */
+const STAGE_PREVIEWS: Record<string, JSX.Element> = {
+  requirements: (
+    <ul className="space-y-2">
+      {[
+        ['Users can add a todo', '92%'],
+        ['Todos persist across reloads', '88%'],
+        ['Completed items can be filtered', '81%'],
+      ].map(([label, confidence]) => (
+        <li
+          key={label}
+          className="flex items-center gap-2 rounded-lg border border-edge bg-surface-sunken px-2.5 py-2"
+        >
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-brand/50 bg-brand/10">
+            <span className="h-1.5 w-1.5 rounded-[2px] bg-brand" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">{label}</span>
+          <span className="font-mono text-[10px] text-fg-faint">{confidence}</span>
+        </li>
+      ))}
+    </ul>
+  ),
+  design: (
+    <div className="space-y-2">
+      <div className="flex gap-1.5">
+        {['bg-brand', 'bg-accent', 'bg-fg/20', 'bg-surface-raised'].map((tone) => (
+          <span key={tone} className={`h-7 flex-1 rounded-md ${tone}`} />
+        ))}
+      </div>
+      <div className="space-y-1.5 rounded-lg border border-edge bg-surface-sunken p-2.5">
+        <span className="block h-2 w-1/3 rounded-full bg-fg/25" />
+        <span className="block h-2 w-full rounded-full bg-fg/10" />
+        <span className="block h-2 w-4/5 rounded-full bg-fg/10" />
+        <div className="flex gap-1.5 pt-1">
+          <span className="h-5 w-14 rounded-md bg-brand/70" />
+          <span className="h-5 w-10 rounded-md bg-fg/10" />
+        </div>
+      </div>
+    </div>
+  ),
+  build: (
+    <ul className="space-y-1 rounded-lg border border-edge bg-surface-sunken p-2.5 font-mono text-[11px]">
+      {[
+        ['src/App.tsx', '+48'],
+        ['src/components/TodoList.tsx', '+96'],
+        ['backend/src/routes/todos.ts', '+72'],
+        ['backend/src/models/Todo.ts', '+31'],
+      ].map(([file, added]) => (
+        <li key={file} className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-fg-subtle">{file}</span>
+          <span className="text-success">{added}</span>
+        </li>
+      ))}
+    </ul>
+  ),
+  test: (
+    <ul className="space-y-2">
+      {[
+        ['todos.spec.ts', 'passed', 'bg-success'],
+        ['api.integration.ts', 'passed', 'bg-success'],
+        ['filter.e2e.ts', 'repaired', 'bg-warning'],
+      ].map(([name, state, tone]) => (
+        <li
+          key={name}
+          className="flex items-center gap-2 rounded-lg border border-edge bg-surface-sunken px-2.5 py-2"
+        >
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone}`} />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted">
+            {name}
+          </span>
+          <span className="text-[10px] uppercase tracking-wide text-fg-faint">{state}</span>
+        </li>
+      ))}
+    </ul>
+  ),
+  deploy: (
+    <div className="space-y-1.5">
+      {[
+        ['web', 'vercel'],
+        ['api', 'vercel'],
+        ['db', 'atlas'],
+      ].map(([node, provider], i) => (
+        <div key={node}>
+          <div className="flex items-center gap-2 rounded-lg border border-edge bg-surface-sunken px-2.5 py-2">
+            <span className="font-mono text-[11px] text-brand-text">{node}</span>
+            <span className="ml-auto text-[10px] uppercase tracking-wide text-fg-faint">
+              {provider}
+            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+          </div>
+          {i < 2 ? <span aria-hidden className="ml-4 block h-2 w-px bg-edge-strong" /> : null}
+        </div>
+      ))}
+    </div>
+  ),
+  validate: (
+    <ul className="space-y-2">
+      {[
+        ['Live URL responds', '200'],
+        ['Create + read a todo', 'ok'],
+        ['Data survives a reload', 'ok'],
+      ].map(([check, result]) => (
+        <li
+          key={check}
+          className="flex items-center gap-2 rounded-lg border border-edge bg-surface-sunken px-2.5 py-2"
+        >
+          <Check aria-hidden className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={2.5} />
+          <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">{check}</span>
+          <span className="font-mono text-[10px] text-success">{result}</span>
+        </li>
+      ))}
+    </ul>
+  ),
+};
+
 const WORKFLOW_COPY: Record<string, string> = {
   design:
     'Upload screenshots or describe the app; refine the look in conversation before any code exists.',
@@ -872,46 +996,60 @@ function Workflow(): JSX.Element {
           />
         </div>
 
-        {/* `flex-1` + `h-full` panels below: the track absorbs every pixel the header does not use,
-            so a viewport-height section is filled by content instead of centring a short block in
-            it. This is what removes the space above and below, not padding tweaks. */}
-        <div data-track-viewport className="mt-8 min-h-0 flex-1 overflow-x-auto pb-3">
-          <div ref={trackRef} className="flex h-full w-max gap-5 will-change-transform">
-            {STAGE_ORDER.map((stage, i) => {
-              const Icon = STAGE_ICONS[stage];
-              return (
-                <article
-                  key={stage}
-                  data-stage-panel
-                  className="group/panel relative flex h-full w-[clamp(17rem,25vw,23rem)] shrink-0 flex-col justify-between overflow-hidden rounded-2xl border border-edge bg-surface p-7 transition-colors duration-500 will-change-transform data-[active=true]:border-brand/40 data-[active=true]:bg-surface-raised"
-                >
-                  {/* The stage number, big enough to read across a moving panel. */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute -right-3 -top-6 select-none font-mono text-[7rem] font-semibold leading-none text-fg/[0.05]"
+        {/* The track takes the height the header leaves it, but not more than it can use: past
+            ~34rem a panel is just a taller box around the same content, which is what made this
+            section read as claiming space it had no need for. Capped and centred, the leftover
+            becomes margin instead of emptiness. The GSAP pin measures `track.parentElement`, so
+            the viewport stays the track's direct parent — the centring wrapper goes outside it. */}
+        <div className="mt-8 flex min-h-0 flex-1 items-center">
+          <div data-track-viewport className="h-full max-h-[34rem] w-full overflow-x-auto pb-3">
+            <div ref={trackRef} className="flex h-full w-max gap-5 will-change-transform">
+              {STAGE_ORDER.map((stage, i) => {
+                const Icon = STAGE_ICONS[stage];
+                return (
+                  <article
+                    key={stage}
+                    data-stage-panel
+                    className="group/panel relative flex h-full w-[clamp(17rem,25vw,23rem)] shrink-0 flex-col justify-between overflow-hidden rounded-2xl border border-edge bg-surface p-7 transition-colors duration-500 will-change-transform data-[active=true]:border-brand/40 data-[active=true]:bg-surface-raised"
                   >
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-
-                  <div className="relative flex items-center justify-between">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-surface-sunken text-fg-muted transition-colors duration-500 group-data-[active=true]/panel:border-brand/50 group-data-[active=true]/panel:bg-brand/10 group-data-[active=true]/panel:text-brand-text">
-                      <Icon aria-hidden className="h-5 w-5" strokeWidth={1.75} />
-                    </span>
-                    <span className="font-mono text-sm font-medium text-fg-muted">
+                    {/* The stage number, big enough to read across a moving panel. */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute -right-3 -top-6 select-none font-mono text-[7rem] font-semibold leading-none text-fg/[0.05]"
+                    >
                       {String(i + 1).padStart(2, '0')}
-                      <span className="text-fg-faint"> / 06</span>
                     </span>
-                  </div>
 
-                  <div className="relative">
-                    <h3 className="text-xl font-semibold text-fg">{STAGE_LABELS[stage]}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-                      {WORKFLOW_COPY[stage]}
-                    </p>
-                  </div>
-                </article>
-              );
-            })}
+                    <div className="relative flex items-center justify-between">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-surface-sunken text-fg-muted transition-colors duration-500 group-data-[active=true]/panel:border-brand/50 group-data-[active=true]/panel:bg-brand/10 group-data-[active=true]/panel:text-brand-text">
+                        <Icon aria-hidden className="h-5 w-5" strokeWidth={1.75} />
+                      </span>
+                      <span className="font-mono text-sm font-medium text-fg-muted">
+                        {String(i + 1).padStart(2, '0')}
+                        <span className="text-fg-faint"> / 06</span>
+                      </span>
+                    </div>
+
+                    {/* What the stage hands you, not a picture of the stage. Hidden from assistive
+                      tech: it restates the copy below in shapes, and reading it aloud would be
+                      noise. */}
+                    <div
+                      aria-hidden
+                      className="relative my-6 flex min-h-0 flex-1 items-center overflow-hidden opacity-80 transition-opacity duration-500 group-data-[active=true]/panel:opacity-100"
+                    >
+                      <div className="w-full">{STAGE_PREVIEWS[stage]}</div>
+                    </div>
+
+                    <div className="relative">
+                      <h3 className="text-xl font-semibold text-fg">{STAGE_LABELS[stage]}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+                        {WORKFLOW_COPY[stage]}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

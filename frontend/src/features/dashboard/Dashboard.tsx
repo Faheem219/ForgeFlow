@@ -16,6 +16,7 @@ import {
 } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
+import { hourIST } from '../../lib/datetime';
 import { EASE_OUT, Flip, SplitText, gsap, motionOK, safeAnimate, useGSAP } from '../../lib/gsap';
 import { useAuthStore } from '../../lib/stores/authStore';
 import { toast } from '../../lib/stores/toastStore';
@@ -48,7 +49,7 @@ function relativeTime(iso: string): string {
 }
 
 function timeGreeting(): string {
-  const hour = new Date().getHours();
+  const hour = hourIST();
   if (hour < 5) return 'Working late';
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';

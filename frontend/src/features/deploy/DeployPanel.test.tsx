@@ -294,3 +294,33 @@ describe('deleting a deployment', () => {
     expect(screen.getByTestId('deploy-run')).toHaveTextContent('Deploy');
   });
 });
+
+describe('the map and the details share the row', () => {
+  /*
+   * A provider build log has lines hundreds of characters wide, and a grid track's automatic
+   * minimum size is its content's min-content width — so the drawer column grew to fit its widest
+   * log line and squeezed the topology to zero. The map vanished and the logs that replaced it
+   * were themselves clipped at the panel edge.
+   *
+   * jsdom has no layout engine, so the width cannot be measured here; the constraint is asserted
+   * where it actually lives, on the track definition and the elements that must not contribute a
+   * width of their own.
+   */
+  it('caps both grid tracks at a zero minimum so a wide log cannot evict the topology', async () => {
+    await renderPanel();
+
+    const topology = screen.getByTestId('deploy-topology');
+    const row = topology.closest('.grid');
+
+    expect(row?.className).toContain('minmax(0,2fr)_minmax(0,1fr)');
+    // Both children need a floor of their own; the track cap alone is not enough.
+    expect(topology.parentElement?.className).toContain('min-w-0');
+  });
+
+  it('keeps the topology mounted while a node’s details are open', async () => {
+    await renderPanel();
+
+    expect(screen.getByTestId('deploy-topology')).toBeInTheDocument();
+    expect(screen.queryByTestId('deploy-node-drawer')).toBeNull();
+  });
+});

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { Badge, Skeleton } from '../../components/ui';
+import { compactCount, exactCount } from '../cost/format';
 import { getGlobalCost } from './api';
 import type { Budget } from './types';
 
@@ -61,7 +62,9 @@ export function Observability(): JSX.Element {
           </div>
           <div>
             <dt className="text-fg-subtle">Tokens</dt>
-            <dd className="text-fg">{cost.tokens.toLocaleString()}</dd>
+            <dd className="text-fg" title={exactCount(cost.tokens)}>
+              {compactCount(cost.tokens)}
+            </dd>
           </div>
           <div>
             <dt className="text-fg-subtle">Runs</dt>

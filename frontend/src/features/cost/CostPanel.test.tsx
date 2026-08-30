@@ -104,7 +104,7 @@ describe('CostPanel', () => {
     await renderPanel();
 
     expect(screen.getByTestId('cost-total')).toHaveTextContent('₹12.50');
-    expect(screen.getByTestId('cost-tokens')).toHaveTextContent('15,000');
+    expect(screen.getByTestId('cost-tokens')).toHaveTextContent('15K');
     expect(screen.getByTestId('cost-runs')).toHaveTextContent('3');
   });
 

@@ -76,7 +76,7 @@ export function NodeDrawer({
     <aside
       data-testid="deploy-node-drawer"
       aria-label={`${node.label} details`}
-      className="flex h-full min-h-0 w-full flex-col gap-3 overflow-auto rounded-xl border border-edge bg-surface p-4"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col gap-3 overflow-auto rounded-xl border border-edge bg-surface p-4"
     >
       <header className="flex items-start justify-between gap-2">
         <div>
@@ -142,7 +142,9 @@ export function NodeDrawer({
                 key={key}
                 className="flex items-center justify-between rounded-lg border border-edge px-2 py-1 text-xs"
               >
-                <code className="text-fg-muted">{key}</code>
+                <code className="min-w-0 truncate text-fg-muted" title={key}>
+                  {key}
+                </code>
                 <span className="text-fg-faint">set</span>
               </li>
             ))}
@@ -153,7 +155,7 @@ export function NodeDrawer({
         </p>
       </section>
 
-      <section className="min-h-0 flex-1">
+      <section className="min-h-0 min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between gap-2">
           <h5 className="text-xs uppercase tracking-wide text-fg-subtle">Logs</h5>
           {canUseProvider ? (
@@ -208,7 +210,7 @@ export function NodeDrawer({
         ) : (
           <pre
             data-testid="drawer-logs"
-            className="max-h-48 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2 text-xs text-fg-muted"
+            className="max-h-64 w-full min-w-0 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2 text-xs leading-relaxed text-fg-muted"
           >
             {lines.join('\n')}
           </pre>

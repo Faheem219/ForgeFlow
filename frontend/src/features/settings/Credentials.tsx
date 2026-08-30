@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { Badge, Button, EmptyState, Panel, Skeleton, fieldClasses } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
+import { formatDateIST } from '../../lib/datetime';
 import { DURATION, EASE } from '../../lib/motion';
 import { toast } from '../../lib/stores/toastStore';
 import type { CredentialKind } from '../../lib/types';
@@ -165,9 +166,7 @@ export function Credentials(): JSX.Element {
                       ) : null}
                     </span>
                     <span className="flex items-center gap-3">
-                      <span className="text-xs text-fg-subtle">
-                        {new Date(c.created_at).toLocaleDateString()}
-                      </span>
+                      <span className="text-xs text-fg-subtle">{formatDateIST(c.created_at)}</span>
                       <button
                         type="button"
                         disabled={busy}

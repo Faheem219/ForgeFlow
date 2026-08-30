@@ -6,7 +6,7 @@ import { Badge, EmptyState, Skeleton } from '../../components/ui';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import type { BudgetDto, RunDto } from '../../lib/types';
 import { getProjectCost, listRuns } from './api';
-import { inr } from './format';
+import { compactCount, exactCount, inr } from './format';
 
 function duration(run: RunDto): string {
   if (run.duration_s === null) return 'running';
@@ -128,23 +128,38 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
 
   return (
     <div className="space-y-3" data-testid="cost-panel">
+      {/* `min-w-0` on each tile is what keeps this grid inside its pane: a grid track's automatic
+          minimum is its content's width, so one long number pushes the other two tiles out rather
+          than being clipped by its own box. */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-edge bg-surface px-2 py-1.5">
+        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
           <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Spend</p>
-          <p className="text-lg font-semibold text-fg" data-testid="cost-total">
+          <p
+            className="truncate text-lg font-semibold tabular-nums text-fg"
+            data-testid="cost-total"
+            title={inr(cost.inr)}
+          >
             {inr(cost.inr)}
           </p>
         </div>
-        <div className="rounded-lg border border-edge bg-surface px-2 py-1.5">
+        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
           <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Tokens</p>
-          <p className="text-lg font-semibold text-fg" data-testid="cost-tokens">
-            {cost.tokens.toLocaleString()}
+          <p
+            className="truncate text-lg font-semibold tabular-nums text-fg"
+            data-testid="cost-tokens"
+            title={exactCount(cost.tokens)}
+          >
+            {compactCount(cost.tokens)}
           </p>
         </div>
-        <div className="rounded-lg border border-edge bg-surface px-2 py-1.5">
+        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
           <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Runs</p>
-          <p className="text-lg font-semibold text-fg" data-testid="cost-runs">
-            {cost.runs}
+          <p
+            className="truncate text-lg font-semibold tabular-nums text-fg"
+            data-testid="cost-runs"
+            title={exactCount(cost.runs, 'runs')}
+          >
+            {compactCount(cost.runs)}
           </p>
         </div>
       </div>
@@ -164,9 +179,12 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
                 className="flex items-center justify-between gap-2 text-xs"
                 data-testid={`kind-${kind}`}
               >
-                <span className="truncate font-mono text-fg-muted">{kind}</span>
-                <span className="whitespace-nowrap tabular-nums text-fg-muted">
-                  {inr(stats.inr)} · {stats.tokens.toLocaleString()} tok · {stats.runs}×
+                <span className="min-w-0 flex-1 truncate font-mono text-fg-muted">{kind}</span>
+                <span
+                  className="whitespace-nowrap tabular-nums text-fg-muted"
+                  title={exactCount(stats.tokens)}
+                >
+                  {inr(stats.inr)} · {compactCount(stats.tokens)} tok · {stats.runs}×
                 </span>
               </li>
             ))}

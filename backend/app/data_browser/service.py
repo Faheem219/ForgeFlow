@@ -114,7 +114,9 @@ class DataBrowserService:
             return self._client_factory(uri)
         from motor.motor_asyncio import AsyncIOMotorClient
 
-        client: Any = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=3000)
+        # `tz_aware=True` for the same reason as the meta client (app/db/mongo.py): a naive
+        # datetime serializes with no offset and the browser reads it as local time.
+        client: Any = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=3000, tz_aware=True)
         return client
 
     async def _open(self, project: Project) -> tuple[Any, Any]:

@@ -23,7 +23,13 @@ def get_client() -> AsyncIOMotorClient[dict[str, Any]]:
     """Return the process-wide Motor client (created lazily)."""
     global _client
     if _client is None:
-        _client = AsyncIOMotorClient(get_config().get("mongodb_uri"))
+        # `tz_aware=True` is load-bearing, not a preference. BSON stores datetimes as UTC, and the
+        # default driver hands them back **naive** — which Pydantic then serializes with no offset
+        # (`2026-08-30T07:34:18`). A browser parses an offset-less date-time as *local* time, so
+        # every timestamp in the UI silently shifted by the viewer's UTC offset: 07:34 UTC rendered
+        # as 07:34 IST, five and a half hours in the past. Reading them back aware makes the wire
+        # format `…+00:00`, which is the same instant everywhere.
+        _client = AsyncIOMotorClient(get_config().get("mongodb_uri"), tz_aware=True)
     return _client
 
 

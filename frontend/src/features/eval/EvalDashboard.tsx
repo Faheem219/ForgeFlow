@@ -3,6 +3,7 @@ import { FileDown, FlaskConical } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import { Badge, Button, EmptyState, Skeleton } from '../../components/ui';
+import { compactCount } from '../cost/format';
 import { EASE_OUT, gsap, motionOK, useGSAP } from '../../lib/gsap';
 import { toast } from '../../lib/stores/toastStore';
 import type { EvalOutcome, EvalRecordDto, EvalSummary } from '../../lib/types';
@@ -244,7 +245,7 @@ export function EvalDashboard(): JSX.Element {
           </h3>
           <BarChart
             data={records.map((r) => ({ id: r.spec_id, label: r.spec_id, value: r.tokens }))}
-            format={(v) => v.toLocaleString()}
+            format={(v) => compactCount(v)}
             unit="tokens"
           />
         </section>

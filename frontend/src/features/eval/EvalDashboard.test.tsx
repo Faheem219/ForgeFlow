@@ -167,7 +167,7 @@ describe('EvalDashboard', () => {
     expect(screen.getByTestId('histogram')).toBeInTheDocument();
     expect(screen.getByTestId('histogram-bucket-2')).toHaveTextContent('2');
     expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
-    expect(screen.getByTestId('bar-row-todo-list')).toHaveTextContent('1,500');
+    expect(screen.getByTestId('bar-row-todo-list')).toHaveTextContent('1.5K');
   });
 
   it('omits the time-to-URL chart when no spec reached a live URL', async () => {
