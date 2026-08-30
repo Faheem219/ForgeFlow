@@ -57,9 +57,13 @@ async def _deployed(project_id: PydanticObjectId, *, with_refs: bool = True) -> 
     ).insert()
 
 
-def _providers(**kwargs: bool) -> tuple[FakeDeployProvider, FakeDeployProvider]:
-    fe = FakeDeployProvider("vercel", DeployTarget.fe, "https://web.vercel.app", **kwargs)
-    be = FakeDeployProvider("vercel", DeployTarget.be, "https://api.vercel.app", **kwargs)
+def _providers(*, destroy_fails: bool = False) -> tuple[FakeDeployProvider, FakeDeployProvider]:
+    fe = FakeDeployProvider(
+        "vercel", DeployTarget.fe, "https://web.vercel.app", destroy_fails=destroy_fails
+    )
+    be = FakeDeployProvider(
+        "vercel", DeployTarget.be, "https://api.vercel.app", destroy_fails=destroy_fails
+    )
     return fe, be
 
 

@@ -25,6 +25,7 @@ import queue
 import shutil
 import signal
 import subprocess
+import sys
 import tarfile
 import threading
 import time
@@ -56,7 +57,10 @@ SANDBOX_UID = 1000
 SANDBOX_GID = 1000
 SANDBOX_USER = "app"
 
-if os.name == "nt":
+# POSIX-only, and this module's production backend (:class:`DockerRuntime`) only ever runs on
+# Linux. Spelled as ``sys.platform`` rather than ``os.name`` because the type checker narrows on
+# it, so the else-branch is analysed against the platform the code actually ships to.
+if sys.platform == "win32":  # pragma: no cover - the runtime target is Linux
     fcntl = None
     pty = None
     struct = None
@@ -220,6 +224,8 @@ def _kill_process_group(proc: subprocess.Popen[bytes]) -> None:
     if proc.poll() is not None:
         return
     try:
+        if not hasattr(os, "killpg"):  # pragma: no cover - the runtime target is Linux
+            raise OSError("process groups are POSIX-only")
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
         try:

@@ -179,6 +179,12 @@ class ContextAnalyzer(Protocol):
     ) -> RepairContext: ...
 
 
+class RevertableWorkspace(Protocol):
+    """The one git method the loop needs to undo an attempt that made things strictly worse."""
+
+    async def restore(self, project: Project, sha: str) -> bool: ...
+
+
 # --------------------------------------------------------------------- controller
 
 
@@ -190,6 +196,7 @@ class RepairLoopController:
         artifacts: ArtifactService | None = None,
         stages: StageStateRepo | None = None,
         runs: RunRepo | None = None,
+        workspace: RevertableWorkspace | None = None,
         *,
         stage: Stage = Stage.test,
         owns_stage_status: bool = True,
@@ -199,6 +206,8 @@ class RepairLoopController:
         self._artifacts = artifacts or ArtifactService()
         self._stages = stages or StageStateRepo()
         self._runs = runs or RunRepo()
+        # Resolved lazily: a loop that never has to undo anything never opens a workspace.
+        self._workspace = workspace
         # Which stage this loop belongs to (phase-55). Test owns its own status; Build does not —
         # the conductor owns build's status via `StageResult.next_status`, so the Build-reuse passes
         # `owns_stage_status=False`. Events + persisted attempts key on `self._stage` either way.
@@ -282,6 +291,11 @@ class RepairLoopController:
             new_failing = failing_keys(after)
             shrank = len(new_failing) < len(failing)
             regressed = bool(result.newly_failing)
+            # Strictly worse: it broke something that worked AND fixed nothing. An attempt that
+            # trades one break for real progress is still progress (the guard counts it and stops
+            # at `max_regressions`) — but pure damage is never worth keeping, so it is undone.
+            # The loop may spend iterations; it may not hand back an app worse than it found.
+            worsened = regressed and not shrank and not result.green
 
             metrics.iterations = iteration
             metrics.failing_by_iteration.append(len(new_failing))
@@ -307,7 +321,12 @@ class RepairLoopController:
                 stage=self._stage,
             )
 
-            current = after
+            # Only advance onto the patched state when it was kept: after an undo the workspace
+            # is back at the pre-attempt commit, so the pre-attempt run is what describes it.
+            reverted = worsened and await self._revert(project, result, iteration, channel)
+            if not reverted:
+                current = after
+                failing = new_failing
             if result.green:
                 return await self._finish(
                     project_id,
@@ -327,8 +346,6 @@ class RepairLoopController:
             if stall >= stall_threshold:
                 escalation = self._escalate(REASON_STALLED, "", current, attempts, metrics)
                 break
-
-            failing = new_failing
         else:
             # Ran the full budget of iterations without going green — the hard bound (§9).
             escalation = self._escalate(REASON_CAP, "", current, attempts, metrics)
@@ -340,6 +357,40 @@ class RepairLoopController:
             RepairLoopResult(LOOP_ESCALATED, metrics, attempts, current, escalation),
             started,
         )
+
+    async def _revert(
+        self, project: Project, result: RepairResult, iteration: int, channel: str
+    ) -> bool:
+        """Undo a strictly-worse attempt. Returns whether the workspace was actually restored.
+
+        Fails soft on purpose: if the undo cannot be performed the loop carries on with the patch
+        in place, exactly as it did before — a failed undo must never be worse than no undo.
+        """
+        if not result.before_sha:
+            return False
+        try:
+            restored = await self._workspace_api().restore(project, result.before_sha)
+        except Exception:  # noqa: BLE001 - an undo failure must not sink the loop
+            restored = False
+        if not restored:
+            return False
+        if result.attempt is not None:
+            result.attempt.reverted = True
+            await result.attempt.save()
+        await emit(
+            channel,
+            "repair.reverted",
+            {"i": iteration, "sha": result.before_sha, "files": result.files_written},
+            stage=self._stage,
+        )
+        return True
+
+    def _workspace_api(self) -> RevertableWorkspace:
+        if self._workspace is None:
+            from app.sandbox.workspace import WorkspaceService
+
+            self._workspace = WorkspaceService()
+        return self._workspace
 
     # -- terminal handling -----------------------------------------------------------------
 
@@ -432,6 +483,7 @@ def _attempt_public(attempt: Any) -> dict[str, Any]:
         "target_files": attempt.target_files,
         "diff_ref": attempt.diff_ref,
         "outcome": str(attempt.outcome) if attempt.outcome else None,
+        "reverted": bool(getattr(attempt, "reverted", False)),
     }
 
 

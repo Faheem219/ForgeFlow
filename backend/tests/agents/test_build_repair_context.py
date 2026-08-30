@@ -9,7 +9,7 @@ returns an empty editable set so the controller's pre-check can escalate cleanly
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -18,6 +18,9 @@ from app.agents.repair_context import RepairContextAnalyzer
 from app.core.config import reset_config
 from app.core.errors import NotFoundError
 from app.sandbox.schemas import FileContent, GitInfo
+
+if TYPE_CHECKING:  # the stubs below are structural stand-ins; nothing here touches a DB
+    from app.db.models import Project, TestRun
 
 SPEC = "frontend/e2e/home.spec.ts"  # a *test* file — implicated, but never editable
 WROTE = "frontend/src/features/todos/TodoPage.tsx"
@@ -92,7 +95,9 @@ async def test_widens_from_fallback_when_only_a_test_file_is_implicated() -> Non
     analyzer = _analyzer(ws, fallback=[WROTE])
 
     context = await analyzer.analyze(
-        object(), _boot_failure_naming_only_a_test_file(), persist=False
+        cast("Project", object()),
+        cast("TestRun", _boot_failure_naming_only_a_test_file()),
+        persist=False,
     )
 
     assert _editable(context) == [WROTE]  # the build-authored file became the repair target
@@ -104,7 +109,9 @@ async def test_widens_from_changed_paths_when_no_fallback() -> None:
     analyzer = _analyzer(ws, fallback=[])
 
     context = await analyzer.analyze(
-        object(), _boot_failure_naming_only_a_test_file(), persist=False
+        cast("Project", object()),
+        cast("TestRun", _boot_failure_naming_only_a_test_file()),
+        persist=False,
     )
 
     assert _editable(context) == [CHANGED]
@@ -115,7 +122,9 @@ async def test_nothing_to_widen_from_leaves_the_set_empty_for_the_precheck() -> 
     analyzer = _analyzer(ws, fallback=[])
 
     context = await analyzer.analyze(
-        object(), _boot_failure_naming_only_a_test_file(), persist=False
+        cast("Project", object()),
+        cast("TestRun", _boot_failure_naming_only_a_test_file()),
+        persist=False,
     )
 
     assert _editable(context) == []  # the controller's pre-check escalates on this
@@ -129,7 +138,9 @@ async def test_widening_respects_the_context_budget(monkeypatch: pytest.MonkeyPa
     analyzer = _analyzer(ws, fallback=[WROTE])
 
     context = await analyzer.analyze(
-        object(), _boot_failure_naming_only_a_test_file(), persist=False
+        cast("Project", object()),
+        cast("TestRun", _boot_failure_naming_only_a_test_file()),
+        persist=False,
     )
 
     # The oversized fallback file is refused by the budget, so the set stays empty AND within cap —

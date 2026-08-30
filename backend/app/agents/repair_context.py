@@ -137,6 +137,17 @@ class RepairContext:
         }
 
 
+def editable_paths(context: RepairContext) -> list[str]:
+    """The files a repair attempt could actually patch: target files that are not test files.
+
+    The oracle is read-only (``app.agents.repair``), so an *empty* result means the agent has
+    nothing to write and the loop can only escalate — which is why the widening analyzers exist.
+    """
+    from app.agents.repair import is_test_file
+
+    return [f.path for f in context.target_files if not is_test_file(f.path)]
+
+
 # --------------------------------------------------------------------- workspace seam
 
 

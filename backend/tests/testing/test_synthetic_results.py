@@ -37,6 +37,7 @@ def test_typecheck_paths_are_rerooted_and_grouped_by_file() -> None:
     # The FE file had two errors → one result, both errors retained, the file listed as editable.
     fe = results[0]
     assert fe.failure is not None
+    assert fe.failure.stack is not None
     assert "TS2339" in fe.failure.stack and "TS2304" in fe.failure.stack
     assert fe.failure.files_referenced == ["frontend/src/features/todos/TodoPage.tsx"]
 

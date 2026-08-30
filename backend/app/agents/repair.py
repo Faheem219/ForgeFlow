@@ -40,7 +40,7 @@ from app.db.models import Project, RepairAttempt, Run, TestRun
 from app.db.models.enums import Stage
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
-from app.sandbox.schemas import GitInfo
+from app.sandbox.schemas import FileContent, GitInfo
 from app.testing.models import (
     FRAMEWORK_JEST,
     FRAMEWORK_PLAYWRIGHT,
@@ -77,7 +77,14 @@ class SuiteRunner(Protocol):
 
 
 class RepairWorkspace(Protocol):
-    """The git surface the agent needs (the tool-facing ``WorkspaceApi`` is FS-only)."""
+    """The git surface the agent needs (the tool-facing ``WorkspaceApi`` is FS-only).
+
+    ``read`` is here because the same workspace is handed to the default context analyzer — one
+    injected seam, so a fake workspace fakes the *whole* attempt (assembly included), not just the
+    git half of it.
+    """
+
+    async def read(self, project: Project, path: str) -> FileContent: ...
 
     async def commit(self, project: Project, message: str) -> tuple[str | None, bool]: ...
 
@@ -106,6 +113,9 @@ class RepairResult:
     diff: str = ""
     diff_ref: str | None = None
     commit: str | None = None
+    #: HEAD *before* this attempt patched anything — the anchor the loop resets to when an
+    #: attempt turns out to have made things strictly worse.
+    before_sha: str | None = None
     summary: str = ""
     green: bool = False
     note: str | None = None  # set when the attempt could not proceed
@@ -171,7 +181,7 @@ class RepairAgent:
         self._client = client or AnthropicClient()
         self._registry = registry or _repair_registry()
         self._runner = runner
-        self._analyzer = analyzer or RepairContextAnalyzer()
+        self._analyzer = analyzer or RepairContextAnalyzer(workspace=workspace)
         self._workspace = workspace
         self._blobs = blobs
 
@@ -281,6 +291,7 @@ class RepairAgent:
             diff=diff,
             diff_ref=diff_ref,
             commit=commit_sha,
+            before_sha=before_sha,
             summary=summary,
             green=summarize(_results_of(full_run)).green,
         )

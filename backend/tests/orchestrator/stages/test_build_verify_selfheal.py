@@ -35,7 +35,9 @@ pytestmark = pytest.mark.usefixtures("mongo_db")
 _RED_TSC = "frontend/src/features/todos/TodoPage.tsx(12,5): error TS2339: Property 'x' ...\n"
 
 
-def _controller(typecheck_probes: list[StepProbe], *, scripted: ScriptedAgent):
+def _controller(
+    typecheck_probes: list[StepProbe], *, scripted: ScriptedAgent
+) -> BuildVerificationController:
     calls = {"typecheck": 0}
 
     async def install(project: object, ctx: object) -> None:

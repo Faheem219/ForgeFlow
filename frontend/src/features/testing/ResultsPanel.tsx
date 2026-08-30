@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import { Badge, Button, EmptyState, Spinner } from '../../components/ui';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
-import type { TestResultDto, TestRunDto, TestScope } from '../../lib/types';
-import { getTestStdout, listTestRuns, runTests } from './api';
+import type { TestResultDto, TestRunDto, TestRunSummaryDto, TestScope } from '../../lib/types';
+import { getTestRun, getTestStdout, listTestRuns, runTests } from './api';
 
 const STATUS_TONES = {
   passed: 'success',
@@ -53,7 +53,7 @@ export function ResultsPanel({
   onRunChange,
 }: {
   projectId: string;
-  run: TestRunDto | null;
+  run: TestRunSummaryDto | null;
   onRunChange?: (run: TestRunDto) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -68,6 +68,15 @@ export function ResultsPanel({
   });
   const latest = run ?? runsQuery.data?.[0] ?? null;
 
+  // `listTestRuns` returns summaries — no per-test results — so the selected run is fetched in
+  // full. Without this a reload would show a run's counts above an empty result list. A fresh run
+  // seeds this cache key below, so running the suites costs no extra request.
+  const detailQuery = useQuery({
+    queryKey: ['test-run', projectId, latest?.id],
+    queryFn: () => getTestRun(projectId, latest?.id as string),
+    enabled: Boolean(latest?.id),
+  });
+
   const stdoutQuery = useQuery({
     queryKey: ['test-stdout', latest?.id],
     queryFn: () => getTestStdout(projectId, latest?.id as string),
@@ -78,6 +87,7 @@ export function ResultsPanel({
     mutationFn: () => runTests(projectId, scope, filter.trim() || undefined),
     onSuccess: (fresh) => {
       onRunChange?.(fresh);
+      queryClient.setQueryData(['test-run', projectId, fresh.id], fresh);
       void queryClient.invalidateQueries({ queryKey: ['test-runs', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
     },
@@ -87,7 +97,8 @@ export function ResultsPanel({
     },
   });
 
-  const grouped = useMemo(() => groupByFile(latest?.results ?? []), [latest]);
+  const detail = detailQuery.data ?? null;
+  const grouped = useMemo(() => groupByFile(detail?.results ?? []), [detail]);
 
   return (
     <div className="flex min-h-0 flex-col gap-3">

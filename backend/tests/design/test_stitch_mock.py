@@ -11,7 +11,7 @@ from beanie import PydanticObjectId
 from app.core.errors import ProviderError
 from app.db.models import Project
 from app.db.models.enums import ArtifactType, Stage
-from app.design.base import DesignImage, ProviderHealth
+from app.design.base import DesignImage, DesignScreenRef, ProviderHealth
 from app.design.service import META_EXTERNAL_REF, META_PROVIDER, DesignService
 from app.design.stitch import StitchDesignPayload, StitchDesignProvider
 from app.design.stitch_auth import StitchAuth
@@ -66,6 +66,14 @@ class FakeStitchClient:
         self.calls.append("fetch_code")
         self.headers.append(dict(headers))
         return StitchDesignPayload(html="<main/>", css="body{}", assets={"logo": "ref://logo"})
+
+    async def list_screens(
+        self, *, headers: Mapping[str, str], workspace: str | None = None
+    ) -> list[DesignScreenRef]:
+        self.calls.append("list_screens")
+        self.headers.append(dict(headers))
+        self.workspaces.append(workspace)
+        return [DesignScreenRef(ref=f"{workspace or 'proj-1'}/stitch-abc", title="Landing")]
 
 
 @pytest.fixture

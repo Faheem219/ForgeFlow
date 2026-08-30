@@ -22,6 +22,10 @@ class RepairAttempt(Document):
     diff_ref: str | None = None
     resulting_run_id: PydanticObjectId | None = None
     outcome: RepairOutcome | None = None
+    #: Set when the loop undid this patch because it was strictly worse — it broke a passing test
+    #: and fixed nothing. The attempt stays in the trail (its diff is still readable); the flag
+    #: records that the code it contains is *not* what the workspace ended up with.
+    reverted: bool = False
     created_at: datetime = Field(default_factory=utcnow)
 
     class Settings:

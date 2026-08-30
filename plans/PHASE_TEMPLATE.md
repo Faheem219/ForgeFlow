@@ -2,7 +2,7 @@
 
 > **Reusable template.** Copy this file to `plans/phase-NN-<slug>.md` and fill every section.
 > Keep phases **independently shippable**: each must build, pass its own tests, and leave the app runnable.
-> Faithfulness check before writing code: re-read the locked decisions (D1–D14) in `IMPLEMENTATION_PLAN.md` §1. If a task forces a deviation, **stop and ask**.
+> Faithfulness check before writing code: re-read the locked decisions (D1–D15) in `IMPLEMENTATION_PLAN.md` §1. If a task forces a deviation, **stop and ask**.
 
 ---
 
@@ -19,7 +19,7 @@ One or two sentences: the single outcome this phase delivers. If you cannot stat
 
 ## Context
 
-Why this phase exists now, how it fits the pipeline, and which locked decisions (D1–D14) / invariants it must honor. Reference the relevant `IMPLEMENTATION_PLAN.md` sections.
+Why this phase exists now, how it fits the pipeline, and which locked decisions (D1–D15) / invariants it must honor. Reference the relevant `IMPLEMENTATION_PLAN.md` sections.
 
 ## Depends on
 

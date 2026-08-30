@@ -10,6 +10,9 @@ from app.core.errors import NotFoundError
 from app.realtime.hub import get_hub
 from app.sandbox.fs import WorkspaceFs
 from app.sandbox.runtime import LocalRuntime
+from tests.sandbox.conftest import requires_posix_runtime
+
+pytestmark = requires_posix_runtime
 
 
 @pytest.fixture

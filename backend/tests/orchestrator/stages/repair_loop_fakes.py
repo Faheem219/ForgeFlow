@@ -67,7 +67,9 @@ async def make_test_run(project: Project, results: list[TestResult]) -> TestRun:
     ).insert()
 
 
-async def make_attempt(project: Project, run: Run, iteration: int) -> RepairAttempt:
+async def make_attempt(
+    project: Project, run: Run, iteration: int, *, resulting_run: TestRun | None = None
+) -> RepairAttempt:
     assert project.id is not None
     return await RepairAttempt(
         project_id=project.id,
@@ -75,6 +77,9 @@ async def make_attempt(project: Project, run: Run, iteration: int) -> RepairAtte
         iteration=iteration,
         target_files=[SRC],
         diff_ref=f"fs:diff-{iteration}",
+        # The real agent links the attempt to the run it produced; the fake must too, or the
+        # audit trail it stands in for is only half there.
+        resulting_run_id=resulting_run.id if resulting_run else None,
     ).insert()
 
 
@@ -91,7 +96,7 @@ async def scripted_result(
     """A RepairResult whose re-run leaves exactly ``failing_names`` red."""
     results = [failing(n) for n in failing_names] + [passing(n) for n in (passing_names or [])]
     after = await make_test_run(project, results)
-    attempt = await make_attempt(project, run, iteration)
+    attempt = await make_attempt(project, run, iteration, resulting_run=after)
     return RepairResult(
         attempt=attempt,
         test_run=after,
@@ -99,9 +104,23 @@ async def scripted_result(
         newly_passing=[key(n) for n in (newly_passing or [])],
         files_written=[SRC],
         commit=f"sha{iteration}",
+        # The pre-attempt anchor the loop resets to when a patch turns out to be pure damage.
+        before_sha=f"sha{iteration - 1}",
         summary=f"attempt {iteration}",
         green=not failing_names,
     )
+
+
+class FakeRevertableWorkspace:
+    """Records the restores the loop asked for; ``fails=True`` makes the undo itself fail."""
+
+    def __init__(self, *, fails: bool = False) -> None:
+        self.fails = fails
+        self.restored: list[str] = []
+
+    async def restore(self, project: Project, sha: str) -> bool:
+        self.restored.append(sha)
+        return not self.fails
 
 
 class StubAnalyzer:

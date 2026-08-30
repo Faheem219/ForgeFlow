@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.agents.repair import is_test_file
-from app.agents.repair_context import RepairContext, RepairContextAnalyzer
+from app.agents.repair_context import RepairContext, RepairContextAnalyzer, editable_paths
 from app.db.models import Project, TestRun
 
 
@@ -29,9 +29,9 @@ class _ChangedPathsWorkspace(Protocol):
     async def changed_paths(self, project: Project, sha_a: str, sha_b: str) -> list[str]: ...
 
 
-def _editable(context: RepairContext) -> list[str]:
-    """The files the repair agent could actually patch — target files that are not test files."""
-    return [f.path for f in context.target_files if not is_test_file(f.path)]
+#: The files the repair agent could actually patch. Shared with the test-stage widener
+#: (``app.agents.test_context``) so both stages judge "nothing to patch" identically.
+_editable = editable_paths
 
 
 class BuildRepairContextAnalyzer:

@@ -24,6 +24,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from app.agents.suite_context import SuiteRepairContextAnalyzer
 from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError, UserError
 from app.core.limits import expensive_rate_limit
@@ -99,9 +100,17 @@ async def run_repair(
     cancel = asyncio.Event()
     _active_loops[str(pid)] = cancel
     try:
-        result = await RepairLoopController().run(project, test_run, cancel=cancel)
+        # The widening analyzer, not the bare one: a plain assertion failure names only its own
+        # spec in the stack, and the spec is read-only during repair — so the bare context leaves
+        # nothing editable and the loop escalates without changing a line. The widener resolves
+        # what each failing test actually exercises, so pressing Repair patches code.
+        controller = RepairLoopController(analyzer=SuiteRepairContextAnalyzer())
+        result = await controller.run(project, test_run, cancel=cancel)
     finally:
-        _active_loops.pop(str(pid), None)
+        # Only retract our own registration: if a second loop for this project has since taken
+        # the slot, popping it blindly would leave that one with no way to be cancelled.
+        if _active_loops.get(str(pid)) is cancel:
+            _active_loops.pop(str(pid), None)
     return RepairLoopPublic.model_validate(result.to_dict())
 
 

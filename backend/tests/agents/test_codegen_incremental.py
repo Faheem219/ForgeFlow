@@ -9,13 +9,16 @@ build report; `fresh=True` deliberately withholds it for a full regeneration.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from app.agents.anthropic_client import AnthropicClient
-from app.agents.codegen import CodegenAgent
+from app.agents.anthropic_client import AnthropicClient, LoopResult
+from app.agents.codegen import BuildReport, CodegenAgent
+from app.agents.cost import Usage
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
+from app.db.models import Project
 from app.db.models.enums import ArtifactType, Stage
 from app.orchestrator.artifacts import ArtifactService
 from tests.agents.codegen_fakes import (
@@ -25,6 +28,7 @@ from tests.agents.codegen_fakes import (
     make_skeleton,
     tool_use,
 )
+from tests.agents.test_client_tool_loop import FakeTransport
 from tests.agents.tools.conftest import FakeExec, FakePreview, FakeWorkspace
 
 pytestmark = pytest.mark.usefixtures("mongo_db")
@@ -61,7 +65,7 @@ async def _run(
     *,
     seed: dict[str, str] | None = None,
     fresh: bool = False,
-):
+) -> tuple[BuildReport, FakeTransport, FakeWorkspace, Project]:
     skeleton = tmp_path / "skeleton"
     make_skeleton(skeleton)
     configure_env(monkeypatch, tmp_path, skeleton)
@@ -169,12 +173,9 @@ async def test_a_failed_build_still_persists_what_it_wrote(
         def __init__(self) -> None:
             self.calls = 0
 
-        async def run_tool_loop(self, **kwargs):
+        async def run_tool_loop(self, **kwargs: Any) -> LoopResult:
             self.calls += 1
             if self.calls == 1:  # the plan step succeeds
-                from app.agents.anthropic_client import LoopResult
-                from app.agents.cost import Usage
-
                 return LoopResult(text="Plan: todo.", messages=[], usage=Usage(), turns=1)
             dispatch = kwargs["tool_dispatch"]
             await dispatch("write_file", {"path": HALF_DONE, "content": "export {};"})

@@ -1,5 +1,5 @@
 import { apiFetch } from '../../lib/apiClient';
-import type { RepairLoopDto, TestRunDto, TestScope } from '../../lib/types';
+import type { RepairLoopDto, TestRunDto, TestRunSummaryDto, TestScope } from '../../lib/types';
 
 export function runTests(
   projectId: string,
@@ -12,9 +12,12 @@ export function runTests(
   });
 }
 
-/** Test runs, newest first (the backend sorts descending by creation). */
-export function listTestRuns(projectId: string): Promise<TestRunDto[]> {
-  return apiFetch<TestRunDto[]>(`/projects/${projectId}/tests/runs`);
+/**
+ * Test runs, newest first (the backend sorts descending by creation). Summaries only — fetch a
+ * run with {@link getTestRun} for its per-test results.
+ */
+export function listTestRuns(projectId: string): Promise<TestRunSummaryDto[]> {
+  return apiFetch<TestRunSummaryDto[]>(`/projects/${projectId}/tests/runs`);
 }
 
 export function getTestRun(projectId: string, runId: string): Promise<TestRunDto> {

@@ -34,7 +34,9 @@ class _StubProject:
         self.id = PydanticObjectId()
 
 
-def _controller(probe: StepProbe, *, container: str, scripted: ScriptedAgent):
+def _controller(
+    probe: StepProbe, *, container: str, scripted: ScriptedAgent
+) -> BuildVerificationController:
     async def install(project: object, ctx: object) -> None:
         return None
 

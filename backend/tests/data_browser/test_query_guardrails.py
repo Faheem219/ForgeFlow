@@ -8,6 +8,8 @@ not because someone remembered to blacklist it.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from app.core.errors import UserError
@@ -72,7 +74,7 @@ def test_an_empty_filter_means_everything() -> None:
 
 
 def test_a_deeply_nested_filter_is_rejected() -> None:
-    payload: dict = {"a": 1}
+    payload: dict[str, Any] = {"a": 1}
     for _ in range(10):
         payload = {"$and": [payload]}
 

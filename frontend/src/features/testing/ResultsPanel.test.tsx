@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TestRunDto } from '../../lib/types';
+import type { TestRunDto, TestRunSummaryDto } from '../../lib/types';
 import { ResultsPanel } from './ResultsPanel';
 
 const PROJECT = 'p1';
@@ -61,6 +61,16 @@ interface MockState {
   postCalls: Array<Record<string, unknown>>;
 }
 
+/** The list endpoint returns counts only — mirror that, or the mock hides the hydration path. */
+function summary(run: TestRunDto): TestRunSummaryDto {
+  const { results, failures, suite_refs, stdout_ref, ...rest } = run;
+  void results;
+  void failures;
+  void suite_refs;
+  void stdout_ref;
+  return rest;
+}
+
 function installFetch(state: MockState): void {
   vi.stubGlobal(
     'fetch',
@@ -73,13 +83,18 @@ function installFetch(state: MockState): void {
         state.postCalls.push(JSON.parse(String(init.body)) as Record<string, unknown>);
         return Promise.resolve(json(RUN));
       }
-      if (url.includes('/tests/runs')) return Promise.resolve(json(state.runs));
+      const detail = /\/tests\/runs\/([^/?]+)$/.exec(url);
+      if (detail) {
+        const found = state.runs.find((r) => r.id === detail[1]);
+        return Promise.resolve(found ? json(found) : json({ detail: 'not found' }, 404));
+      }
+      if (url.includes('/tests/runs')) return Promise.resolve(json(state.runs.map(summary)));
       return Promise.resolve(json({}));
     }),
   );
 }
 
-function renderPanel(run: TestRunDto | null = RUN) {
+function renderPanel(run: TestRunSummaryDto | null = summary(RUN)) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -100,7 +115,8 @@ describe('ResultsPanel', () => {
     renderPanel();
 
     expect(await screen.findByTestId('test-summary')).toHaveTextContent('1/2 passing');
-    expect(screen.getByText('adds a todo')).toBeInTheDocument();
+    // The counts come from the run list; the per-test rows are hydrated by a second request.
+    expect(await screen.findByText('adds a todo')).toBeInTheDocument();
     expect(screen.getByText('rejects an empty title')).toBeInTheDocument();
     // Traceability back to the acceptance criterion (phase-25 → 27 → 28).
     expect(screen.getByText('ac-empty')).toBeInTheDocument();

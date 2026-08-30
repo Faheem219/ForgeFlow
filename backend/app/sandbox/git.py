@@ -83,6 +83,21 @@ class WorkspaceGit:
             raise SystemError(f"git diff --name-only failed: {err.strip()}")
         return [line.strip() for line in out.splitlines() if line.strip()]
 
+    async def restore(self, sha: str) -> bool:
+        """Reset the workspace tree back to ``sha``, discarding everything after it.
+
+        Used by the repair loop to undo an attempt that made things **strictly worse** (§9): the
+        loop is allowed to spend iterations, never to hand back an app more broken than it found.
+        A hard reset is right here and nowhere else — this history is a per-project scratch anchor
+        for diff-aware repair, not a shared branch, and the discarded attempt survives in its
+        ``RepairAttempt.diff_ref`` blob, so the audit trail is not what is being thrown away.
+
+        Returns whether the reset succeeded; a git failure is reported, never raised, so a botched
+        undo cannot turn a recoverable escalation into a 500.
+        """
+        code, _, _ = await self._git("reset", "--hard", sha)
+        return code == 0
+
     async def set_last_passing(self, sha: str) -> None:
         """Move the ``last-passing`` ref (called by the test runner in phase-28)."""
         code, _, err = await self._git("update-ref", LAST_PASSING_REF, sha)

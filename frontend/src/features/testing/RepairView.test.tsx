@@ -124,6 +124,22 @@ describe('RepairView', () => {
     expect(screen.getByTestId('repair-running')).toBeInTheDocument();
   });
 
+  it('starts a fresh trail when a second loop begins', () => {
+    // The event ring outlives a loop: "Repair again" must not graft onto the previous trail.
+    useRealtimeStore.setState({
+      events: [
+        iterationEvent(1, 5),
+        iterationEvent(2, 4),
+        iterationEvent(1, 3),
+        iterationEvent(2, 1),
+      ],
+    });
+    renderView({ running: true, report: null });
+
+    expect(screen.getByTestId('failing-trail')).toHaveTextContent('3 → 1');
+    expect(screen.getByTestId('repair-iterations')).toHaveTextContent('2');
+  });
+
   it('ignores iteration events from other projects', () => {
     useRealtimeStore.setState({
       events: [{ ...iterationEvent(1, 9), project_id: 'other' }, iterationEvent(2, 4)],
@@ -132,6 +148,17 @@ describe('RepairView', () => {
 
     expect(screen.getByTestId('failing-trail')).toHaveTextContent('4');
     expect(screen.getByTestId('failing-trail')).not.toHaveTextContent('9');
+  });
+
+  it('marks an attempt the loop undid, so its diff is not read as applied code', () => {
+    renderView({
+      report: {
+        ...REPORT,
+        attempts: [{ ...REPORT.attempts[0], outcome: 'regressed', reverted: true }],
+      },
+    });
+
+    expect(screen.getByTestId('attempt-reverted')).toHaveTextContent('reverted');
   });
 
   it('lists each attempt with its verdict and loads its diff on demand', async () => {

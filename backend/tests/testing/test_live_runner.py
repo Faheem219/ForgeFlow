@@ -350,6 +350,10 @@ async def test_a_live_run_does_not_hijack_the_sandbox_repair_loop() -> None:
     live_run = await _runner(FakeExec(), _workspace(), FakeSandbox()).run(project)  # newer
 
     runs = TestRunRepo()
-    assert (await runs.latest(project.id)).id == live_run.id  # newest overall
-    assert (await runs.latest(project.id, env=TestEnv.sandbox)).id == sandbox_run.id
-    assert (await runs.latest(project.id, env=TestEnv.live)).id == live_run.id
+    newest = await runs.latest(project.id)
+    newest_sandbox = await runs.latest(project.id, env=TestEnv.sandbox)
+    newest_live = await runs.latest(project.id, env=TestEnv.live)
+
+    assert newest is not None and newest.id == live_run.id  # newest overall
+    assert newest_sandbox is not None and newest_sandbox.id == sandbox_run.id
+    assert newest_live is not None and newest_live.id == live_run.id

@@ -15,8 +15,9 @@ from app.projects.service import ProjectService
 from app.realtime.hub import get_hub
 from app.sandbox.exec import ExecService
 from app.sandbox.runtime import LocalRuntime, WorkspaceRuntime
+from tests.sandbox.conftest import requires_posix_runtime
 
-pytestmark = pytest.mark.usefixtures("mongo_db")
+pytestmark = [pytest.mark.usefixtures("mongo_db"), requires_posix_runtime]
 
 
 async def _project() -> Project:

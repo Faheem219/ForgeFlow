@@ -16,7 +16,7 @@ DB-free: the guard returns before persisting anything.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from beanie import PydanticObjectId
@@ -31,6 +31,10 @@ from app.orchestrator.stages.build_verify import (
 )
 from app.orchestrator.stages.repair import RepairLoopController
 from tests.orchestrator.stages.repair_loop_fakes import ScriptedAgent, StubAnalyzer
+
+if TYPE_CHECKING:  # the stubs below are structural stand-ins; nothing here touches a DB
+    from app.agents.tools.context import ToolContext
+    from app.db.models import Project, Run
 
 # The two files phase-54 requires codegen to rewrite in place.
 APP_TEST = "frontend/src/App.test.tsx"
@@ -108,7 +112,11 @@ async def test_stale_demo_test_stops_without_spending_a_single_repair_iteration(
     controller = _controller(stale=[HOME_SPEC], scripted=scripted)
 
     report = await controller.run(
-        _StubProject(), object(), ctx=object(), channel="c", written_files=[]
+        cast("Project", _StubProject()),
+        cast("Run", object()),
+        ctx=cast("ToolContext", object()),
+        channel="c",
+        written_files=[],
     )
 
     assert report.ok is False
@@ -123,7 +131,11 @@ async def test_the_report_names_the_offending_file_and_what_to_do() -> None:
     controller = _controller(stale=[APP_TEST, HOME_SPEC], scripted=ScriptedAgent([]))
 
     report = await controller.run(
-        _StubProject(), object(), ctx=object(), channel="c", written_files=[]
+        cast("Project", _StubProject()),
+        cast("Run", object()),
+        ctx=cast("ToolContext", object()),
+        channel="c",
+        written_files=[],
     )
 
     assert APP_TEST in report.message and HOME_SPEC in report.message
@@ -137,7 +149,11 @@ async def test_rewritten_demo_tests_let_verification_pass() -> None:
     controller = _controller(stale=[], scripted=ScriptedAgent([]))
 
     report = await controller.run(
-        _StubProject(), object(), ctx=object(), channel="c", written_files=[]
+        cast("Project", _StubProject()),
+        cast("Run", object()),
+        ctx=cast("ToolContext", object()),
+        channel="c",
+        written_files=[],
     )
 
     assert report.ok is True
@@ -159,7 +175,9 @@ async def test_scan_is_case_insensitive_because_the_copy_lives_in_a_regex_litera
         }
     )
 
-    assert await _default_demo_test(object(), ctx) == [HOME_SPEC]
+    assert await _default_demo_test(cast("Project", object()), cast("ToolContext", ctx)) == [
+        HOME_SPEC
+    ]
 
 
 @pytest.mark.asyncio
@@ -171,10 +189,10 @@ async def test_scan_passes_a_demo_test_that_asserts_real_app_content() -> None:
         }
     )
 
-    assert await _default_demo_test(object(), ctx) == []
+    assert await _default_demo_test(cast("Project", object()), cast("ToolContext", ctx)) == []
 
 
 @pytest.mark.asyncio
 async def test_scan_tolerates_a_workspace_missing_the_demo_tests() -> None:
     """A generated app may legitimately not have them; absence is not a finding."""
-    assert await _default_demo_test(object(), _Ctx({})) == []
+    assert await _default_demo_test(cast("Project", object()), cast("ToolContext", _Ctx({}))) == []

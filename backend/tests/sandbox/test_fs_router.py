@@ -18,10 +18,12 @@ from app.api.app import create_app
 from app.db.models import Project
 from app.sandbox.runtime import LocalRuntime, WorkspaceRuntime
 from app.sandbox.workspace import set_runtime_provider
+from tests.sandbox.conftest import requires_posix_runtime
 
 pytestmark = [
     pytest.mark.usefixtures("mongo_db"),
     pytest.mark.skipif(shutil.which("git") is None, reason="git not installed"),
+    requires_posix_runtime,
 ]
 
 

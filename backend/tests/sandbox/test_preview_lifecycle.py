@@ -24,8 +24,9 @@ from app.realtime.hub import get_hub
 from app.sandbox.preview import PreviewService
 from app.sandbox.runtime import LocalRuntime, WorkspaceRuntime
 from app.sandbox.schemas import PreviewStatus
+from tests.sandbox.conftest import requires_posix_runtime
 
-pytestmark = pytest.mark.usefixtures("mongo_db")
+pytestmark = [pytest.mark.usefixtures("mongo_db"), requires_posix_runtime]
 
 
 def _free_port() -> int:

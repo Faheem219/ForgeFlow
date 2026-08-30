@@ -4,7 +4,7 @@ Per-phase execution specs generated from **Section 10** of [`IMPLEMENTATION_PLAN
 
 ## How to use these plans
 
-1. **Never start blind.** Before executing a phase, re-read the locked decisions (D1–D14) in `IMPLEMENTATION_PLAN.md` §1 and `CLAUDE.md` (the operating manual). The plan is *what* to build; `CLAUDE.md` is *how* to work.
+1. **Never start blind.** Before executing a phase, re-read the locked decisions (D1–D15) in `IMPLEMENTATION_PLAN.md` §1 and `CLAUDE.md` (the operating manual). The plan is *what* to build; `CLAUDE.md` is *how* to work.
 2. **Execute on request only.** When the user says **"execute phase N"**: open `plans/phase-NN-*.md` + its `Depends on`; verify prerequisites are ✅; implement end-to-end (code + tests); run lint/type/tests; ensure the app still boots; meet **every** acceptance criterion; update this table's **Status** and the phase file's **Status**; commit with a Conventional Commit referencing the phase. Then **stop** — never start the next phase unprompted, never expand scope.
 3. **If a phase would force deviating** from the locked decisions, **pause and ask** (Golden Rule 1).
 4. **Status legend:** ⬜ todo · 🔄 in progress · ✅ done. Keep this table and each file's Status in sync.

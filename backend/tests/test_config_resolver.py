@@ -80,7 +80,11 @@ def test_blank_budget_cap_env_means_uncapped(field: str, monkeypatch: pytest.Mon
 
 
 def test_numeric_budget_cap_still_parses() -> None:
-    settings = Settings(_env_file=None, budget_cap_inr_per_project="100")  # type: ignore[call-arg]
+    settings = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        # A string is the point: the env always hands Pydantic one, and this pins the coercion.
+        budget_cap_inr_per_project="100",  # type: ignore[arg-type]
+    )
     assert settings.budget_cap_inr_per_project == 100.0
 
 
@@ -89,4 +93,7 @@ def test_a_non_numeric_cap_still_fails_loudly() -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, budget_cap_inr_global="# blank = uncapped")  # type: ignore[call-arg]
+        Settings(  # type: ignore[call-arg]
+            _env_file=None,
+            budget_cap_inr_global="# blank = uncapped",  # type: ignore[arg-type]
+        )

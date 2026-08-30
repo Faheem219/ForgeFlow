@@ -7,7 +7,7 @@ import { ApiError } from '../../lib/apiClient';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
-import type { IntentRequest, TestRunDto } from '../../lib/types';
+import type { IntentRequest, TestRunSummaryDto } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import { Escalation } from './Escalation';
@@ -22,7 +22,7 @@ import { cancelRepair, getLatestRepair, listTestRuns, runRepair } from './api';
  */
 export function TestingPanel({ projectId }: { projectId: string }): JSX.Element {
   const queryClient = useQueryClient();
-  const [run, setRun] = useState<TestRunDto | null>(null);
+  const [run, setRun] = useState<TestRunSummaryDto | null>(null);
 
   const stagesQuery = useQuery({
     queryKey: ['stages', projectId],

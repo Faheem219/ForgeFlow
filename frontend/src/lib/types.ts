@@ -146,7 +146,8 @@ export interface TestResultDto {
   failure: TestFailure | null;
 }
 
-export interface TestRunDto {
+/** What the run *list* endpoint returns — counts only, no per-test results. */
+export interface TestRunSummaryDto {
   id: string;
   total: number;
   passed: number;
@@ -155,6 +156,10 @@ export interface TestRunDto {
   green: boolean;
   env: string;
   created_at: string;
+}
+
+/** One run in full — only the single-run endpoints (`/tests/run`, `/tests/runs/{id}`) return this. */
+export interface TestRunDto extends TestRunSummaryDto {
   results: TestResultDto[];
   failures: TestResultDto[];
   suite_refs: string[];
@@ -179,6 +184,8 @@ export interface RepairAttemptDto {
   target_files: string[];
   diff_ref: string | null;
   outcome: 'fixed' | 'no_progress' | 'regressed' | null;
+  /** The loop undid this patch: it broke a passing test and fixed nothing (the diff still reads). */
+  reverted?: boolean;
 }
 
 export interface RepairEscalation {

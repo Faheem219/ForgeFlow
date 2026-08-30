@@ -103,6 +103,11 @@ class WorkspaceService:
         _, git = await self._open(project)
         return GitInfo(current_sha=await git.current_sha(), last_passing=await git.last_passing())
 
+    async def restore(self, project: Project, sha: str) -> bool:
+        """Reset the workspace back to ``sha`` (the repair loop's undo for a worsening patch)."""
+        _, git = await self._open(project)
+        return await git.restore(sha)
+
     async def set_last_passing(self, project: Project, sha: str) -> None:
         """Advance the ``last-passing`` ref — the anchor the repair loop diffs against."""
         _, git = await self._open(project)

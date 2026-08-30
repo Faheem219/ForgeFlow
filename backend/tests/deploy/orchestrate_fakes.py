@@ -12,7 +12,7 @@ from typing import Any
 from beanie import PydanticObjectId
 
 from app.db.models import Project
-from app.db.models.enums import DeployMode, Stage, StageStatus
+from app.db.models.enums import CredentialKind, DeployMode, Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.deploy.analyzer import BackendPlan, DatabasePlan, FrontendPlan, InfraPlan
 from app.deploy.providers.base import (
@@ -69,9 +69,13 @@ class FakeDeployProvider:
         env_fails: bool = False,
         destroy_fails: bool = False,
         log_lines: list[str] | None = None,
+        credential_kind: CredentialKind = CredentialKind.vercel,
     ) -> None:
         self.key = key
         self.target = target
+        # Part of the `DeployProvider` contract, not an implementation detail: phase-62's BYO
+        # readiness check asks the provider which vault credential it authenticates with.
+        self.credential_kind = credential_kind
         self._url = url
         self._fail = fail
         self._status = status

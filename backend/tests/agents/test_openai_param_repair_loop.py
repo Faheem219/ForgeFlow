@@ -19,6 +19,7 @@ import pytest
 from app.agents.anthropic_client import (
     MessageRequest,
     OpenAITransport,
+    StreamEvent,
     TextDelta,
     TurnComplete,
 )
@@ -115,8 +116,10 @@ class FakeEndpoint:
         return _ok_stream()
 
 
-async def _drain(transport: OpenAITransport, endpoint: FakeEndpoint, model: str = "some-model"):
-    events = []
+async def _drain(
+    transport: OpenAITransport, endpoint: FakeEndpoint, model: str = "some-model"
+) -> list[StreamEvent]:
+    events: list[StreamEvent] = []
     async for event in transport.run(
         _request(model),
         endpoint.create,

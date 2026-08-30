@@ -10,6 +10,9 @@ from app.core.errors import UserError
 from app.sandbox.fs import WorkspaceFs
 from app.sandbox.paths import require_rel_path, safe_rel_path
 from app.sandbox.runtime import LocalRuntime
+from tests.sandbox.conftest import requires_posix_runtime
+
+pytestmark = requires_posix_runtime
 
 
 @pytest.mark.parametrize(

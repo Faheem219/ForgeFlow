@@ -50,7 +50,12 @@ afterEach(() => vi.unstubAllGlobals());
 describe('router', () => {
   it('serves the public landing page at the root', async () => {
     renderAt('/');
-    expect(await screen.findByText('in one guided flow.')).toBeInTheDocument();
+    // Landing is the one `lazy()` route, so this waits on a dynamic import being transformed on
+    // first use — not on the DOM settling. Testing Library's 1s default is sized for the latter
+    // and the cold chunk can outrun it when the whole suite is competing for workers.
+    expect(
+      await screen.findByText('in one guided flow.', undefined, { timeout: 15_000 }),
+    ).toBeInTheDocument();
   });
 
   it('redirects unauthenticated users from /dashboard to /login', () => {

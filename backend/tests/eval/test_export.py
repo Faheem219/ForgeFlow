@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -172,7 +173,7 @@ async def _auth(client: AsyncClient, email: str) -> dict[str, str]:
 
 
 async def test_the_summary_endpoint_reports_unavailable_before_any_run(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     import app.eval.report as report_module
 
@@ -192,13 +193,13 @@ async def test_the_eval_endpoints_require_authentication(client: AsyncClient) ->
 
 
 async def test_the_csv_endpoint_serves_a_download(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     import json as json_lib
 
     import app.eval.report as report_module
 
-    (tmp_path / "eval-1.json").write_text(  # type: ignore[attr-defined]
+    (tmp_path / "eval-1.json").write_text(
         json_lib.dumps({"records": [record("todo")], "legs": ["build"]}), encoding="utf-8"
     )
     monkeypatch.setattr(report_module, "RESULTS_DIR", tmp_path)
@@ -213,13 +214,13 @@ async def test_the_csv_endpoint_serves_a_download(
 
 
 async def test_the_markdown_endpoint_serves_a_report(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     import json as json_lib
 
     import app.eval.report as report_module
 
-    (tmp_path / "eval-1.json").write_text(  # type: ignore[attr-defined]
+    (tmp_path / "eval-1.json").write_text(
         json_lib.dumps({"records": [record("todo", first=(4, 1), post=(4, 4))]}), encoding="utf-8"
     )
     monkeypatch.setattr(report_module, "RESULTS_DIR", tmp_path)
@@ -233,14 +234,14 @@ async def test_the_markdown_endpoint_serves_a_report(
 
 
 async def test_runs_are_listed_newest_first(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     import json as json_lib
 
     import app.eval.report as report_module
 
     for name in ("eval-100.json", "eval-200.json"):
-        (tmp_path / name).write_text(  # type: ignore[attr-defined]
+        (tmp_path / name).write_text(
             json_lib.dumps({"records": [record("a")], "legs": ["build", "test"]}), encoding="utf-8"
         )
     monkeypatch.setattr(report_module, "RESULTS_DIR", tmp_path)

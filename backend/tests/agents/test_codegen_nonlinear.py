@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.agents.anthropic_client import AnthropicClient
-from app.agents.codegen import CodegenAgent
+from app.agents.codegen import BuildReport, CodegenAgent
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.db.models import Project, RequirementSpec, Run
@@ -43,7 +43,7 @@ async def _seed_requirements(project: Project) -> None:
     await RequirementSpec(project_id=project.id, features=[Feature(name="Todos")]).insert()
 
 
-async def _run_build(project: Project, run: Run, tmp_path: Path) -> object:
+async def _run_build(project: Project, run: Run, tmp_path: Path) -> BuildReport:
     ctx = ToolContext.build(
         project, run, workspace=FakeWorkspace(), exec_service=FakeExec(), preview=FakePreview()
     )

@@ -88,6 +88,9 @@ target-version = ["py311"]
 # ------------------------------------------------------------------ mypy
 [tool.mypy]
 python_version = "3.11"
+# Both the control plane and the sandbox run on Linux (Docker via Colima). Checking against the
+# host's platform instead makes POSIX-only stdlib calls look like errors on a Windows dev machine.
+platform = "linux"
 strict = true
 ignore_missing_imports = true
 disallow_untyped_decorators = false

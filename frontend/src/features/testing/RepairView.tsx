@@ -114,6 +114,15 @@ function AttemptRow({
           {attempt.outcome ? (
             <Badge tone={OUTCOME_TONES[attempt.outcome]}>{attempt.outcome}</Badge>
           ) : null}
+          {/* The diff below is still readable, but it is not what the workspace ended up with. */}
+          {attempt.reverted ? (
+            <span
+              data-testid="attempt-reverted"
+              title="Undone — it broke a passing test and fixed nothing"
+            >
+              <Badge tone="neutral">reverted</Badge>
+            </span>
+          ) : null}
           <span className="font-mono text-[11px] text-fg-subtle">
             {attempt.target_files.join(', ') || 'no files'}
           </span>
@@ -163,7 +172,13 @@ export function RepairView({
     const out: LiveIteration[] = [];
     for (const e of events) {
       if (e.event === 'repair.iteration' && e.project_id === projectId) {
-        out.push(e.payload as unknown as LiveIteration);
+        const iteration = e.payload as unknown as LiveIteration;
+        // The event ring outlives a loop, so "Repair again" would otherwise graft its first
+        // iteration onto the previous loop's trail. Each loop counts from 1, so a non-increasing
+        // `i` means a new one started — drop what came before it.
+        const previous = out.at(-1);
+        if (previous && iteration.i <= previous.i) out.length = 0;
+        out.push(iteration);
       }
     }
     return out;
