@@ -60,6 +60,13 @@ Why the two containers are not optional:
 | `appdb` (:27018) | generated apps boot, then every query dies with mongoose `buffering timed out after 10000ms` |
 | `proxy` (:80) | preview URLs (`*.preview.localhost`) refuse to connect — it is the only route into a sandbox |
 
+Both carry `restart: always` rather than `unless-stopped`, because `unless-stopped` explicitly does
+**not** restart a container that was stopped when the daemon went down — which is every docker
+restart. Starting a preview also restarts whichever of the two it finds stopped
+(`PREVIEW_AUTOSTART_DEPS=false` opts out), so the usual cause of "it worked yesterday" is handled
+before the dev servers launch. Neither helps if the containers were never created: run
+`make host-deps` after a `make down`.
+
 Sandboxes need no wiring: the backend picks up your daemon via `docker.from_env()`. If `DOCKER_HOST` is unset and `/var/run/docker.sock` is absent (some Colima setups), export `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`.
 
 ---
@@ -164,9 +171,11 @@ Routes: `/` dashboard · `/projects/:id` workspace · `/eval` benchmarks · `/ad
 |---|---|
 | `sandbox reconcile skipped — Docker unavailable` | daemon not reachable — start Colima/Docker Desktop; in compose mode check the socket mount ([§2](#2-section-b--everything-in-docker-compose)) |
 | Generated app: `buffering timed out after 10000ms` | `APP_DB_SANDBOX_URI` unset or `appdb` not running — `make host-deps` |
+| Generated app: `getaddrinfo EAI_AGAIN forgeflow-appdb` | the `appdb` container is gone, so the name has no DNS record. Preview start restarts it if it merely stopped; if it was removed, `make host-deps` |
 | Deploy refuses: *"not reachable from the internet"* | `APP_DB_CLUSTER_URI` is a localhost/docker address; set it to your Atlas URI (`APP_DB_SANDBOX_URI` stays local) |
 | Vercel dashboard shows no environment variables | pre-phase-62 deployment — redeploy; env is now mirrored to the Vercel *project*, not just the deployment |
-| Preview URL refuses to connect | proxy not running — `make proxy` |
+| Preview URL refuses to connect | proxy not running — preview start restarts a *stopped* one; if it was removed, `make proxy` |
+| Preview URL returns `502` | the proxy is up but the sandbox behind it is not — it was idle-reaped after `SANDBOX_IDLE_TIMEOUT_S`; start the preview again |
 | `Sandbox runtime unavailable` | `make sandbox-build`; if stale, `make sandbox-reap-all` then retry |
 | API boot: `ValidationError … budget_cap_inr…` | stale `.env` with inline comments — `cp .env.example .env`, re-add your keys |
 | pnpm `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | global pnpm 11 — `corepack enable` |

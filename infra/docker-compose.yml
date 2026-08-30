@@ -26,7 +26,13 @@ services:
   appdb:
     image: mongo:7
     container_name: forgeflow-appdb
-    restart: unless-stopped
+    # `always`, not `unless-stopped`, and deliberately: this and `proxy` are the two containers a
+    # preview needs but nobody re-runs compose for. They are started detached (`make host-deps`)
+    # and then expected to just be there, while `unless-stopped` explicitly does NOT restart a
+    # container that was stopped when the daemon went down -- which is every docker restart. The
+    # sandbox, meanwhile, comes back on demand via the sandbox manager, so the failure lands as
+    # "the generated app cannot resolve forgeflow-appdb" long after the restart that caused it.
+    restart: always
     ports:
       # 27018 on the host (27017 is the control-plane mongo) so a control plane running *outside*
       # docker — `uvicorn` on the host — can still reach it for provisioning + the data browser.
@@ -96,7 +102,9 @@ services:
 
   proxy:
     image: caddy:2
-    restart: unless-stopped
+    # `always` for the same reason as `appdb` above: the only route into a sandbox must not need a
+    # human to notice it is gone after a docker restart.
+    restart: always
     depends_on:
       - api
       - web

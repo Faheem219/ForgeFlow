@@ -52,8 +52,23 @@ _STARTING = {"created", "restarting"}
 _STOPPED = {"exited", "paused", "dead", "removing"}
 
 
+#: Every sandbox container carries this prefix — which is also how the shared dev-stack services
+#: (the proxy, the generated apps' database) are told apart from sandboxes on the preview network.
+SANDBOX_NAME_PREFIX = "forgeflow-sb-"
+
+
 def container_name(project_id: str) -> str:
-    return f"forgeflow-sb-{project_id}"
+    return f"{SANDBOX_NAME_PREFIX}{project_id}"
+
+
+def _networks_of(container: object) -> dict[str, Any]:
+    """The networks a container is *configured* for — populated even while it is stopped."""
+    settings = (getattr(container, "attrs", None) or {}).get("NetworkSettings") or {}
+    return settings.get("Networks") or {}
+
+
+def _is_sandbox(container: object) -> bool:
+    return str(getattr(container, "name", "")).startswith(SANDBOX_NAME_PREFIX)
 
 
 def volume_name(project_id: str) -> str:
@@ -402,7 +417,8 @@ class SandboxManager:
             return False
         attached = (getattr(network, "attrs", None) or {}).get("Containers") or {}
         return any(
-            not str(info.get("Name", "")).startswith("forgeflow-sb-") for info in attached.values()
+            not str(info.get("Name", "")).startswith(SANDBOX_NAME_PREFIX)
+            for info in attached.values()
         )
 
     async def detach_preview_network(self, project_id: str) -> None:
@@ -420,6 +436,121 @@ class SandboxManager:
             await asyncio.to_thread(network.disconnect, container.id, force=True)
         except APIError:
             logger.debug("sandbox %s was not on the preview network", project_id, exc_info=True)
+
+    # -- preview dependencies (proxy + generated-app database) -------------------------
+
+    async def _preview_dependencies(self) -> list[Any]:
+        """Every container configured for the preview network that is not a sandbox.
+
+        Two of them exist and a preview needs both: the Caddy proxy (the only route into a sandbox)
+        and the MongoDB the generated apps use. Identified by exclusion — the same rule
+        :meth:`preview_proxy_attached` applies — so this keeps working whatever compose names them.
+        """
+        client = self._client()
+        try:
+            containers = await asyncio.to_thread(client.containers.list, all=True)
+        except (DockerException, APIError):
+            logger.debug("could not list containers for the preview dependencies", exc_info=True)
+            return []
+        network = str(get_config().get("preview_network_name"))
+        return [c for c in containers if not _is_sandbox(c) and network in _networks_of(c)]
+
+    async def start_preview_dependencies(self) -> list[str]:
+        """Restart the preview's stopped dependencies. Returns the names started.
+
+        Restarting docker leaves these two exited: they are compose services whose restart policy
+        does not survive a daemon restart, and nothing re-runs compose afterwards. The *sandbox*
+        meanwhile comes back on its own, because :meth:`ensure` starts it on demand — so the dev
+        servers run inside a sandbox whose two neighbours are gone, and the two symptoms that
+        produces both point away from the cause: the preview URL refuses to connect (no proxy) and
+        the generated backend dies on ``getaddrinfo EAI_AGAIN forgeflow-appdb`` (no database, so no
+        DNS record for it either). One cause, one fix — start them again.
+
+        Best effort: a dependency that cannot be started is logged, and the preflight warnings in
+        :mod:`app.sandbox.preview` still tell the user which one is missing.
+        """
+        started: list[str] = []
+        for container in await self._preview_dependencies():
+            if getattr(container, "status", "") == "running":
+                continue
+            try:
+                await asyncio.to_thread(container.start)
+            except (DockerException, APIError):
+                logger.warning(
+                    "could not start preview dependency %s", container.name, exc_info=True
+                )
+                continue
+            started.append(str(container.name))
+        if started:
+            logger.info("restarted preview dependencies: %s", ", ".join(started))
+            await self._await_dependencies_ready(started)
+        return started
+
+    async def _await_dependencies_ready(self, names: list[str]) -> None:
+        """Wait (bounded) for just-started dependencies to actually serve.
+
+        Load-bearing for the database: mongo needs a moment before it accepts connections, and the
+        generated backend connects exactly **once**, at boot (``templates/app-skeleton`` starts the
+        HTTP server first and then dials mongo, logging a failure rather than retrying). Launch the
+        dev servers into a database that is still starting and the user reads a connection error
+        that is already stale by the time they see it.
+        """
+        timeout_s = float(get_config().get("preview_deps_ready_timeout_s"))
+        deadline = time.monotonic() + timeout_s
+        pending = set(names)
+        while pending and time.monotonic() < deadline:
+            for name in sorted(pending):
+                if await self._dependency_ready(name):
+                    pending.discard(name)
+            if pending:
+                await asyncio.sleep(0.5)
+        if pending:
+            logger.warning(
+                "preview dependencies still not ready after %.0fs: %s",
+                timeout_s,
+                ", ".join(sorted(pending)),
+            )
+
+    async def _dependency_ready(self, name: str) -> bool:
+        """Whether one dependency is serving — healthy when it declares a healthcheck, else up."""
+        client = self._client()
+        try:
+            container = await asyncio.to_thread(client.containers.get, name)
+            await asyncio.to_thread(container.reload)
+        except (NotFound, DockerException, APIError):
+            return True  # gone or unreadable: there is nothing left to wait for
+        state = (getattr(container, "attrs", None) or {}).get("State") or {}
+        health = ((state.get("Health") or {}).get("Status") or "").strip()
+        if health:
+            return health == "healthy"
+        return str(getattr(container, "status", "")) == "running"
+
+    async def preview_dns_state(self, host: str) -> str:
+        """Whether ``host`` resolves on the preview network: running | stopped | absent | unknown.
+
+        Docker's embedded DNS answers for a container's name and its network aliases, and only
+        while that container is **running** — a stopped one is not in the zone at all, which is why
+        a generated app gets ``EAI_AGAIN`` (name resolution failed) rather than a refused
+        connection. Distinguishing *stopped* from *absent* matters: one is recoverable here, the
+        other means the container was never created and only the user can fix it.
+        """
+        client = self._client()
+        try:
+            containers = await asyncio.to_thread(client.containers.list, all=True)
+        except (DockerException, APIError):
+            return "unknown"
+        network = str(get_config().get("preview_network_name"))
+        found = False
+        for container in containers:
+            entry = _networks_of(container).get(network) or {}
+            names = {str(getattr(container, "name", ""))}
+            names |= {str(alias) for alias in (entry.get("Aliases") or [])}
+            if network not in _networks_of(container) or host not in names:
+                continue
+            found = True
+            if str(getattr(container, "status", "")) == "running":
+                return "running"
+        return "stopped" if found else "absent"
 
     # -- egress network (phase-39) -----------------------------------------------------
 

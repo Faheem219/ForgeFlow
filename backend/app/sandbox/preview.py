@@ -98,6 +98,17 @@ DB_UNREACHABLE_WARNING = (
     "own connection string."
 )
 
+#: Shown when the app database is addressed by a docker name that nothing currently answers to.
+#: Docker's embedded DNS only holds *running* containers, so the generated backend fails at boot
+#: with `getaddrinfo EAI_AGAIN forgeflow-appdb` — a resolver error that reads like a typo in the
+#: generated config rather than "that container is not running". The usual cause is a docker
+#: restart: the sandbox comes back on demand, its neighbours do not.
+DB_HOST_UNRESOLVABLE_WARNING = (
+    "The generated app's database host `{host}` does not resolve on the preview network — nothing "
+    "is running under that name, so the app fails to connect with `EAI_AGAIN`. Start it with "
+    "`make host-deps` (or `make dev` for the whole stack)."
+)
+
 #: Hosts that can never mean "the machine running ForgeFlow" from inside a container.
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
@@ -112,6 +123,23 @@ def loopback_db_host(uri: str) -> str | None:
         return None
     port = urlsplit(uri).port
     return f"{host}:{port}" if port else host
+
+
+def docker_db_host(uri: str) -> str | None:
+    """The bare docker hostname ``uri`` names, or ``None`` when it is not one.
+
+    A single-label host can only be a container name or a network alias: Atlas hostnames, IPv4
+    literals and every other routable address carry a dot. Loopback is excluded because it is a
+    *different* diagnosis with a different fix (see :func:`loopback_db_host`).
+
+    Only the host is returned — never the credentials a BYO connection string may carry.
+    """
+    host = urlsplit(uri).hostname or ""
+    if not host or host.lower() in _LOOPBACK_HOSTS:
+        return None
+    if "." in host or ":" in host:
+        return None
+    return host
 
 
 @dataclass
@@ -289,6 +317,13 @@ class PreviewService:
         # node_modules at all, so `pnpm dev` would exit instantly with "vite: not found"; and the
         # install's egress window is cleanest before the *internal* preview network is attached.
         if isinstance(runtime, DockerRuntime):
+            # Before anything is launched: a preview needs the proxy and the generated-app database
+            # as much as it needs the sandbox, and only the sandbox comes back by itself after a
+            # docker restart. Doing this first also gives mongo the install's duration to finish
+            # starting, which is time the generated backend -- one connection attempt, at boot --
+            # does not otherwise get.
+            if bool(config.get("preview_autostart_deps")):
+                await get_manager().start_preview_dependencies()
             await ensure_dependencies(project, runtime)
             await get_manager().attach_preview_network(project_id)
 
@@ -342,6 +377,7 @@ class PreviewService:
                     limit,
                 )
             db_host = loopback_db_host(be_env["MONGODB_URI"])
+            docker_host = docker_db_host(be_env["MONGODB_URI"])
             if db_host:
                 warnings.append(DB_UNREACHABLE_WARNING.format(host=db_host))
                 logger.warning(
@@ -349,6 +385,20 @@ class PreviewService:
                     project_id,
                     db_host,
                 )
+            elif docker_host is not None:
+                # A name that resolved yesterday resolves to nothing once its container stops, and
+                # the only trace is `EAI_AGAIN` in the generated app's own log. Checked after the
+                # restart above, so this fires only when starting it could not (or did not) help.
+                dns_state = await get_manager().preview_dns_state(docker_host)
+                if dns_state in ("stopped", "absent"):
+                    warnings.append(DB_HOST_UNRESOLVABLE_WARNING.format(host=docker_host))
+                    logger.warning(
+                        "preview started for %s with an app database host that does not resolve "
+                        "(%s: %s)",
+                        project_id,
+                        docker_host,
+                        dns_state,
+                    )
         state.warning = " ".join(warnings) or None
         self._state[project_id] = state
 

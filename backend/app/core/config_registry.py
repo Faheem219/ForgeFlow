@@ -783,6 +783,21 @@ _KEYS: tuple[ConfigKey, ...] = (
         extra=_docker_name,
     ),
     ConfigKey(
+        "preview_autostart_deps",
+        Cat.preview,
+        "bool",
+        "Restart the stopped containers a preview depends on (the proxy and the generated-app "
+        "database) when a preview starts, instead of only warning about them.",
+    ),
+    ConfigKey(
+        "preview_deps_ready_timeout_s",
+        Cat.preview,
+        "int",
+        "How long preview start waits for a restarted dependency to become healthy.",
+        minimum=0,
+        maximum=600,
+    ),
+    ConfigKey(
         "preview_base_domain",
         Cat.preview,
         "str",

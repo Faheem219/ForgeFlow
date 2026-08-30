@@ -9,7 +9,7 @@ whether an existing sandbox predates the current image/mount spec.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from docker.errors import APIError, ImageNotFound, NotFound
@@ -33,6 +33,8 @@ class FakeContainer:
         mounts: Sequence[str] | None = None,
         image_id: str | None = None,
         network_mode: str = "",
+        networks: Mapping[str, Sequence[str]] | None = None,
+        health: str = "",
     ) -> None:
         self._client = client
         self.name = name
@@ -59,6 +61,15 @@ class FakeContainer:
             "HostConfig": {
                 "NetworkMode": network_mode or str(self.run_kwargs.get("network_mode", ""))
             },
+            # The networks a container is *configured* for. Docker reports these even while it is
+            # stopped, which is what lets the manager find a preview dependency that is down.
+            "NetworkSettings": {
+                "Networks": {
+                    name: {"Aliases": list(aliases)} for name, aliases in (networks or {}).items()
+                }
+            },
+            # Present only when the container declares a healthcheck (compose's appdb does).
+            "State": {"Health": {"Status": health}} if health else {},
         }
 
     def reload(self) -> None:  # docker refreshes .status; our state is already live
@@ -117,6 +128,8 @@ class FakeContainers:
         image: str = "img",
         mounts: Sequence[str] | None = None,
         network_mode: str = "",
+        networks: Mapping[str, Sequence[str]] | None = None,
+        health: str = "",
     ) -> FakeContainer:
         container = FakeContainer(
             self._client,
@@ -126,6 +139,8 @@ class FakeContainers:
             status=status,
             mounts=mounts if mounts is not None else [WORKSPACE, SANDBOX_HOME],
             network_mode=network_mode,
+            networks=networks,
+            health=health,
         )
         self._store[name] = container
         return container

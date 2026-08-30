@@ -233,6 +233,14 @@ class Settings(BaseSettings):
     preview_network_name: str = "forgeflow-preview"
     # Routed network the sandbox joins *only* for a live validation run (phase-39), then leaves.
     egress_network_name: str = "forgeflow-egress"
+    # A preview needs two containers that are not the sandbox: the proxy (the only route in) and
+    # the generated apps' database. Restarting docker leaves both exited while the sandbox itself
+    # comes back on demand, so previews break in two ways that both point away from the cause.
+    # When true, preview start restarts whatever it finds stopped on the preview network.
+    preview_autostart_deps: bool = True
+    # How long preview start waits for a dependency it restarted to serve (mongo needs a moment,
+    # and the generated backend only dials it once, at boot).
+    preview_deps_ready_timeout_s: int = 45
     preview_base_domain: str = (
         ""  # set in prod → https://<project>.<domain>; else *.preview.localhost
     )
