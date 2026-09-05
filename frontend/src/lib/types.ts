@@ -146,6 +146,12 @@ export interface TestResultDto {
   failure: TestFailure | null;
 }
 
+/**
+ * Where a run was executed: the sandbox preview, or the deployed URL (live validation, phase-39).
+ * Both share one collection, so a reader that means one of them has to say which.
+ */
+export type TestRunEnv = 'sandbox' | 'live';
+
 /** What the run *list* endpoint returns — counts only, no per-test results. */
 export interface TestRunSummaryDto {
   id: string;
@@ -154,7 +160,7 @@ export interface TestRunSummaryDto {
   failed: number;
   skipped: number;
   green: boolean;
-  env: string;
+  env: TestRunEnv;
   created_at: string;
 }
 

@@ -1,5 +1,11 @@
 import { apiFetch } from '../../lib/apiClient';
-import type { RepairLoopDto, TestRunDto, TestRunSummaryDto, TestScope } from '../../lib/types';
+import type {
+  RepairLoopDto,
+  TestRunDto,
+  TestRunEnv,
+  TestRunSummaryDto,
+  TestScope,
+} from '../../lib/types';
 
 export function runTests(
   projectId: string,
@@ -15,9 +21,16 @@ export function runTests(
 /**
  * Test runs, newest first (the backend sorts descending by creation). Summaries only — fetch a
  * run with {@link getTestRun} for its per-test results.
+ *
+ * Scoped to the sandbox on purpose: live-validation runs (phase-39) share the same collection but
+ * only cover the E2E subset, so an unscoped list would make the Test stage show the live run's
+ * handful of results as if the suites had shrunk. Live results come from `getLiveRun` instead.
  */
-export function listTestRuns(projectId: string): Promise<TestRunSummaryDto[]> {
-  return apiFetch<TestRunSummaryDto[]>(`/projects/${projectId}/tests/runs`);
+export function listTestRuns(
+  projectId: string,
+  env: TestRunEnv = 'sandbox',
+): Promise<TestRunSummaryDto[]> {
+  return apiFetch<TestRunSummaryDto[]>(`/projects/${projectId}/tests/runs?env=${env}`);
 }
 
 export function getTestRun(projectId: string, runId: string): Promise<TestRunDto> {

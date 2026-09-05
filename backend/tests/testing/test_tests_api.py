@@ -50,14 +50,16 @@ def _result(criterion: str, status: TestStatus) -> dict[str, object]:
     ).model_dump(mode="json")
 
 
-async def _insert_run(project_id: str, *statuses: TestStatus) -> TestRun:
+async def _insert_run(
+    project_id: str, *statuses: TestStatus, env: TestEnv = TestEnv.sandbox
+) -> TestRun:
     results = [_result(f"ac-{i}", s) for i, s in enumerate(statuses)]
     failures = [r for r, s in zip(results, statuses, strict=True) if s is TestStatus.failed]
     return await TestRun(
         project_id=PydanticObjectId(project_id),
         results=results,
         failures=failures,
-        env=TestEnv.sandbox,
+        env=env,
     ).insert()
 
 
@@ -110,6 +112,35 @@ async def test_list_and_get_runs(client: AsyncClient) -> None:
     assert detail.status_code == 200
     body = detail.json()
     assert body["failed"] == 1 and len(body["results"]) == 2
+
+
+async def test_listing_is_scoped_to_the_sandbox_by_default(client: AsyncClient) -> None:
+    """A live run must not masquerade as the Test stage's newest result.
+
+    Live validation (phase-39) runs only the E2E subset against the deployed URL and persists it in
+    the same collection. An unscoped listing put that run first, so the Test panel — which reads
+    ``data[0]`` — showed the full suite collapsing to a handful of tests until it was re-run.
+    """
+    token = await _register(client, "envscope@example.com")
+    pid = await _project(client, token)
+
+    sandbox = await _insert_run(pid, TestStatus.passed, TestStatus.passed)
+    # Newer than the sandbox run, but it belongs to Validate, not to the Test stage.
+    live = await _insert_run(pid, TestStatus.passed, env=TestEnv.live)
+
+    default = await client.get(f"/projects/{pid}/tests/runs", headers=_auth(token))
+    assert default.status_code == 200
+    assert [r["id"] for r in default.json()] == [str(sandbox.id)]
+
+    only_live = await client.get(f"/projects/{pid}/tests/runs?env=live", headers=_auth(token))
+    assert [r["id"] for r in only_live.json()] == [str(live.id)]
+
+    every = await client.get(f"/projects/{pid}/tests/runs?env=all", headers=_auth(token))
+    assert {r["id"] for r in every.json()} == {str(sandbox.id), str(live.id)}
+    assert every.json()[0]["id"] == str(live.id)  # newest first, across environments
+
+    bad = await client.get(f"/projects/{pid}/tests/runs?env=nope", headers=_auth(token))
+    assert bad.status_code == 422
 
 
 async def test_run_ownership_is_enforced(client: AsyncClient) -> None:

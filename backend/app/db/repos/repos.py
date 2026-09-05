@@ -249,8 +249,20 @@ class TestRunRepo(BaseRepo[TestRun]):
     def __init__(self) -> None:
         super().__init__(TestRun)
 
-    async def list_for_project(self, project_id: PydanticObjectId) -> list[TestRun]:
-        return await TestRun.find({"project_id": project_id}).sort("-created_at").to_list()
+    async def list_for_project(
+        self, project_id: PydanticObjectId, env: TestEnv | None = None
+    ) -> list[TestRun]:
+        """A project's runs, newest first, optionally restricted to one environment.
+
+        Same caveat as :meth:`latest`: sandbox and live runs (phase-39) share this collection, so a
+        caller that means one of them must say which — otherwise a live run, which covers only the
+        E2E subset, surfaces as if it were the sandbox suite's newest result.
+        """
+        query: dict[str, Any] = {"project_id": project_id}
+        if env is not None:
+            query["env"] = env
+        # `_id` breaks ties: two runs created in the same millisecond otherwise order arbitrarily.
+        return await TestRun.find(query).sort("-created_at", "-_id").to_list()
 
     async def latest(
         self, project_id: PydanticObjectId, env: TestEnv | None = None
@@ -263,7 +275,7 @@ class TestRunRepo(BaseRepo[TestRun]):
         query: dict[str, Any] = {"project_id": project_id}
         if env is not None:
             query["env"] = env
-        return await TestRun.find(query).sort("-created_at").first_or_none()
+        return await TestRun.find(query).sort("-created_at", "-_id").first_or_none()
 
 
 class RepairAttemptRepo(BaseRepo[RepairAttempt]):

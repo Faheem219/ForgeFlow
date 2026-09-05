@@ -56,9 +56,39 @@ const RUN: TestRunDto = {
   failures: [],
 };
 
+/**
+ * A live-validation run (phase-39): the same collection, but only the E2E subset against the
+ * deployed URL. It is newer than any sandbox run once Validate has been used.
+ */
+const LIVE_RUN: TestRunDto = {
+  id: 'live1',
+  total: 1,
+  passed: 1,
+  failed: 0,
+  skipped: 0,
+  green: true,
+  env: 'live',
+  created_at: '',
+  suite_refs: [],
+  stdout_ref: null,
+  results: [
+    {
+      name: 'home page renders the todo list',
+      status: 'passed',
+      framework: 'playwright',
+      criterion_id: null,
+      file: 'frontend/e2e/home.spec.ts',
+      duration_ms: 900,
+      failure: null,
+    },
+  ],
+  failures: [],
+};
+
 interface MockState {
   runs: TestRunDto[];
   postCalls: Array<Record<string, unknown>>;
+  listUrls: string[];
 }
 
 /** The list endpoint returns counts only — mirror that, or the mock hides the hydration path. */
@@ -88,7 +118,13 @@ function installFetch(state: MockState): void {
         const found = state.runs.find((r) => r.id === detail[1]);
         return Promise.resolve(found ? json(found) : json({ detail: 'not found' }, 404));
       }
-      if (url.includes('/tests/runs')) return Promise.resolve(json(state.runs.map(summary)));
+      if (url.includes('/tests/runs')) {
+        // Mirror the server: the listing is scoped by `env` (default sandbox, `all` for both).
+        state.listUrls.push(url);
+        const env = new URL(url, 'http://test').searchParams.get('env') ?? 'sandbox';
+        const scoped = env === 'all' ? state.runs : state.runs.filter((r) => r.env === env);
+        return Promise.resolve(json(scoped.map(summary)));
+      }
       return Promise.resolve(json({}));
     }),
   );
@@ -105,7 +141,7 @@ function renderPanel(run: TestRunSummaryDto | null = summary(RUN)) {
 let state: MockState;
 
 beforeEach(() => {
-  state = { runs: [RUN], postCalls: [] };
+  state = { runs: [RUN], postCalls: [], listUrls: [] };
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -156,6 +192,21 @@ describe('ResultsPanel', () => {
     await waitFor(() =>
       expect(screen.getByTestId('test-stdout')).toHaveTextContent('PASS todos.test.ts'),
     );
+  });
+
+  it('lists sandbox runs only, so a live-validation run cannot replace the suite', async () => {
+    // Regression: an unscoped listing put the newest *live* run first, and the panel reads the
+    // head of that list — so after running Validate the Test stage showed the E2E smoke test as if
+    // the suite had shrunk to one, until the suites were re-run.
+    state.runs = [LIVE_RUN, RUN];
+    installFetch(state);
+    renderPanel(null);
+
+    expect(await screen.findByTestId('test-summary')).toHaveTextContent('1/2 passing');
+    expect(await screen.findByText('adds a todo')).toBeInTheDocument();
+    expect(screen.queryByText('home page renders the todo list')).not.toBeInTheDocument();
+    expect(state.listUrls.length).toBeGreaterThan(0);
+    expect(state.listUrls.every((u) => u.includes('env=sandbox'))).toBe(true);
   });
 
   it('invites a first run when there are none', async () => {
