@@ -7,8 +7,11 @@ JSON, so no multipart dependency) to the blob store; the intake then references 
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
+from app.db.models import DesignQuestion
 from app.design.base import DesignCapabilities, DesignScreenRef, ProviderHealth
 
 
@@ -37,6 +40,34 @@ class DesignIntake(BaseModel):
     #: screen picker so "make this darker" changes the screen the user is actually looking at,
     #: not whichever one happened to be generated last.
     design_ref: str | None = None
+    #: Close the provider's pending question unanswered and design without it — the escape hatch
+    #: for a user who would rather have *a* design than answer ("Design without Stitch"). The
+    #: asking provider is excluded and the fallback chain serves the request instead.
+    dismiss_question: bool = False
+
+
+class DesignQuestionPublic(BaseModel):
+    """The design provider's pending question, for the stage UI to put to the user."""
+
+    id: str
+    provider: str
+    question: str
+    #: Quick replies the provider offered, when it offered any — rendered as one-click answers.
+    suggestions: list[str] = Field(default_factory=list)
+    #: ``text`` (a generate) or ``refine`` — what the answer will resume.
+    source: str
+    created_at: datetime
+
+    @classmethod
+    def from_question(cls, question: DesignQuestion) -> DesignQuestionPublic:
+        return cls(
+            id=str(question.id),
+            provider=question.provider,
+            question=question.question,
+            suggestions=question.suggestions,
+            source=question.source,
+            created_at=question.created_at,
+        )
 
 
 class UploadImage(BaseModel):

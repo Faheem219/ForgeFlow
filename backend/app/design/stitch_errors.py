@@ -25,6 +25,11 @@ class StitchErrorKind(StrEnum):
     # another provider may well succeed, so this DOES advance the fallback chain (phase-48).
     contract = "contract"
     unsupported = "unsupported"  # the API has no such capability (e.g. screenshot→UI)
+    # The provider answered with a question rather than a design, and the transport has already
+    # spent its blind-confirmation budget on it. Not a failure: another provider cannot answer it
+    # either, so this does NOT advance the fallback chain (see resilient.py) — it is handed to the
+    # design stage, which parks it as a DesignQuestion for the user to answer.
+    clarification = "clarification"
 
 
 _DEFAULT_HINTS: dict[StitchErrorKind, str] = {
@@ -46,6 +51,10 @@ _DEFAULT_HINTS: dict[StitchErrorKind, str] = {
         "Stitch rejected the call or answered unexpectedly — its API may have changed. Run "
         "`uv run python -m scripts.stitch_probe` to see the tools it currently exposes; meanwhile "
         "the design falls back to 'figma'/'fake'."
+    ),
+    StitchErrorKind.clarification: (
+        "Stitch needs a decision before it can design this. Answer its question in the design "
+        "stage, or design without Stitch to fall back to 'figma'/'fake'."
     ),
     StitchErrorKind.unsupported: (
         "Stitch's API cannot do this (its MCP surface is text-prompt only). Use a text prompt, "

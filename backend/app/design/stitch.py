@@ -15,6 +15,14 @@ Stitch web app but has no tool on the API, so :meth:`StitchDesignProvider.capabi
 ``from_image=False`` and screenshot intake degrades to the next provider in the fallback chain
 (phase-48) instead of silently producing a design that ignored the screenshots.
 
+**Conversational replies:** Stitch answers a broad brief with a scope proposal and a question
+("shall I proceed with these five screens?") as often as it answers with a design. A proposal only
+needs a yes, so :meth:`HttpStitchClient._generate` says it — bounded by
+``STITCH_CLARIFY_MAX_REPLIES`` — rather than letting a usable brief collapse onto the figma/fake
+fallback. A question that survives that budget wants a decision nobody here can make, so it is
+raised as ``clarification`` and the design stage parks it for the user to answer (phase-19,
+``app/design/questions.py``).
+
 Failures are classified (auth/quota/transient/fatal/unsupported) as :class:`ProviderError` with a
 fallback hint. Missing credentials → ``health()==down`` (never a crash) so the stage falls back.
 Keys and tokens are never logged or placed in any :class:`DesignResult`/artifact/event.
@@ -323,6 +331,65 @@ def _clarifying_question(payload: Mapping[str, Any]) -> str | None:
         if isinstance(text, str) and text.strip():
             texts.append(text.strip())
     return " ".join(texts) or None
+
+
+#: Keys a quick-reply list has been seen under. The Stitch web app offers the model's own
+#: suggested replies as chips; the MCP payload is not documented to carry them, so this reads
+#: defensively and simply finds nothing when they are absent.
+_SUGGESTION_KEYS = ("suggestions", "suggestedReplies", "suggested_replies", "quickReplies")
+
+
+def _suggested_replies(payload: Mapping[str, Any]) -> list[str]:
+    """Quick replies offered alongside a clarifying question, if the response carried any."""
+    found: list[str] = []
+    sources: list[Any] = [payload, *(payload.get("outputComponents") or [])]
+    for source in sources:
+        if not isinstance(source, Mapping):
+            continue
+        for key in _SUGGESTION_KEYS:
+            for item in source.get(key) or []:
+                text = item if isinstance(item, str) else ""
+                if isinstance(item, Mapping):
+                    text = str(item.get("text") or item.get("label") or "")
+                text = text.strip()
+                if text and text not in found:
+                    found.append(text)
+    return found[:6]
+
+
+def _decision_directive() -> str:
+    """The standing instruction that keeps a generate from turning into a conversation.
+
+    ForgeFlow has no one at the keyboard when the design stage runs, and a question spends a round
+    trip that produces no screens, so the model is told up front to decide rather than ask.
+    """
+    return (
+        "Generate the screens now. Do not ask questions and do not wait for confirmation — "
+        "make sensible design decisions for anything the brief leaves open."
+    )
+
+
+def _design_prompt(brief: str) -> str:
+    """A generate/edit prompt: the caller's brief plus the decide-don't-ask directive."""
+    return f"{brief.strip()}\n\n{_decision_directive()}"
+
+
+def _confirmation_prompt(brief: str, question: str) -> str:
+    """The answer to a clarifying question — "yes, proceed" — as a self-contained prompt.
+
+    Stitch's ``generate_screen_from_text``/``edit_screens`` advertise no session handle (their
+    schemas are ``projectId``/``prompt``/…), so a reply cannot be threaded onto the conversation
+    that asked: it lands as a brand-new prompt and has to carry the proposal being confirmed *and*
+    the original brief with it. The question is quoted back because it is where the model put the
+    scope it proposed ("a cohesive 5-screen experience covering …") — dropping it would let the
+    retry come back with a narrower design than the one just offered.
+    """
+    return (
+        "Yes — proceed exactly as you proposed, covering every screen you listed, and "
+        "generate the designs now.\n\n"
+        f"Your proposal was:\n{question.strip()[:2000]}\n\n"
+        f"The request it answered was:\n{brief.strip()}\n\n{_decision_directive()}"
+    )
 
 
 def _summarize(payload: Mapping[str, Any]) -> str:
@@ -748,7 +815,12 @@ class HttpStitchClient:
         }
 
     async def _hydrate(
-        self, project_id: str, payload: Mapping[str, Any], headers: Headers
+        self,
+        project_id: str,
+        payload: Mapping[str, Any],
+        headers: Headers,
+        *,
+        brief: str = "",
     ) -> StitchDesignPayload:
         """Turn a tool result into a design payload, fetching the screen and its HTML as needed.
 
@@ -776,20 +848,28 @@ class HttpStitchClient:
         html = _decode_inline(inline) if inline else await self._resolve_html(html_url, headers)
         if not html.strip():
             # Never save a blank design: the stage would show "nothing to preview" and the build
-            # would have no context. Fail as `contract` (not `fatal` — that kind skips the fallback
-            # chain entirely, see resilient.py's `_NON_RECOVERABLE`, and another provider deserves a
-            # chance here same as any other unreadable response) so figma/fake still get a shot —
-            # but say something the user can actually act on when we can tell why.
+            # would have no context. Which failure this is matters, though: a question Stitch is
+            # waiting on goes to the *user* (`clarification`, below), while an unreadable response
+            # is `contract` — recoverable, so figma/fake still get a shot at it, unlike `fatal`,
+            # which skips the chain entirely (see resilient.py's `_NON_RECOVERABLE`).
             question = _clarifying_question(last)
             if question:
+                # Not a failure and not something another provider can answer either: the model
+                # wants a decision. `clarification` short-circuits the fallback chain so the design
+                # stage can park it as a DesignQuestion and put it to the user, instead of quietly
+                # designing something nobody asked for. Everything needed to resume the call rides
+                # on the detail, because this turn produced no artifact to read it back from.
                 raise stitch_error(
-                    StitchErrorKind.contract,
+                    StitchErrorKind.clarification,
                     f"Stitch asked for more detail instead of generating a design: "
                     f'"{question[:300]}"',
-                    hint=(
-                        "Try a more detailed prompt — what the app is for, who uses it, and its "
-                        "key screens or actions. Meanwhile the design falls back to 'figma'/'fake'."
-                    ),
+                    detail={
+                        "provider": PROVIDER_KEY,
+                        "question": question,
+                        "suggestions": _suggested_replies(last),
+                        "prompt": brief,
+                        "workspace": project_id,
+                    },
                 )
             raise stitch_error(
                 StitchErrorKind.contract,
@@ -963,6 +1043,51 @@ class HttpStitchClient:
                 raise error
             await self._sleep(SCREEN_POLL_INTERVAL_S)
 
+    # -- answering a conversational reply --------------------------------------------------------
+
+    async def _generate(
+        self,
+        canonical: str,
+        arguments: dict[str, Any],
+        headers: Headers,
+        *,
+        brief: str,
+    ) -> dict[str, Any]:
+        """Run a generate/edit, confirming a proposal rather than surrendering the design.
+
+        Given a broad brief, Stitch's model may answer conversationally — a scope proposal plus
+        "shall I proceed?" — with no screen attached (:func:`_clarifying_question`). Nobody
+        downstream can answer that: the design stage runs unattended, so the reply used to end as a
+        ``contract`` error and the design fell through to the figma/fake chain, which is how a
+        perfectly good brief came back as a placeholder design.
+
+        The confirmation is therefore sent from here, bounded by ``STITCH_CLARIFY_MAX_REPLIES``
+        (each one is another tool call, so the budget is deliberately small). An exhausted budget
+        returns the last conversational payload untouched and :meth:`_hydrate` raises the same
+        actionable "asked for more detail" error as before, so the fallback chain still works.
+        """
+        payload = await self._call_tool(
+            canonical, arguments, headers, timeout=self._generate_timeout()
+        )
+        budget = max(0, int(get_config().get("stitch_clarify_max_replies")))
+        for attempt in range(budget):
+            question = _clarifying_question(payload)
+            if question is None:
+                break
+            logger.info(
+                "stitch: %s asked a question instead of designing; confirming (%d/%d)",
+                canonical,
+                attempt + 1,
+                budget,
+            )
+            payload = await self._call_tool(
+                canonical,
+                {**arguments, "prompt": _confirmation_prompt(brief, question)},
+                headers,
+                timeout=self._generate_timeout(),
+            )
+        return payload
+
     # -- the StitchClient Protocol -------------------------------------------------------------
 
     async def text_to_ui(
@@ -974,18 +1099,18 @@ class HttpStitchClient:
         title: str | None = None,
     ) -> StitchDesignPayload:
         project_id = await self._ensure_project(headers, workspace, title)
-        arguments: dict[str, Any] = {"projectId": project_id, "prompt": prompt}
+        arguments: dict[str, Any] = {"projectId": project_id, "prompt": _design_prompt(prompt)}
         model_id = str(get_config().get("stitch_model_id")).strip()
         if model_id:
             arguments["modelId"] = model_id
         known = await self._known_screen_ids(project_id, headers)
         try:
-            payload = await self._call_tool(
-                TOOL_GENERATE_FROM_TEXT, arguments, headers, timeout=self._generate_timeout()
+            payload = await self._generate(
+                TOOL_GENERATE_FROM_TEXT, arguments, headers, brief=prompt
             )
         except ProviderError as exc:
             payload = await self._recover_generation(project_id, known, headers, exc)
-        return await self._hydrate(project_id, payload, headers)
+        return await self._hydrate(project_id, payload, headers, brief=prompt)
 
     async def refine(
         self, external_ref: str, instruction: str, *, headers: Headers
@@ -993,15 +1118,15 @@ class HttpStitchClient:
         project_id, screen_id = self._split_ref(external_ref, self._project_id)
         known = await self._known_screen_ids(project_id, headers)
         try:
-            payload = await self._call_tool(
+            payload = await self._generate(
                 TOOL_EDIT_SCREENS,
                 {
                     "projectId": project_id,
                     "selectedScreenIds": [screen_id],
-                    "prompt": instruction,
+                    "prompt": _design_prompt(instruction),
                 },
                 headers,
-                timeout=self._generate_timeout(),
+                brief=instruction,
             )
         except ProviderError as exc:
             # An edit is as slow as a generate and likewise adds screens to the project, so the
@@ -1011,7 +1136,7 @@ class HttpStitchClient:
         # screen id is the one we edited unless the server names a new one.
         if not _pluck(_screen_object(payload), _SCREEN_KEYS):
             payload = {**payload, "screenId": screen_id}
-        return await self._hydrate(project_id, payload, headers)
+        return await self._hydrate(project_id, payload, headers, brief=instruction)
 
     async def list_screens(
         self, *, headers: Headers, workspace: str | None = None

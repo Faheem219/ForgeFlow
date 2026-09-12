@@ -35,6 +35,8 @@ class EventType(StrEnum):
     validate_status = "validate.status"
     sandbox_status = "sandbox.status"
     design_quota = "design.quota"
+    # The design provider is waiting on a decision from the user (app/design/questions.py).
+    design_question = "design.question"
     budget_halt = "budget.halt"
     budget_warning = "budget.warning"
     stage_transition = "stage.transition"

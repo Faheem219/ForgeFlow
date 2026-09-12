@@ -278,6 +278,12 @@ class Settings(BaseSettings):
     # (and charged for) the screens. Generation/edit calls get their own, much longer budget.
     stitch_generate_timeout_s: float = 300.0
     stitch_max_retries: int = 2  # extra attempts on transient errors (total = 1 + this)
+    # Given a broad brief, Stitch's model may answer with a proposal and a question ("shall I
+    # proceed with these 5 screens?") instead of a design. The tool takes no session handle, so
+    # the transport answers by re-asking with the confirmation folded into the prompt. A proposal
+    # only needs one yes; a question that survives that wants a decision no blind retry can make,
+    # so the stage parks it for the user instead (app/design/questions.py). 0 disables it.
+    stitch_clarify_max_replies: int = 1
     stitch_token_skew_s: float = 60.0  # refresh this many seconds before real expiry
     stitch_quota_soft_ratio: float = 0.9  # used/limit >= this → health() degraded
     # Figma MCP (phase-18): a static access token (no OAuth refresh). Blank token → health()=down.

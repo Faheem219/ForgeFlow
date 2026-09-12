@@ -8,6 +8,7 @@ from app.db.models.artifact import Artifact
 from app.db.models.config_audit import ConfigAudit
 from app.db.models.credential import Credential
 from app.db.models.deployment import STATUS_DELETED, Deployment, DeploymentRef
+from app.db.models.design_question import DesignQuestion, DesignQuestionStatus
 from app.db.models.design_quota import DesignQuota
 from app.db.models.message import Message
 from app.db.models.platform_setting import PlatformSetting
@@ -37,6 +38,7 @@ ALL_DOCUMENT_MODELS: list[type[Document]] = [
     Run,
     PlatformSetting,
     DesignQuota,
+    DesignQuestion,
 ]
 
 __all__ = [
@@ -48,6 +50,8 @@ __all__ = [
     "Credential",
     "Deployment",
     "DeploymentRef",
+    "DesignQuestion",
+    "DesignQuestionStatus",
     "DesignQuota",
     "AcceptanceCriterion",
     "Feature",

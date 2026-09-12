@@ -15,15 +15,19 @@ Two deliberate boundaries:
   different provider would fail anyway — refine stays single-provider (its ``fallback_hint`` still
   guides the user to switch). The corollary is :func:`provider_for_refine`: a refine must go to the
   provider that *produced* the design, which after a fallback is **not** the active one.
-- **``fatal`` never falls back.** A request *we* rejected locally is the caller's problem; another
-  provider will reject it too. Everything else — quota/auth/transient/unsupported/``contract``
-  (the provider rejected our call or drifted) /unknown — advances the chain.
+- **``fatal`` and ``clarification`` never fall back.** A request *we* rejected locally is the
+  caller's problem; another provider will reject it too. A ``clarification`` is not a failure at
+  all — the provider is waiting on a decision only the user can make, and quietly asking a
+  different provider to design something else is exactly the outcome this avoids (it goes to the
+  design stage, which parks it: ``app/design/questions.py``). Everything else —
+  quota/auth/transient/unsupported/``contract`` (the provider rejected our call or drifted)
+  /unknown — advances the chain.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -35,8 +39,9 @@ from app.design.registry import get_provider, resolve_active_key
 
 logger = logging.getLogger(__name__)
 
-#: The one error kind that must not trigger a fallback — the request itself is bad.
-_NON_RECOVERABLE = "fatal"
+#: Error kinds that must not trigger a fallback: the request itself is bad (``fatal``), or the
+#: provider is waiting on the user rather than failing (``clarification``).
+_NON_RECOVERABLE = frozenset({"fatal", "clarification"})
 
 
 class DesignCapability(StrEnum):
@@ -82,15 +87,24 @@ def _fallback_chain() -> list[str]:
     return [key.strip() for key in raw.split(",") if key.strip()]
 
 
-def candidate_keys(project: Project | None, capability: DesignCapability) -> list[str]:
+def candidate_keys(
+    project: Project | None,
+    capability: DesignCapability,
+    *,
+    exclude: Collection[str] = (),
+) -> list[str]:
     """The ordered, deduped, capability-filtered provider keys to try for ``capability``.
 
     Active provider first (honoring the per-project override), then the configured fallback chain.
     A key that is unregistered or cannot do ``capability`` is dropped rather than attempted.
+
+    ``exclude`` drops a provider the caller has already decided against — how "design without
+    Stitch" answers a clarifying question the user does not want to answer: the provider that is
+    waiting on them is skipped and the chain serves the design instead.
     """
     ordered: list[str] = []
     for key in [resolve_active_key(project), *_fallback_chain()]:
-        if key not in ordered:
+        if key not in ordered and key not in exclude:
             ordered.append(key)
 
     usable: list[str] = []
@@ -163,6 +177,7 @@ def _reason(exc: ProviderError) -> str:
         "unsupported": "doesn't support this",
         "contract": "rejected the request",
         "down": "is unavailable",
+        "clarification": "needs a decision from you",
     }
     return known.get(str(kind), "was unavailable")
 
@@ -170,20 +185,22 @@ def _reason(exc: ProviderError) -> str:
 def _is_recoverable(exc: ProviderError) -> bool:
     detail = exc.detail
     kind = detail.get("kind") if isinstance(detail, dict) else None
-    return str(kind) != _NON_RECOVERABLE
+    return str(kind) not in _NON_RECOVERABLE
 
 
 async def invoke_with_fallback(
     project: Project | None,
     capability: DesignCapability,
     call: DesignCall,
+    *,
+    exclude: Collection[str] = (),
 ) -> DesignOutcome:
     """Run ``call`` against each candidate until one succeeds.
 
     Raises the **last** :class:`ProviderError` (with its ``fallback_hint``) if every candidate
-    fails, or re-raises immediately on a non-recoverable (``fatal``) failure.
+    fails, or re-raises immediately on a non-recoverable (``fatal``/``clarification``) one.
     """
-    keys = candidate_keys(project, capability)
+    keys = candidate_keys(project, capability, exclude=exclude)
     if not keys:
         raise provider_error(
             resolve_active_key(project),

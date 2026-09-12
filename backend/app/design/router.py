@@ -22,10 +22,12 @@ from app.core.errors import ProviderError, UserError
 from app.core.limits import expensive_rate_limit
 from app.db.blobs import get_blob_store
 from app.design.base import ScreenLister
+from app.design.questions import DesignQuestionService
 from app.design.registry import get_active, resolve_active_key
 from app.design.schemas import (
     DesignImageRef,
     DesignProviderInfo,
+    DesignQuestionPublic,
     ImageUploadRequest,
     ImageUploadResponse,
     ScreenCodeResponse,
@@ -119,6 +121,26 @@ async def get_design_screen(
 
     code = await get_active(project).fetch_code(ref)
     return ScreenCodeResponse(ref=ref, html=code.html, css=code.css)
+
+
+@router.get("/{project_id}/design/question", response_model=DesignQuestionPublic | None)
+async def get_design_question(
+    project_id: str,
+    user_id: PydanticObjectId = Depends(get_current_user_id),
+) -> DesignQuestionPublic | None:
+    """The design provider's pending question, or ``null`` when it isn't waiting on anything.
+
+    A provider that answers a brief with a question rather than a design leaves the stage
+    ``awaiting_user`` with nothing to preview; this is what the UI renders in that gap, so the
+    question is answerable in place instead of only existing in the conversation transcript.
+    Answering goes through the conductor like any other design turn (``POST /intent`` with the
+    answer as the message); ``payload.dismiss_question`` designs without that provider instead.
+    """
+    pid = parse_object_id(project_id)
+    await ProjectService().get_owned(pid, user_id)
+
+    question = await DesignQuestionService().pending(pid)
+    return DesignQuestionPublic.from_question(question) if question is not None else None
 
 
 @router.get("/{project_id}/design/provider", response_model=DesignProviderInfo)

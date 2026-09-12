@@ -567,6 +567,16 @@ _KEYS: tuple[ConfigKey, ...] = (
         maximum=10,
     ),
     ConfigKey(
+        "stitch_clarify_max_replies",
+        Cat.providers,
+        "int",
+        "How many times to confirm a Stitch proposal when it answers with a question instead of "
+        'a design ("shall I proceed with these 5 screens?"). Each confirmation is another '
+        "generate call; a question that survives them is put to the user in the design stage.",
+        minimum=0,
+        maximum=5,
+    ),
+    ConfigKey(
         "stitch_token_skew_s",
         Cat.providers,
         "float",

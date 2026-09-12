@@ -106,6 +106,9 @@ class McpServer:
         #: Override the whole ``generate_screen_from_text`` result — a conversational, non-design
         #: reply (Stitch asking a clarifying question) rather than the usual screen_doc/session_doc.
         self.generate_result: dict[str, Any] | None = None
+        #: Conversational replies answered *before* the design, one per generate/edit call — how
+        #: the live API behaves when it proposes a scope and waits for a yes.
+        self.clarifications: list[dict[str, Any]] = []
         #: How many ``get_screen`` reads answer without code before one carries it (async gen).
         self.screen_ready_after = 0
         self._screen_reads = 0
@@ -185,11 +188,15 @@ class McpServer:
             # The real response is the project resource, keyed by `name`.
             return self._text({"name": "projects/proj-9", "title": "ForgeFlow"})
         if name in ("generate_screen_from_text", "generateScreenFromText"):
+            if self.clarifications:
+                return self._text(self.clarifications.pop(0))
             if self.generate_result is not None:
                 return self._text(self.generate_result)
             primary = screen_doc(with_code=not self.generate_without_code)
             return self._text(session_doc(primary, self.extra_screens))
         if name == "edit_screens":
+            if self.clarifications:
+                return self._text(self.clarifications.pop(0))
             return self._text(session_doc(screen_doc(), self.extra_screens))
         if name == "list_screens":
             if self._generate_seen and self.screens_after_generate is not None:
@@ -276,10 +283,13 @@ async def test_a_generation_performs_the_handshake_then_calls_the_tool(patched_h
     body = server.requests[0]
     assert body["jsonrpc"] == "2.0" and "id" in body  # a real JSON-RPC envelope, not a bare call
     assert server.arguments_for("create_project") == {"title": "ForgeFlow"}
-    assert server.arguments_for("generate_screen_from_text") == {
-        "projectId": "proj-9",
-        "prompt": "a todo app",
-    }
+    generate = server.arguments_for("generate_screen_from_text")
+    assert set(generate) == {"projectId", "prompt"}
+    assert generate["projectId"] == "proj-9"
+    # The caller's brief leads the prompt verbatim; the standing "decide, don't ask" directive
+    # (which stops Stitch answering with a question instead of a design) follows it.
+    assert generate["prompt"].startswith("a todo app\n\n")
+    assert "Do not ask questions" in generate["prompt"]
     # The screen is dug out of outputComponents[].design.screens, and its htmlCode.downloadUrl
     # fetched into the markup the preview renders.
     assert payload.html == "<main>generated</main>"
@@ -340,10 +350,10 @@ async def test_arguments_are_renamed_to_whatever_the_schema_declares(patched_htt
     await HttpStitchClient().text_to_ui("a todo app", headers=await _headers())
 
     assert server.arguments_for("create_project") == {"title": "ForgeFlow"}
-    assert server.arguments_for("generate_screen_from_text") == {
-        "project_id": "proj-9",
-        "text": "a todo app",
-    }
+    generate = server.arguments_for("generate_screen_from_text")
+    assert set(generate) == {"project_id", "text"}
+    assert generate["project_id"] == "proj-9"
+    assert generate["text"].startswith("a todo app")
 
 
 async def test_an_argument_the_tool_does_not_declare_is_dropped(
@@ -587,10 +597,112 @@ async def test_a_screen_that_never_produces_html_fails_loudly(
     assert "PENDING" in exc.value.message  # the raw payload is quoted, so the shape is diagnosable
 
 
-async def test_a_clarifying_question_gets_its_own_actionable_message(patched_httpx: Any) -> None:
-    """An under-specified prompt can make Stitch ask a question instead of designing — that is a
-    distinct, actionable case (not a broken/unrecognised response shape) and must say so plainly,
-    not dump raw JSON on the user."""
+def _proposal() -> dict[str, Any]:
+    """What Stitch actually answered a real ForgeFlow brief with: a scope proposal, no design."""
+    return {
+        "projectId": "proj-9",
+        "sessionId": "sess-1",
+        "outputComponents": [
+            {
+                "text": (
+                    "Because this is a full multi-user platform, I propose a cohesive 5-screen "
+                    "experience covering auth, publishing, discussion and moderation. "
+                    "Would you like me to proceed?"
+                )
+            }
+        ],
+    }
+
+
+async def test_a_proposal_is_confirmed_so_the_design_still_comes_from_stitch(
+    patched_httpx: Any,
+) -> None:
+    """The live failure this fixes: a broad brief made Stitch answer with a five-screen proposal
+    and "shall I proceed?", which ended the generation as a ``contract`` error and dropped the
+    whole design onto the fake fallback. Nobody is at the keyboard to say yes, so we say it."""
+    server = McpServer()
+    server.clarifications = [_proposal()]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient(sleeper=_no_sleep).text_to_ui(
+        "a blog and discussion site", headers=await _headers()
+    )
+
+    assert payload.html == "<main>generated</main>"  # a real Stitch design, not a fallback
+    assert payload.external_ref == "proj-9/screen-1"
+    generates = [
+        r["params"]["arguments"]["prompt"]
+        for r in server.requests
+        if r.get("method") == "tools/call" and r["params"]["name"] == "generate_screen_from_text"
+    ]
+    assert len(generates) == 2  # the ask, then the confirmation
+    # The tool takes no session handle, so the confirmation cannot be threaded onto the
+    # conversation that asked: it has to carry the proposed scope *and* the original brief.
+    assert "5-screen" in generates[1]
+    assert "a blog and discussion site" in generates[1]
+    assert "proceed" in generates[1].lower()
+
+
+async def test_an_edit_that_asks_a_question_is_confirmed_too(patched_httpx: Any) -> None:
+    """A refine goes through the same conversational model, so it gets the same answer."""
+    server = McpServer()
+    server.clarifications = [_proposal()]
+    patched_httpx(server)
+
+    payload = await HttpStitchClient(sleeper=_no_sleep).refine(
+        "proj-9/screen-1", "make it dark", headers=await _headers()
+    )
+
+    assert payload.html == "<main>generated</main>"
+    edits = [
+        r["params"]["arguments"]["prompt"]
+        for r in server.requests
+        if r.get("method") == "tools/call" and r["params"]["name"] == "edit_screens"
+    ]
+    assert len(edits) == 2
+    assert "make it dark" in edits[1]
+
+
+async def test_confirming_is_bounded_and_configurable(
+    patched_httpx: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model that only ever wants to talk must not loop: the budget caps the round trips, and
+    the stage then falls back rather than spending the Stitch quota on a conversation."""
+    monkeypatch.setenv("STITCH_CLARIFY_MAX_REPLIES", "1")
+    reset_config()
+    server = McpServer()
+    server.generate_result = _proposal()  # never answers with a design
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError) as exc:
+        await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+    assert exc.value.detail["kind"] == "clarification"  # → the user is asked, not another provider
+    assert server.tool_calls().count("generate_screen_from_text") == 2  # ask + one confirmation
+
+
+async def test_confirming_can_be_turned_off(
+    patched_httpx: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STITCH_CLARIFY_MAX_REPLIES", "0")
+    reset_config()
+    server = McpServer()
+    server.generate_result = _proposal()
+    patched_httpx(server)
+
+    with pytest.raises(ProviderError):
+        await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
+
+    assert server.tool_calls().count("generate_screen_from_text") == 1  # asked once, gave up
+
+
+async def test_a_question_that_survives_confirmation_is_raised_for_the_user(
+    patched_httpx: Any,
+) -> None:
+    """A question a blind "yes" cannot answer — *who* is this for — is not a provider failure and
+    must not be resolved by designing something else: it is classified as `clarification`, which
+    stops the fallback chain, and carries everything the design stage needs to put it to the user
+    and resume the call with their answer."""
     server = McpServer()
     server.generate_result = {
         "projectId": "proj-9",
@@ -598,16 +710,28 @@ async def test_a_clarifying_question_gets_its_own_actionable_message(patched_htt
         "outputComponents": [
             {"text": "I'd love to help you design your ToDo app. Who is it for?"},
         ],
+        "suggestions": ["Busy professionals", {"text": "Students"}],
     }
     patched_httpx(server)
 
     with pytest.raises(ProviderError) as exc:
         await HttpStitchClient(sleeper=_no_sleep).text_to_ui("todo app", headers=await _headers())
 
-    assert exc.value.detail == {"kind": "contract"}  # still recoverable → the stage falls back
+    assert exc.value.detail["kind"] == "clarification"
     assert "asked for more detail" in exc.value.message
     assert "Who is it for?" in exc.value.message  # Stitch's own question survives, not just a dump
     assert "no HTML" not in exc.value.message  # the specific message wins over the generic one
+    detail = exc.value.detail["detail"]
+    assert detail["provider"] == "stitch"
+    assert detail["question"] == "I'd love to help you design your ToDo app. Who is it for?"
+    # Quick replies become one-click answers in the UI; both shapes the payload has been seen in.
+    assert detail["suggestions"] == ["Busy professionals", "Students"]
+    # The brief and the container the asking call opened — so the answer resumes the same call in
+    # the same Stitch project rather than starting over beside it.
+    assert detail["prompt"] == "todo app"
+    assert detail["workspace"] == "proj-9"
+    # Reached only once the confirmation (default budget: 1) has been answered with more talk.
+    assert server.tool_calls().count("generate_screen_from_text") == 2
 
 
 # ---------------------------------------------------------------- auth
@@ -653,11 +777,11 @@ async def test_refine_edits_the_named_screen(patched_httpx: Any) -> None:
         "proj-9/screen-1", "make it dark", headers=await _headers()
     )
 
-    assert server.arguments_for("edit_screens") == {
-        "projectId": "proj-9",
-        "selectedScreenIds": ["screen-1"],  # the API's own spelling, not `screenIds`
-        "prompt": "make it dark",
-    }
+    edit = server.arguments_for("edit_screens")
+    assert set(edit) == {"projectId", "selectedScreenIds", "prompt"}
+    assert edit["projectId"] == "proj-9"
+    assert edit["selectedScreenIds"] == ["screen-1"]  # the API's own spelling, not `screenIds`
+    assert edit["prompt"].startswith("make it dark")
     assert payload.external_ref == "proj-9/screen-1"
     assert payload.html == "<main>generated</main>"
 

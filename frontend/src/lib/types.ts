@@ -123,6 +123,21 @@ export interface DesignProviderInfo {
   capabilities: DesignCapabilities;
 }
 
+/**
+ * A design provider waiting on a decision before it will design (Stitch answers a broad brief
+ * with a scope proposal as often as it answers with a screen). `null` when nothing is waiting.
+ */
+export interface DesignQuestionDto {
+  id: string;
+  provider: string;
+  question: string;
+  /** Quick replies the provider offered — one click sends one as the answer. */
+  suggestions: string[];
+  /** `text` (a generate) or `refine` — what the answer resumes. */
+  source: string;
+  created_at: string;
+}
+
 // --- Testing + repair (phases 28 / 31 / 32) ---
 
 export type TestStatus = 'passed' | 'failed' | 'skipped';

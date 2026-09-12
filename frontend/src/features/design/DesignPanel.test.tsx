@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useToastStore } from '../../lib/stores/toastStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
-import type { Stage, StageStatus } from '../../lib/types';
+import type { DesignQuestionDto, Stage, StageStatus } from '../../lib/types';
 import { DesignPanel } from './DesignPanel';
 
 const PROJECT = 'p1';
@@ -26,12 +26,17 @@ interface MockState {
   screens: Array<{ ref: string; title: string; preview_image: string | null }>;
   screenBodies: Record<string, string>;
   stages: Array<{ stage: Stage; status: StageStatus; artifacts: string[] }>;
+  /** What the provider is waiting on, or null when it isn't waiting on anything. */
+  question: DesignQuestionDto | null;
 }
 
 function installFetch(state: MockState): void {
   const fetchMock = vi.fn<typeof fetch>((input, init) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
+    if (url.includes('/design/question')) {
+      return Promise.resolve(json(state.question));
+    }
     if (url.includes('/design/provider')) {
       return Promise.resolve(
         json({
@@ -130,6 +135,7 @@ beforeEach(() => {
     intentCalls: [],
     screens: [],
     screenBodies: {},
+    question: null,
     // Requirements complete by default, so only the nudge tests below exercise the nudge.
     stages: [
       { stage: 'design', status: 'awaiting_user', artifacts: [] },
@@ -425,6 +431,87 @@ describe('DesignPanel', () => {
     await waitFor(() => {
       const toasts = useToastStore.getState().toasts;
       expect(toasts.some((t) => t.description?.includes('switch to figma'))).toBe(true);
+    });
+  });
+  describe("a provider's clarifying question", () => {
+    const QUESTION: DesignQuestionDto = {
+      id: 'q1',
+      provider: 'stitch',
+      question: 'Should I start with the public feed, or the admin tools?',
+      suggestions: ['The public feed first', 'The admin tools first'],
+      source: 'text',
+      created_at: '',
+    };
+
+    it('shows the question when the provider is waiting on one', async () => {
+      state.question = QUESTION;
+      installFetch(state);
+      renderPanel();
+
+      const card = await screen.findByTestId('design-question');
+      expect(card).toHaveTextContent('stitch needs a decision');
+      expect(card).toHaveTextContent('public feed, or the admin tools');
+    });
+
+    it('sends a typed answer as a plain message, which is what the backend answers with', async () => {
+      state.question = QUESTION;
+      installFetch(state);
+      renderPanel();
+      await screen.findByTestId('design-question');
+
+      fireEvent.change(screen.getByTestId('design-question-input'), {
+        target: { value: 'Start with the public feed' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
+
+      await waitFor(() => {
+        const call = state.intentCalls.at(-1);
+        expect(call).toMatchObject({
+          stage: 'design',
+          action: 'refine',
+          message: 'Start with the public feed',
+        });
+        // No payload: intake of any kind would read as a *new* request, not an answer.
+        expect((call as { payload?: unknown }).payload).toBeUndefined();
+      });
+    });
+
+    it('sends a suggested reply in one click', async () => {
+      state.question = QUESTION;
+      installFetch(state);
+      renderPanel();
+      await screen.findByTestId('design-question');
+
+      fireEvent.click(screen.getByRole('button', { name: 'The admin tools first' }));
+
+      await waitFor(() => {
+        expect(state.intentCalls.at(-1)).toMatchObject({ message: 'The admin tools first' });
+      });
+    });
+
+    it('offers designing without the provider that asked', async () => {
+      state.question = QUESTION;
+      installFetch(state);
+      renderPanel();
+      await screen.findByTestId('design-question');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Design without stitch' }));
+
+      await waitFor(() => {
+        expect(state.intentCalls.at(-1)).toMatchObject({
+          stage: 'design',
+          action: 'refine',
+          payload: { dismiss_question: true },
+        });
+      });
+    });
+
+    it('shows nothing when the provider is not waiting on anything', async () => {
+      installFetch(state); // state.question is null
+      renderPanel();
+      await screen.findByTestId('provider-health');
+
+      expect(screen.queryByTestId('design-question')).not.toBeInTheDocument();
     });
   });
 });

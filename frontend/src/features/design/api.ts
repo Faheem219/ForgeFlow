@@ -4,6 +4,7 @@ import type {
   ArtifactDto,
   DesignImageRef,
   DesignProviderInfo,
+  DesignQuestionDto,
 } from '../../lib/types';
 
 export interface UploadImage {
@@ -24,6 +25,14 @@ export function uploadDesignImages(
 
 export function getDesignProvider(projectId: string): Promise<DesignProviderInfo> {
   return apiFetch<DesignProviderInfo>(`/projects/${projectId}/design/provider`);
+}
+
+/**
+ * The provider's pending question, or `null` when it isn't waiting on anything. Answering goes
+ * through the conductor like any other design turn — the answer is the intent's `message`.
+ */
+export function getDesignQuestion(projectId: string): Promise<DesignQuestionDto | null> {
+  return apiFetch<DesignQuestionDto | null>(`/projects/${projectId}/design/question`);
 }
 
 /** Design versions, oldest → newest (the artifact endpoint sorts ascending). */

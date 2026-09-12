@@ -29,10 +29,12 @@ from typing import TYPE_CHECKING
 
 from beanie import PydanticObjectId
 
-from app.core.errors import UserError
+from app.core.errors import ProviderError, UserError
 from app.db.blobs import get_blob_store
 from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.design.base import DesignImage, DesignProvider, DesignResult
+from app.design.questions import DesignQuestionService, answered_prompt, clarification_detail
+from app.design.registry import resolve_active_key
 from app.design.resilient import DesignCapability, invoke_with_fallback, provider_for_refine
 from app.design.schemas import DesignImageRef, DesignIntake
 from app.design.service import (
@@ -51,7 +53,7 @@ from app.orchestrator.schemas import (
 )
 
 if TYPE_CHECKING:  # avoid an import cycle: stages/__init__ imports this module
-    from app.db.models import Project, RequirementSpec
+    from app.db.models import DesignQuestion, Project, RequirementSpec
     from app.orchestrator.stages.base import StageContext
 
 OWN_PROVIDER = "own"  # sentinel provider key for bring-your-own designs (no MCP call)
@@ -107,9 +109,46 @@ class DesignStageHandler:
     # -- refine (generate / import / refine) ----------------------------------------------
 
     async def _generate_or_refine(self, intent: Intent, ctx: StageContext) -> StageResult:
-        project = ctx.project
+        """Route one design turn — and treat a provider's question as a turn, not a failure.
+
+        A provider that answers with a question rather than a design is not broken: it is waiting
+        on a decision only the user can make (who the app is for, which half of the scope first).
+        Failing over to the next provider "resolved" that by designing something nobody asked for,
+        so a ``clarification`` is parked as a :class:`DesignQuestion` and put to the user instead.
+        Their next plain message answers it and the original call resumes.
+        """
         project_id = _project_id(ctx)
         intake = DesignIntake.model_validate(intent.payload or {})
+        questions = DesignQuestionService()
+        pending = await questions.pending(project_id)
+
+        #: Set when this turn is *answering* a question — a follow-up question then inherits what
+        #: that one was resuming, since the empty intake of an answer no longer says.
+        resuming: DesignQuestion | None = None
+        try:
+            if pending is not None:
+                if intake.dismiss_question:
+                    return await self._design_without(pending, ctx)
+                if _answers_question(intake, intent):
+                    resuming = pending
+                    return await self._answer_question(pending, intent, ctx)
+                # Anything else — a new prompt, screenshots, an import, a refine aimed at a
+                # screen — is the user moving on, so the question is no longer what they are
+                # being asked.
+                await questions.dismiss(project_id)
+            return await self._run(intent, ctx, intake)
+        except ProviderError as exc:
+            detail = clarification_detail(exc)
+            if detail is None:
+                raise
+            # Covers the answered call too: a provider that asks a *follow-up* question parks that
+            # one and asks again, rather than surfacing as an error on a turn the user got right.
+            return await self._park_question(detail, intent, ctx, intake, resuming)
+
+    async def _run(self, intent: Intent, ctx: StageContext, intake: DesignIntake) -> StageResult:
+        """Generate / import / refine, exactly as the intake asks."""
+        project = ctx.project
+        project_id = _project_id(ctx)
 
         if intake.own_design is not None:
             own = intake.own_design
@@ -222,20 +261,168 @@ class DesignStageHandler:
                 )
                 summary = _summary(f"Refined the design: {instruction}", target.note)
 
+        return _designed(summary, text, meta)
+
+    # -- clarifying questions (the provider is waiting on the user) -------------------------
+
+    async def _park_question(
+        self,
+        detail: dict[str, object],
+        intent: Intent,
+        ctx: StageContext,
+        intake: DesignIntake,
+        resuming: DesignQuestion | None = None,
+    ) -> StageResult:
+        """Record the provider's question and hand it to the user, instead of failing over.
+
+        No artifact is produced — this turn generated nothing — so the stage stays
+        ``awaiting_user`` with the question as the assistant's reply. The user's next plain
+        message lands in :meth:`_answer_question`.
+        """
+        project_id = _project_id(ctx)
+        message = (intent.message or "").strip()
+        if resuming is not None:
+            # A follow-up to an answer: it resumes whatever the first question did, and the brief
+            # is the answered prompt — not this turn's message, which is only half of it.
+            source, design_ref = resuming.source, resuming.design_ref
+            fallback_prompt = answered_prompt(resuming, message)
+        else:
+            source, design_ref = await self._resume_target(intake, intent, project_id)
+            fallback_prompt = (intake.text or message or "").strip()
+        provider = str(detail.get("provider") or "").strip() or resolve_active_key(ctx.project)
+        question = await DesignQuestionService().record(
+            project_id,
+            provider,
+            detail,
+            # Only used when the provider did not echo the prompt it received.
+            prompt=fallback_prompt,
+            source=source,
+            design_ref=design_ref,
+        )
+        summary = (
+            f"{provider} needs one decision before it can design this:\n\n"
+            f"{question.question}\n\n"
+            f"Reply with your answer, or choose \u201cDesign without {provider}\u201d to go ahead "
+            f"without it."
+        )
         return StageResult(
             messages=[OutboundMessage(role=MessageRole.assistant, content=summary)],
-            artifacts=[
-                ArtifactSpec(stage=Stage.design, type=ArtifactType.design, text=text, meta=meta)
-            ],
-            # Generated/imported — leave it for the user to review, then Approve or Refine.
             next_status=StageStatus.awaiting_user,
             events=[
                 {
-                    "event": "progress",
-                    "payload": {"stage": "design", "status": "awaiting_user", "note": summary},
+                    "event": "design.question",
+                    "payload": {
+                        "stage": "design",
+                        "provider": provider,
+                        "question": question.question,
+                        "suggestions": question.suggestions,
+                    },
                 }
             ],
         )
+
+    async def _answer_question(
+        self, pending: DesignQuestion, intent: Intent, ctx: StageContext
+    ) -> StageResult:
+        """Send the user's answer back to the provider that asked, and resume its call."""
+        project = ctx.project
+        project_id = _project_id(ctx)
+        answer = (intent.message or "").strip()
+        # Closed *before* the provider round trip: a call that fails must not leave the question
+        # pending, or the next message would be read as a second answer to a question the user has
+        # already answered. A failure surfaces as an error they can retry from.
+        await DesignQuestionService().answer(pending, answer)
+        prompt = answered_prompt(pending, answer)
+
+        if pending.source == "refine" and pending.design_ref:
+            # A refine keys off a provider-specific ref, so it goes back to the provider that
+            # issued it — the same provenance rule any other refine follows.
+            target = provider_for_refine(project, pending.provider)
+            result = await target.provider.refine(pending.design_ref, prompt)
+            latest = await DesignService().latest(project_id)
+            text, meta = design_artifact_fields(
+                result,
+                source="refine",
+                refined_from=latest.version if latest is not None else None,
+            )
+            summary = _summary(f"Answered {pending.provider} and refined the design.", target.note)
+        else:
+            outcome = await invoke_with_fallback(
+                project,
+                DesignCapability.from_text,
+                _into_workspace(
+                    project,
+                    lambda p, ws, title: p.generate_from_text(
+                        prompt, workspace=ws, workspace_title=title
+                    ),
+                    # The asking call already opened a container for this project but produced no
+                    # artifact to record it on; reusing it keeps the answer in the same Stitch
+                    # project instead of opening a second one beside it.
+                    prefer=(pending.provider, pending.workspace),
+                ),
+            )
+            result = outcome.result
+            text, meta = design_artifact_fields(result, source="text")
+            summary = _summary(
+                f"Answered {pending.provider} and generated a design via {result.provider}.",
+                outcome.note(),
+            )
+        return _designed(summary, text, meta)
+
+    async def _design_without(self, pending: DesignQuestion, ctx: StageContext) -> StageResult:
+        """The escape hatch: close the question unanswered and design without that provider.
+
+        Keeps the stage's "fail soft, always offer a way forward" promise for a user who would
+        rather have *a* design than answer — the asking provider is excluded, so the fallback
+        chain (figma/fake) serves the same brief instead.
+        """
+        project = ctx.project
+        project_id = _project_id(ctx)
+        await DesignQuestionService().dismiss(project_id)
+
+        context = await _requirements_context(project_id)
+        prompt = (
+            pending.prompt.strip()
+            or _with_requirements(project.original_prompt, context)
+            or _default_prompt(project.name)
+        )
+        outcome = await invoke_with_fallback(
+            project,
+            DesignCapability.from_text,
+            _into_workspace(
+                project,
+                lambda p, ws, title: p.generate_from_text(
+                    prompt, workspace=ws, workspace_title=title
+                ),
+            ),
+            exclude={pending.provider},
+        )
+        result = outcome.result
+        text, meta = design_artifact_fields(result, source="text")
+        return _designed(
+            f"Left {pending.provider}'s question unanswered and generated a design via "
+            f"{result.provider}.",
+            text,
+            meta,
+        )
+
+    async def _resume_target(
+        self, intake: DesignIntake, intent: Intent, project_id: PydanticObjectId
+    ) -> tuple[str, str]:
+        """Which call the question interrupted, so the answer resumes that one.
+
+        Mirrors the branches of :meth:`_run` — the intake decides there and must decide the same
+        thing here.
+        """
+        if intake.image_refs:
+            return "image", ""
+        if (intake.text or "").strip():
+            return "text", ""
+        latest = await DesignService().latest(project_id)
+        if latest is not None and (intent.message or "").strip():
+            ref = (intake.design_ref or "").strip() or str(latest.meta.get(META_EXTERNAL_REF) or "")
+            return "refine", ref
+        return "text", ""
 
     async def _load_images(self, refs: list[DesignImageRef]) -> list[DesignImage]:
         blobs = get_blob_store()
@@ -246,9 +433,43 @@ class DesignStageHandler:
         return images
 
 
+def _answers_question(intake: DesignIntake, intent: Intent) -> bool:
+    """Whether this turn is the answer to the pending question.
+
+    A plain message and nothing else — which is exactly what the chat composer and the question
+    card's own box send. Anything carrying intake (a new prompt, screenshots, an import, or a
+    refine aimed at a specific screen) is a different request and is handled as one.
+    """
+    if intake.image_refs or intake.own_design is not None:
+        return False
+    if (intake.text or "").strip() or (intake.design_ref or "").strip():
+        return False
+    return bool((intent.message or "").strip())
+
+
+def _designed(summary: str, text: str, meta: dict[str, object]) -> StageResult:
+    """The common result of a turn that produced a design version."""
+    return StageResult(
+        messages=[OutboundMessage(role=MessageRole.assistant, content=summary)],
+        artifacts=[
+            ArtifactSpec(stage=Stage.design, type=ArtifactType.design, text=text, meta=meta)
+        ],
+        # Generated/imported — leave it for the user to review, then Approve or Refine.
+        next_status=StageStatus.awaiting_user,
+        events=[
+            {
+                "event": "progress",
+                "payload": {"stage": "design", "status": "awaiting_user", "note": summary},
+            }
+        ],
+    )
+
+
 def _into_workspace(
     project: Project,
     call: Callable[[DesignProvider, str | None, str], Awaitable[DesignResult]],
+    *,
+    prefer: tuple[str, str] | None = None,
 ) -> Callable[[DesignProvider], Awaitable[DesignResult]]:
     """Wrap a generate so it lands in *this* ForgeFlow project's own provider container.
 
@@ -263,6 +484,11 @@ def _into_workspace(
         service = DesignService()
         project_id = _project_id_of(project)
         workspace = await service.workspace_for(project_id, provider.key)
+        if workspace is None and prefer is not None and provider.key == prefer[0] and prefer[1]:
+            # `prefer` names a container this project already has with `provider` that no artifact
+            # records yet — the one a clarifying question was asked from. Only ever a fallback for
+            # the artifact lookup, which stays the source of truth.
+            workspace = prefer[1]
         return await call(provider, workspace, await service.workspace_title_for(project))
 
     return run

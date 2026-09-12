@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { HelpCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
@@ -12,6 +13,7 @@ import {
   fileToBase64,
   getDesignArtifact,
   getDesignProvider,
+  getDesignQuestion,
   getDesignScreen,
   listDesignScreens,
   listDesignVersions,
@@ -60,6 +62,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [instruction, setInstruction] = useState('');
+  const [answer, setAnswer] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [screenRef, setScreenRef] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -79,6 +82,14 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
     queryKey: ['stages', projectId],
     queryFn: () => listStages(projectId),
   });
+  // A provider can answer a brief with a question instead of a design ("shall I proceed with
+  // these five screens?"). The stage then has nothing to preview and is waiting on the user, so
+  // the question is rendered in that gap rather than only existing in the chat transcript.
+  const questionQuery = useQuery({
+    queryKey: ['design-question', projectId],
+    queryFn: () => getDesignQuestion(projectId),
+  });
+  const question = questionQuery.data ?? null;
 
   const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
   const latest = versions.at(-1);
@@ -188,10 +199,12 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
     onSuccess: (_data, body) => {
       setPrompt('');
       setInstruction('');
+      setAnswer('');
       setOwnHtml('');
       setOwnCss('');
       setImportOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['design-versions', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['design-question', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['design-provider', projectId] });
@@ -223,6 +236,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['design-versions', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['design-question', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['stages', projectId] });
       void queryClient.invalidateQueries({ queryKey: ['design-provider', projectId] });
     },
@@ -232,6 +246,12 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   const busy = intent.isPending || uploadAndGenerate.isPending;
   const hasDesign = versions.length > 0;
   const provider = providerQuery.data;
+
+  /** Answer the provider's question. A plain message with no payload *is* the answer. */
+  function sendAnswer(text: string): void {
+    const trimmed = text.trim();
+    if (trimmed) intent.mutate({ stage: 'design', action: 'refine', message: trimmed });
+  }
 
   function onFilesSelected(list: FileList | null): void {
     const files = list ? Array.from(list) : [];
@@ -274,6 +294,78 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
           </Button>
         </div>
       </header>
+
+      {question ? (
+        <aside
+          className="space-y-3 rounded-xl border border-brand/40 bg-brand/5 p-3"
+          data-testid="design-question"
+        >
+          <div className="flex items-start gap-2">
+            <HelpCircle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" />
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-fg">
+                {question.provider} needs a decision before it designs this
+              </p>
+              <p className="whitespace-pre-wrap break-words text-sm text-fg-muted">
+                {question.question}
+              </p>
+            </div>
+          </div>
+
+          {question.suggestions.length > 0 ? (
+            <div className="flex flex-wrap gap-2" data-testid="design-question-suggestions">
+              {question.suggestions.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => sendAnswer(suggestion)}
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendAnswer(answer);
+            }}
+          >
+            <input
+              aria-label="Answer the design question"
+              data-testid="design-question-input"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Your answer…"
+              disabled={busy}
+              className="flex-1 rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand disabled:opacity-50"
+            />
+            <Button type="submit" size="sm" disabled={busy || !answer.trim()}>
+              Send answer
+            </Button>
+          </form>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            data-testid="design-question-dismiss"
+            onClick={() =>
+              intent.mutate({
+                stage: 'design',
+                action: 'refine',
+                payload: { dismiss_question: true },
+              })
+            }
+          >
+            Design without {question.provider}
+          </Button>
+        </aside>
+      ) : null}
 
       {showRequirementsNudge ? (
         <aside
