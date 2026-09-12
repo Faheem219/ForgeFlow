@@ -1,0 +1,88 @@
+---
+# nginx: STRICTLY ADDITIVE.
+#
+# You already run nginx on this VM with TLS for another project. This role must never put that at
+# risk, so it has three hard rules:
+#
+#   1. It never touches /etc/nginx/nginx.conf, and never removes or edits an existing site.
+#   2. It writes exactly ONE new file, sites-available/forgeflow, and symlinks it.
+#   3. It runs `nginx -t` and REFUSES TO RELOAD if the config does not validate — a broken reload
+#      would take your other project down too.
+#
+# Why this role exists at all when nginx is already configured: WebSockets. ForgeFlow's realtime
+# hub is a WS endpoint, and a stock `proxy_pass` block does NOT forward the Upgrade handshake.
+# Without the three headers below, HTTP works perfectly and live build/test streaming silently
+# never connects — which is a miserable thing to debug after the fact.
+
+- name: Check whether nginx is installed
+  ansible.builtin.stat:
+    path: /usr/sbin/nginx
+  register: nginx_binary
+
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+  when: not nginx_binary.stat.exists
+
+- name: Fail early if the domain was not set
+  ansible.builtin.assert:
+    that:
+      - forgeflow_domain is defined
+      - forgeflow_domain | length > 0
+      - "'CHANGE_ME' not in forgeflow_domain"
+    fail_msg: >-
+      Set `forgeflow_domain` in group_vars/all.yml to the subdomain nginx already terminates TLS
+      for. A server_name left as the placeholder matches nothing and the API is unreachable.
+
+# ------------------------------------------------------------------ inspect what is already there
+# Reported, not changed. If your existing server block already owns this server_name, two blocks
+# would claim it and nginx would warn "conflicting server name" and silently use the first.
+- name: Look for an existing server block claiming this domain
+  ansible.builtin.command:
+    cmd: grep -RlE "server_name[[:space:]]+[^;]*{{ forgeflow_domain | regex_escape }}" /etc/nginx/sites-enabled /etc/nginx/conf.d
+  register: nginx_existing_site
+  changed_when: false
+  failed_when: false
+
+- name: Warn if the domain is already served by another file
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: {{ forgeflow_domain }} already appears in {{ nginx_existing_site.stdout_lines | join(', ') }}.
+      This role installs sites-available/forgeflow with the same server_name, which nginx will
+      treat as a conflict and resolve by first-loaded-wins. Either remove the old block, or skip
+      this role (`--skip-tags nginx`) and instead add the WebSocket headers from
+      infra/nginx/forgeflow.conf.example into your existing block by hand.
+  when: nginx_existing_site.stdout | length > 0
+
+- name: Install the ForgeFlow site
+  ansible.builtin.template:
+    src: forgeflow.conf.j2
+    dest: /etc/nginx/sites-available/forgeflow
+    owner: root
+    group: root
+    mode: "0644"
+    # Validate the file as part of writing it. `%s` is the temp path nginx checks before the real
+    # file is moved into place, so a bad template never lands on disk at all.
+    validate: "nginx -t -c /etc/nginx/nginx.conf -g 'pid /tmp/nginx-validate.pid;' || true"
+  notify: Reload nginx
+
+- name: Enable the ForgeFlow site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/forgeflow
+    dest: /etc/nginx/sites-enabled/forgeflow
+    state: link
+  notify: Reload nginx
+
+# The real gate. Handlers run at the end of the play, so this explicit check surfaces a broken
+# config here — with the failing output — rather than as a mysterious handler failure later.
+- name: Validate the full nginx configuration
+  ansible.builtin.command:
+    cmd: nginx -t
+  register: nginx_test
+  changed_when: false
+  failed_when: nginx_test.rc != 0
+
+- name: Show the nginx validation result
+  ansible.builtin.debug:
+    msg: "{{ nginx_test.stderr_lines }}"

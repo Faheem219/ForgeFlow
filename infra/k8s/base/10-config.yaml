@@ -1,0 +1,63 @@
+# Non-secret configuration for the API Deployment.
+#
+# Split deliberately from the Secret below: a ConfigMap is world-readable to anyone with namespace
+# read access and shows up in plain text in `kubectl describe`, so nothing here may ever be a
+# credential. Every key is one of the env vars documented in the repo-root .env.example, read
+# through the layered resolver in backend/app/core/config.py.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgeflow-config
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+data:
+  FORGEFLOW_ENV: "k8s"
+  LOG_LEVEL: "INFO"
+  LOG_JSON: "true"
+
+  # Metrics are what the Prometheus ServiceMonitor/scrape annotation below targets.
+  METRICS_ENABLED: "true"
+  METRICS_PATH: "/metrics"
+
+  # In-cluster Mongo (the StatefulSet in 20-mongo.yaml), addressed through its headless service.
+  MONGODB_URI: "mongodb://forgeflow-mongo-0.forgeflow-mongo.forgeflow.svc.cluster.local:27017"
+  FORGEFLOW_META_DB: "forgeflow_meta"
+
+  # CORS: the Vercel frontend origin. Replace with your real deployment URL — "*" is NOT usable
+  # here because the app sets allow_credentials whenever origins != ["*"] (see api/app.py), and a
+  # wildcard with credentials is rejected by every browser.
+  CORS_ORIGINS: "https://forgeflow.vercel.app"
+
+  # Sandbox-backed stages are inert in this cluster (see the note in api-deployment). Keeping the
+  # image name correct anyway means nothing silently points at a non-existent tag if the socket is
+  # later mounted.
+  SANDBOX_IMAGE: "forgeflow-sandbox:latest"
+---
+# Secrets are templated, NOT committed with values. `stringData` is used rather than `data` so the
+# file stays readable; k8s base64-encodes on write. Note that base64 is encoding, not encryption —
+# a k8s Secret is only as protected as the cluster's RBAC and etcd encryption-at-rest.
+#
+# Create the real one out-of-band instead of editing this file:
+#
+#   kubectl -n forgeflow create secret generic forgeflow-secrets \
+#     --from-literal=SECRET_KEY="$(openssl rand -hex 32)" \
+#     --from-literal=FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
+#     --from-literal=ANTHROPIC_API_KEY="sk-ant-..."
+#
+# FERNET_KEY warning (repeated from .env.example because it is unrecoverable): rotating it
+# permanently invalidates every stored provider credential. Back it up before you generate one.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: forgeflow-secrets
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+type: Opaque
+stringData:
+  SECRET_KEY: "REPLACE_ME_WITH_A_RANDOM_32_BYTE_HEX"
+  FERNET_KEY: "REPLACE_ME_WITH_A_GENERATED_FERNET_KEY"
+  ANTHROPIC_API_KEY: ""

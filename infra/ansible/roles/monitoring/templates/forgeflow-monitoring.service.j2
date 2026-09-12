@@ -1,0 +1,20 @@
+{{ ansible_managed | comment }}
+# The monitoring stack. Deliberately independent of forgeflow.service: the thing that tells you the
+# app is down must not share the app's lifecycle, and a monitoring stack that restarts on every
+# deploy is blind exactly when you most want to watch one.
+[Unit]
+Description=ForgeFlow monitoring (Prometheus + Grafana + exporters)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory={{ monitoring_root }}
+ExecStart=/usr/bin/docker compose --env-file {{ monitoring_root }}/.env -f {{ monitoring_root }}/docker-compose.monitoring.yml up -d
+ExecStop=/usr/bin/docker compose --env-file {{ monitoring_root }}/.env -f {{ monitoring_root }}/docker-compose.monitoring.yml down
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

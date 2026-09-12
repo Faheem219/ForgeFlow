@@ -1,0 +1,134 @@
+---
+# k3s — the Kubernetes deliverable (assignment step 3).
+#
+# k3s rather than kubeadm: a single binary, ~60 MB, first-class arm64 support, and it bundles
+# containerd, CoreDNS, a CNI and the local-path StorageClass. kubeadm on a 4-OCPU Ampere shape
+# means a control plane that eats most of the box for a demo cluster.
+#
+# Traefik is disabled by default (see group_vars): k3s exposes it through a LoadBalancer service
+# that klipper-lb satisfies by binding host :80/:443 — ports nginx already owns. The demo reaches
+# the cluster via `kubectl port-forward`, which needs no ingress at all.
+
+- name: Check whether k3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+  when: k3s_enabled | bool
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: "0755"
+  when:
+    - k3s_enabled | bool
+    - not k3s_binary.stat.exists
+
+- name: Install k3s
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: >-
+      server
+      {% for component in k3s_disable_components %}--disable={{ component }} {% endfor %}
+      --write-kubeconfig-mode=0640
+    # 0640 + the group below, rather than the 0644 every tutorial uses: this file embeds a client
+    # certificate with full cluster-admin. World-readable means any local account owns the cluster.
+    K3S_KUBECONFIG_MODE: "0640"
+  args:
+    creates: /usr/local/bin/k3s
+  when:
+    - k3s_enabled | bool
+    - not k3s_binary.stat.exists
+
+- name: Ensure k3s is running
+  ansible.builtin.service:
+    name: k3s
+    state: started
+    enabled: true
+  when: k3s_enabled | bool
+
+- name: Wait for the node to become Ready
+  ansible.builtin.command:
+    cmd: k3s kubectl wait --for=condition=Ready node --all --timeout=180s
+  register: k3s_ready
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: k3s_ready.rc == 0
+  when: k3s_enabled | bool
+
+# ------------------------------------------------------------------ operator access
+- name: Create a kube config directory for the login user
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+  when: k3s_enabled | bool
+
+- name: Give the login user a kubeconfig
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  when: k3s_enabled | bool
+
+- name: Point that kubeconfig at the node's real address
+  # The file k3s writes says `server: https://127.0.0.1:6443`, which is correct on the box and
+  # useless from anywhere else. Rewriting it is what makes the same file usable as the
+  # KUBECONFIG_B64 secret in .github/workflows/k8s-rollout.yml.
+  ansible.builtin.replace:
+    path: "/home/{{ ansible_user }}/.kube/config"
+    regexp: 'server: https://127\.0\.0\.1:6443'
+    replace: "server: https://{{ ansible_host | default(ansible_default_ipv4.address) }}:6443"
+  when:
+    - k3s_enabled | bool
+    - k3s_rewrite_kubeconfig_server | bool
+
+# ------------------------------------------------------------------ manifests
+- name: Create the manifest directory
+  ansible.builtin.file:
+    path: "{{ forgeflow_root }}/k8s"
+    state: directory
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    mode: "0750"
+  when: k3s_enabled | bool
+
+- name: Copy the ForgeFlow manifests and scripts to the VM
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../k8s/"
+    dest: "{{ forgeflow_root }}/k8s/"
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    mode: "0640"
+    # Scripts need to be executable; everything else does not.
+    directory_mode: "0750"
+  when: k3s_enabled | bool
+
+- name: Make the rollout scripts executable
+  ansible.builtin.file:
+    path: "{{ forgeflow_root }}/k8s/scripts/{{ item }}"
+    mode: "0750"
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+  loop:
+    - rolling-update.sh
+    - rollback.sh
+    - demo-rolling-update.sh
+  when: k3s_enabled | bool
+
+- name: Report how to reach the cluster
+  ansible.builtin.debug:
+    msg: >-
+      k3s is up. On the VM: `kubectl get nodes`. From your laptop: copy
+      /home/{{ ansible_user }}/.kube/config, or run
+      `ssh -L 6443:127.0.0.1:6443 {{ ansible_user }}@<vm>` and use the original 127.0.0.1 form.
+      Apply ForgeFlow with `kubectl apply -f {{ forgeflow_root }}/k8s/base/`.
+  when: k3s_enabled | bool

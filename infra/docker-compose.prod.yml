@@ -1,0 +1,159 @@
+# ForgeFlow — PRODUCTION stack for the Oracle ARM VM.
+#
+# Relationship to infra/docker-compose.yml: that file is the *developer* stack (bind mounts, hot
+# reload, ports published on 0.0.0.0, a `web` service running Vite). This one is what actually runs
+# on the VM. They are kept separate rather than layered with an override file because almost every
+# value differs, and a half-applied override is the worst of both.
+#
+# Shape on the VM:
+#
+#   internet ──► nginx (you already run this, :443 + TLS for your subdomain)
+#                  │  proxy_pass 127.0.0.1:${FORGEFLOW_API_PORT:-8000}
+#                  ▼
+#              api (this file) ──► mongo        (control-plane metadata, never published)
+#                  │              appdb        (generated-app data, 127.0.0.1:27018 only)
+#                  │
+#                  └─ /var/run/docker.sock ──► forgeflow-sb-* sandbox containers
+#                                                    ▲
+#                              proxy (Caddy, 127.0.0.1:8080) ─┘  preview routing only
+#
+# EVERY published port binds to 127.0.0.1 on purpose. Oracle Cloud security lists are a second
+# firewall most people forget, and a service bound to 0.0.0.0 that "looks fine" because the
+# security list blocks it is one console click away from being world-reachable. Only nginx
+# terminates public traffic.
+#
+# Usage:
+#   docker compose --env-file /opt/forgeflow/.env -f docker-compose.prod.yml up -d
+name: forgeflow-prod
+
+# Anchor: every service gets bounded logs. On a 50 GB boot volume, an unrotated json-file driver on
+# a chatty container is the single most common way one of these VMs falls over at 3am.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: forgeflow-mongo
+    restart: always
+    logging: *default-logging
+    # No `ports:` at all. The control-plane database is reachable only over the compose network;
+    # nothing outside docker has any business talking to it.
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # The database GENERATED apps use — separate from `mongo` by design (D8), and the only stateful
+  # service on the preview network so a sandbox can resolve it by name.
+  appdb:
+    image: mongo:7
+    container_name: forgeflow-appdb
+    restart: always
+    logging: *default-logging
+    ports:
+      # Loopback only: the control plane reaches it for provisioning + the data browser. The
+      # sandboxes reach the same server by name over the preview network.
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - appdb-data:/data/db
+    networks:
+      - default
+      - preview
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    # Set FORGEFLOW_IMAGE to the tag the CD pipeline pushed (ghcr.io/<owner>/forgeflow-api:<sha>).
+    # Pinning to an immutable sha tag rather than `latest` is what makes `rollback` mean something:
+    # `latest` would roll back to whatever `latest` points at *now*, which is the broken build.
+    image: ${FORGEFLOW_IMAGE:-ghcr.io/faheem219/forgeflow-api:latest}
+    container_name: forgeflow-api
+    restart: always
+    logging: *default-logging
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      FORGEFLOW_ENV: prod
+      MONGODB_URI: mongodb://mongo:27017
+      APP_DB_CLUSTER_URI: mongodb://forgeflow-appdb:27017
+      METRICS_ENABLED: "true"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      appdb:
+        condition: service_healthy
+    volumes:
+      # The control plane creates per-project sandboxes on the HOST daemon, so it needs the socket.
+      # This is the deliberate, documented trade-off from the threat model: the api container gains
+      # host-Docker (effectively root) access. It is why nothing untrusted is ever executed in this
+      # container — generated code only ever runs inside a sandbox (D5).
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      # The host's docker group id, so the non-root `forgeflow` user (uid 10001) can use the socket
+      # without running the container as root. Ansible discovers the real gid and writes it into
+      # .env — it is 988/999/1001 depending on the image, so hardcoding it is a guaranteed break.
+      - "${DOCKER_GID:?DOCKER_GID must be set — run: getent group docker | cut -d: -f3}"
+    ports:
+      # Loopback only; your existing nginx proxies the public subdomain to this.
+      - "127.0.0.1:${FORGEFLOW_API_PORT:-8000}:8000"
+    networks:
+      - default
+      # Joined so the control plane can reach sandbox containers directly for health probes.
+      - preview
+    deploy:
+      resources:
+        limits:
+          # Leaves headroom on a 4-OCPU/24 GB Ampere A1 for the sandboxes, which are the memory
+          # hogs (each runs pnpm + vite + a node server + sometimes Playwright).
+          cpus: "2.0"
+          memory: 4g
+
+  proxy:
+    image: caddy:2
+    container_name: forgeflow-proxy
+    restart: always
+    logging: *default-logging
+    depends_on:
+      - api
+    ports:
+      # Loopback only. Expose preview subdomains publicly by adding a wildcard server block to
+      # nginx that proxies to this port — see infra/nginx/forgeflow-preview.conf.example.
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      # Substituted into the Caddyfile so preview hostnames match your real domain.
+      PREVIEW_BASE_DOMAIN: ${PREVIEW_BASE_DOMAIN:-preview.localhost}
+    networks:
+      - default
+      - preview
+
+volumes:
+  mongo-data:
+  appdb-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  default:
+  preview:
+    name: forgeflow-preview
+    # External for the same reason as in the dev stack: the sandbox MANAGER owns this network, not
+    # compose. Two owners means a race where whichever creates it first wins, and if the manager
+    # gets there first compose refuses to start at all. Ansible creates it before first boot.
+    external: true

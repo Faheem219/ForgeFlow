@@ -1,0 +1,134 @@
+{{ ansible_managed | comment }}
+# ForgeFlow control plane — reverse proxy.
+#
+# TLS: this file assumes certbot has already issued a certificate for {{ forgeflow_domain }} and
+# that its managed lines are present below. If you are adding ForgeFlow to a domain certbot
+# ALREADY manages for another project, run:
+#
+#     sudo certbot --nginx -d {{ forgeflow_domain }}
+#
+# and certbot will rewrite the ssl_certificate lines in this file.
+
+# Map, not a hardcoded header. `Connection: upgrade` must only be sent for requests that actually
+# carry an Upgrade header; sending it unconditionally breaks keepalive on every ordinary HTTP
+# request. This is the standard nginx idiom and the reason it is a `map` at the top level.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ forgeflow_domain }};
+
+    # ACME HTTP-01 challenges must stay on plain HTTP.
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name {{ forgeflow_domain }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ forgeflow_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ forgeflow_domain }}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # ForgeFlow accepts design-image batches; the app's own cap is MAX_REQUEST_BYTES (64 MiB).
+    # nginx's default is 1 MiB, so without this an upload fails at the proxy with a 413 before the
+    # application ever sees it — and the app's error envelope never gets a chance to explain why.
+    client_max_body_size 64m;
+
+    access_log /var/log/nginx/forgeflow.access.log;
+    error_log  /var/log/nginx/forgeflow.error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ forgeflow_api_port }};
+
+        # ---- WebSocket support -----------------------------------------------------------
+        # ForgeFlow's realtime hub (/ws/projects/...) is a WebSocket. HTTP/1.1 plus these two
+        # headers is the whole requirement; omit them and every REST call works fine while live
+        # build/test streaming silently fails to connect.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+
+        # ---- Forwarded identity ----------------------------------------------------------
+        # uvicorn runs with --proxy-headers, so it trusts these to reconstruct the client's real
+        # scheme and address. Without X-Forwarded-Proto the app believes it is on plain HTTP and
+        # any absolute URL it generates comes out as http:// — which a browser on an HTTPS page
+        # then blocks as mixed content.
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # ---- Timeouts --------------------------------------------------------------------
+        # A ForgeFlow build streams for minutes; the 60s default would cut the WebSocket off
+        # mid-build. `proxy_read_timeout` is the one that matters for a long-lived WS connection,
+        # and the app sends a heartbeat every REALTIME_HEARTBEAT_S (20s) to keep it alive.
+        proxy_connect_timeout 10s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+
+        # Server-sent progress must reach the browser as it happens, not in 4 KB chunks.
+        proxy_buffering off;
+    }
+
+    # The scrape endpoint. Prometheus reaches it over the loopback on the VM, so there is no reason
+    # for it to be on the public internet — it is cheap for an outsider to poll and it reveals your
+    # route table and traffic shape. Denied here by default; the monitoring stack is unaffected.
+    location /metrics {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+        proxy_pass http://127.0.0.1:{{ forgeflow_api_port }}/metrics;
+        proxy_set_header Host $host;
+    }
+}
+{% if forgeflow_preview_domain %}
+
+# --------------------------------------------------------------------------------------------
+# Per-project sandbox previews: *.{{ forgeflow_preview_domain }} -> the Caddy preview proxy.
+#
+# Requires a WILDCARD DNS record (*.{{ forgeflow_preview_domain }} -> this VM) and a WILDCARD
+# certificate, which Let's Encrypt only issues over the DNS-01 challenge:
+#
+#     sudo certbot certonly --manual --preferred-challenges dns \
+#          -d '*.{{ forgeflow_preview_domain }}' -d '{{ forgeflow_preview_domain }}'
+#
+# Caddy does the per-project routing by container name; nginx just terminates TLS and forwards.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name *.{{ forgeflow_preview_domain }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ forgeflow_preview_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ forgeflow_preview_domain }}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+
+    location / {
+        # Caddy routes on the Host header, so it must be passed through unchanged.
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # A generated app's Vite dev server uses a WebSocket for HMR; same long timeout applies.
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+    }
+}
+{% endif %}

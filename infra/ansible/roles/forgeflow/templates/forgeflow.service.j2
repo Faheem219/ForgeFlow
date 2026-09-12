@@ -1,0 +1,25 @@
+{{ ansible_managed | comment }}
+# Brings the compose stack back after a reboot, and gives `systemctl status forgeflow` a real
+# answer. Type=oneshot + RemainAfterExit is the correct shape for compose: `up -d` returns
+# immediately, so a Type=simple unit would consider the service dead the moment it succeeded.
+[Unit]
+Description=ForgeFlow control plane (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory={{ forgeflow_root }}
+# Pulling before up means a reboot picks up the tag currently in .env even if that image was never
+# pulled on this host. `|| true` so a registry outage does not block a restart with a cached image.
+ExecStartPre=-/usr/bin/docker compose --env-file {{ forgeflow_root }}/.env -f {{ forgeflow_root }}/docker-compose.prod.yml pull --quiet
+ExecStart=/usr/bin/docker compose --env-file {{ forgeflow_root }}/.env -f {{ forgeflow_root }}/docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose --env-file {{ forgeflow_root }}/.env -f {{ forgeflow_root }}/docker-compose.prod.yml down
+ExecReload=/usr/bin/docker compose --env-file {{ forgeflow_root }}/.env -f {{ forgeflow_root }}/docker-compose.prod.yml up -d
+# Compose can take a while to pull a ~400MB arm64 image on first boot.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

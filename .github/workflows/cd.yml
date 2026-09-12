@@ -1,0 +1,309 @@
+# Continuous Delivery — ForgeFlow
+#
+# CI (.github/workflows/ci.yml) proves the code is good. THIS workflow ships it:
+#
+#     CI green on main ──► build multi-arch image ──► push to GHCR ──┬──► deploy backend to the
+#                                                                    │    Oracle ARM VM (SSH)
+#                                                                    └──► deploy frontend to Vercel
+#
+# It is triggered by `workflow_run` rather than `push` on purpose. A `push`-triggered deploy races
+# CI: both start from the same commit at the same time, so a deploy can finish and be serving
+# traffic while the test job that would have failed it is still running. `workflow_run` +
+# `conclusion == 'success'` makes "CI passed" an actual precondition rather than a coincidence.
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # Manual runs: redeploy a known-good SHA, or deploy without waiting for CI in an emergency.
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: the current commit SHA)"
+        required: false
+        type: string
+      skip_frontend:
+        description: "Skip the Vercel frontend deploy"
+        required: false
+        type: boolean
+        default: false
+
+# Never let two deploys interleave on one VM. `cancel-in-progress: false` is deliberate here (it is
+# `true` in CI): cancelling a half-finished deploy leaves the VM in an unknown state, which is worse
+# than queueing.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/forgeflow-api
+
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  gate:
+    name: Gate on CI
+    runs-on: ubuntu-latest
+    # A workflow_run event fires on failure too; this is where that is filtered out.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - id: resolve
+        run: |
+          # workflow_run events carry the SHA of the run that triggered them, NOT of the default
+          # branch head — using github.sha here would build whatever main points at *now*, which
+          # may be a newer, untested commit.
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${{ github.sha }}"
+          fi
+          TAG="${{ inputs.image_tag }}"
+          [ -n "$TAG" ] || TAG="$(echo "$SHA" | cut -c1-7)"
+          echo "sha=$SHA"  >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"  >> "$GITHUB_OUTPUT"
+          echo "Deploying commit $SHA as tag $TAG"
+
+  # ---------------------------------------------------------------------------------------------
+  build:
+    name: Build + push image (arm64 + amd64)
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+
+      # QEMU is what makes the arm64 build possible on GitHub's amd64 runners. The Oracle Ampere A1
+      # VM is aarch64, so an amd64-only image would pull fine and then die with "exec format error".
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # The built-in token; no PAT needed for pushing from within the repo.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        name: Compute image reference
+        run: |
+          # Lowercase: GHCR rejects uppercase path segments, and GitHub owners often have capitals.
+          IMAGE="$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - id: push
+        name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # Three tags, three jobs: the immutable SHA tag is what actually gets deployed and is
+          # what makes rollback meaningful; `latest` is a human convenience; the run number gives a
+          # monotonic ordering when several deploys share a SHA.
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ needs.gate.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:build-${{ github.run_number }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.gate.outputs.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          # Registry-backed layer cache. Without it every arm64 build re-runs `uv sync` under QEMU
+          # emulation, which is the slowest step in the whole pipeline by a wide margin.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        env:
+          # Passed as env rather than pasted inline: an expression interpolated straight into a
+          # shell word is the standard script-injection foothold in Actions, and doing it this way
+          # also stops shellcheck misreading `${{ }}` as shell syntax.
+          IMAGE_REF: ${{ steps.meta.outputs.image }}:${{ needs.gate.outputs.tag }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          COMMIT: ${{ needs.gate.outputs.sha }}
+        run: |
+          {
+            echo "### Image published"
+            echo ""
+            echo "\`${IMAGE_REF}\`"
+            echo ""
+            echo "- platforms: linux/amd64, linux/arm64"
+            echo "- digest: \`${DIGEST}\`"
+            echo "- commit: \`${COMMIT}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------------------------
+  deploy-backend:
+    name: Deploy backend to Oracle ARM VM
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.FORGEFLOW_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+
+      - name: Install SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pin the host key instead of StrictHostKeyChecking=no. Disabling the check makes every
+          # deploy trivially MITM-able by anyone who can answer on that IP.
+          echo "${{ secrets.VM_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # Keep the VM's copy of the compose file and proxy config in step with the repo, so a change
+      # to either ships with the code rather than needing a manual copy.
+      - name: Sync deployment files to the VM
+        run: |
+          scp -i ~/.ssh/id_ed25519 -P "${{ vars.VM_SSH_PORT || 22 }}" \
+            infra/docker-compose.prod.yml \
+            "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/opt/forgeflow/docker-compose.prod.yml"
+          scp -i ~/.ssh/id_ed25519 -P "${{ vars.VM_SSH_PORT || 22 }}" \
+            infra/caddy/Caddyfile.prod \
+            "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/opt/forgeflow/caddy/Caddyfile.prod"
+
+      - name: Deploy (with automatic rollback)
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}:${{ needs.gate.outputs.tag }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -p "${{ vars.VM_SSH_PORT || 22 }}" \
+              "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
+              "IMAGE='${IMAGE}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/forgeflow
+
+          # Record what is currently serving BEFORE changing anything. This file is the rollback
+          # target; without it "roll back" would mean "whatever :latest points at", which after a
+          # bad deploy is the broken image itself.
+          PREVIOUS="$(grep -E '^FORGEFLOW_IMAGE=' .env 2>/dev/null | cut -d= -f2- || true)"
+          echo "previous image: ${PREVIOUS:-<none>}"
+          echo "new image:      ${IMAGE}"
+
+          # Rewrite FORGEFLOW_IMAGE in .env idempotently (append if absent, replace if present).
+          if grep -qE '^FORGEFLOW_IMAGE=' .env; then
+            sed -i "s|^FORGEFLOW_IMAGE=.*|FORGEFLOW_IMAGE=${IMAGE}|" .env
+          else
+            echo "FORGEFLOW_IMAGE=${IMAGE}" >> .env
+          fi
+
+          docker compose --env-file .env -f docker-compose.prod.yml pull api
+          docker compose --env-file .env -f docker-compose.prod.yml up -d --no-deps api
+
+          # Poll the container's own health rather than sleeping a fixed amount. The image declares
+          # a HEALTHCHECK, so this is the same signal docker itself uses.
+          echo "waiting for health..."
+          ok=0
+          for _ in $(seq 1 30); do
+            state="$(docker inspect -f '{{.State.Health.Status}}' forgeflow-api 2>/dev/null || echo starting)"
+            if [ "$state" = "healthy" ]; then ok=1; break; fi
+            if [ "$state" = "unhealthy" ]; then break; fi
+            sleep 5
+          done
+
+          if [ "$ok" = "1" ]; then
+            echo "deploy OK: $(curl -sf http://127.0.0.1:${FORGEFLOW_API_PORT:-8000}/health)"
+            # Reclaim disk. A 50 GB boot volume fills up fast at one ~400 MB image per deploy, and
+            # a full disk breaks the NEXT deploy in a way that looks unrelated.
+            docker image prune -af --filter "until=168h" >/dev/null 2>&1 || true
+            exit 0
+          fi
+
+          echo "!!! new image is not healthy — rolling back" >&2
+          docker logs --tail 50 forgeflow-api >&2 || true
+
+          if [ -n "${PREVIOUS}" ]; then
+            sed -i "s|^FORGEFLOW_IMAGE=.*|FORGEFLOW_IMAGE=${PREVIOUS}|" .env
+            docker compose --env-file .env -f docker-compose.prod.yml up -d --no-deps api
+            echo "rolled back to ${PREVIOUS}" >&2
+          else
+            echo "no previous image recorded — cannot auto-roll back; manual intervention needed" >&2
+          fi
+          exit 1
+          REMOTE
+
+      - name: Verify the public endpoint
+        run: |
+          # Through nginx + TLS this time, not just the loopback check the VM did. This is what
+          # catches "the container is healthy but the proxy is misconfigured".
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "https://${{ vars.FORGEFLOW_DOMAIN }}/health"; then
+              echo ""; echo "public endpoint OK"; exit 0
+            fi
+            echo "attempt $i failed; retrying..."; sleep 6
+          done
+          echo "public endpoint did not respond" >&2
+          exit 1
+
+  # ---------------------------------------------------------------------------------------------
+  deploy-frontend:
+    name: Deploy frontend to Vercel
+    needs: [gate, deploy-backend]
+    # `inputs` is null on a workflow_run event, so compare explicitly rather than negating null.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_frontend != true }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: corepack enable
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      # Deliberately ordered AFTER deploy-backend: the frontend is compiled against
+      # VITE_API_BASE_URL, so shipping it first would point a new UI at an old API.
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VITE_API_BASE_URL: https://${{ vars.FORGEFLOW_DOMAIN }}
+
+      - name: Deploy
+        run: |
+          URL="$(vercel deploy --prebuilt --prod --token='${{ secrets.VERCEL_TOKEN }}')"
+          echo "Deployed: $URL"
+          echo "### Frontend deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

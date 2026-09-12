@@ -1,0 +1,28 @@
+---
+# Map ansible's architecture fact onto the names Docker's apt repo uses. Ampere A1 reports
+# `aarch64`; the repo calls it `arm64`, and an apt source with the wrong arch fails with a
+# misleading "no installation candidate" instead of an architecture error.
+docker_apt_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armhf
+docker_apt_arch: "{{ docker_apt_arch_map[ansible_facts['architecture']] | default('amd64') }}"
+
+# Convenience for a human operator; it does mean that user can trivially become root via docker.
+docker_add_login_user_to_group: true
+
+docker_daemon_config:
+  # Bounded logs, daemon-wide. The compose file sets this per-service too, but a default here
+  # catches the sandbox containers, which the sandbox manager creates directly via the SDK and
+  # which would otherwise use the unbounded default driver on a small boot volume.
+  log-driver: json-file
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+  # Containers get a clean shutdown on `systemctl restart docker` instead of being killed.
+  live-restore: true
+  # Docker's default pools can collide with an OCI VCN's own ranges; pinning them keeps the
+  # per-project sandbox networks inside a block that will not fight the cloud network.
+  default-address-pools:
+    - base: "172.20.0.0/16"
+      size: 24

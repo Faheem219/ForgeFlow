@@ -1,0 +1,63 @@
+{
+	admin off
+	# TLS is terminated by YOUR nginx out front, not here. Caddy's automatic HTTPS would try to
+	# solve an ACME challenge on :443 — a port it cannot bind behind nginx — and fail on boot.
+	auto_https off
+}
+
+# Production Caddy has exactly one job: routing a preview request to the right sandbox container.
+# It is NOT the front door (nginx is) and it does NOT serve the frontend (Vercel does).
+#
+# Sandboxes are routed by *name*: the container is `forgeflow-sb-<project-id>` on the
+# `forgeflow-preview` network and docker's embedded DNS resolves it, so no config regeneration is
+# needed when a project appears. That name resolution is exactly why this stays a docker container
+# attached to that network — a Kubernetes pod on the CNI could not do it.
+#
+# Two mechanisms, each doing the half it is good at:
+#
+#   1. The SITE ADDRESS pins the domain suffix (`*.api.{$PREVIEW_BASE_DOMAIN}`). This is what stops
+#      an arbitrary Host header reaching a sandbox: a request for `example.com` matches no site and
+#      gets a 404 rather than being proxied to `forgeflow-sb-example`. Caddy matches the more
+#      specific `*.api.<domain>` before the broader `*.<domain>`, so the two blocks do not collide.
+#
+#   2. A LEFT-ANCHORED REGEX extracts the project id. The dev Caddyfile can use
+#      `{http.request.host.labels.N}` because `preview.localhost` is a fixed two-label suffix, but
+#      labels are indexed RIGHT-to-left, so a hardcoded index silently resolves to the TLD once the
+#      domain is deeper (preview.example.com is 3 labels, preview.example.co.uk is 4) and every
+#      preview 502s. Anchoring on the left puts the capture where the project id actually is, at
+#      any depth. The charset is constrained to docker-name characters so no dot, slash or colon
+#      from a crafted Host can steer the upstream elsewhere.
+
+# The `http://` scheme prefix is load-bearing: a bare hostname site address makes Caddy listen
+# on :443 even with `auto_https off`, so this block would never see the plain-HTTP traffic nginx
+# forwards and every preview would hang. (The dev Caddyfile pins `:80` for the same reason.)
+#
+# Backend preview: <project-id>.api.<base-domain>
+http://*.api.{$PREVIEW_BASE_DOMAIN} {
+	@pid header_regexp pid Host ^([A-Za-z0-9][A-Za-z0-9_-]*)\.
+	handle @pid {
+		reverse_proxy forgeflow-sb-{re.pid.1}:3001
+	}
+	handle {
+		respond "ForgeFlow preview proxy: no project id in host." 404
+	}
+}
+
+# Frontend preview: <project-id>.<base-domain>
+http://*.{$PREVIEW_BASE_DOMAIN} {
+	@pid header_regexp pid Host ^([A-Za-z0-9][A-Za-z0-9_-]*)\.
+	handle @pid {
+		reverse_proxy forgeflow-sb-{re.pid.1}:5173
+	}
+	handle {
+		respond "ForgeFlow preview proxy: no project id in host." 404
+	}
+}
+
+# Catch-all for any other Host on :80. Without it Caddy answers an unmatched host with an empty
+# 200, which reads like "the service is fine" to a health check that is in fact misrouted. These
+# requests are NEVER proxied to a sandbox — the wildcard site addresses above are what guarantees
+# that — this block only makes the rejection legible.
+http://:80 {
+	respond "ForgeFlow preview proxy: unknown host. Use <project-id>.{$PREVIEW_BASE_DOMAIN}." 404
+}

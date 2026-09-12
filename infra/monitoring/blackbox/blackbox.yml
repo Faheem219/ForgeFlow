@@ -1,0 +1,37 @@
+# Blackbox exporter: probe definitions.
+#
+# These are the only checks that test the system the way a user does — from outside, through DNS,
+# TLS, nginx and the proxy. An in-process /metrics counter cannot tell you the certificate expired
+# or the OCI security list closed.
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      # Follow redirects so an http->https bounce is a pass, not a failure.
+      follow_redirects: true
+      # Fail the probe on an expired cert rather than quietly succeeding. probe_ssl_earliest_cert_expiry
+      # is exported either way and drives the cert-expiry alert.
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      preferred_ip_protocol: ip4
+
+  # For /health specifically: assert the BODY too. A 200 from a misconfigured proxy that is serving
+  # someone else's app would otherwise read as a healthy ForgeFlow.
+  forgeflow_health:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"status"\s*:\s*"ok"'
+      follow_redirects: true
+      preferred_ip_protocol: ip4
+
+  tcp_connect:
+    prober: tcp
+    timeout: 5s

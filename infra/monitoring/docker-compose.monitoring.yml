@@ -1,0 +1,156 @@
+# Monitoring stack: Prometheus + Grafana + exporters (assignment step 4).
+#
+# Deliberately a SEPARATE compose project from the application stack. Two reasons, both practical:
+# a monitoring stack that restarts whenever you deploy the app is blind exactly when you most want
+# to watch a deploy; and the thing that tells you the app is down must not share the app's
+# lifecycle.
+#
+#   forgeflow-api  :8000/metrics  ──┐
+#   node-exporter  :9100          ──┼──► prometheus :9090 ──► grafana :3000
+#   cadvisor       :8080          ──┤
+#   blackbox       :9115  ─probe─►  the PUBLIC https URL
+#
+# Everything binds 127.0.0.1. Reach the UIs over an SSH tunnel:
+#   ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 ubuntu@<vm>
+# then open http://localhost:3000. Grafana on a public port with a default password is how these
+# boxes get taken over.
+#
+# Usage:  docker compose -f docker-compose.monitoring.yml up -d
+name: forgeflow-monitoring
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: forgeflow-prometheus
+    restart: always
+    logging: *default-logging
+    user: "65534:65534"  # nobody — it only ever needs to write its own TSDB
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      # 15 days on a small boot volume. Raise only if you also check disk headroom.
+      - "--storage.tsdb.retention.time=${PROM_RETENTION:-15d}"
+      - "--storage.tsdb.retention.size=2GB"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      # Lets `curl -X POST localhost:9090/-/reload` apply a config change without a restart, which
+      # would otherwise lose the in-memory head block.
+      - "--web.enable-lifecycle"
+    ports:
+      - "127.0.0.1:${PROM_PORT:-9090}:9090"
+    extra_hosts:
+      # `host.docker.internal` is a Docker Desktop nicety that does NOT exist on Linux. Mapping it
+      # to the gateway explicitly is what lets Prometheus scrape the API on the host's loopback
+      # port, and it keeps the scrape config identical across a Mac laptop and the Linux VM.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: forgeflow-grafana
+    restart: always
+    logging: *default-logging
+    depends_on:
+      - prometheus
+    volumes:
+      # Provisioning: the datasource and dashboards are declared as files, so a rebuilt Grafana
+      # comes back identical. A dashboard clicked together in the UI lives only in that volume and
+      # is gone the moment someone recreates the container.
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      # No anonymous access and no sign-up: this is bound to loopback, but defence in depth costs
+      # nothing here.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Host-level metrics: CPU, memory, disk, filesystem, load. Answers "is the VM itself the
+  # problem?" — which on a 4-OCPU box running sandboxes is a real and frequent question.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: forgeflow-node-exporter
+    restart: always
+    logging: *default-logging
+    # pid: host + the /host mounts are what make the numbers refer to the HOST rather than to the
+    # exporter's own namespace. Without them you get a very tidy graph of an idle container.
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker)($$|/)"
+    ports:
+      - "127.0.0.1:9100:9100"
+
+  # Per-container CPU/memory/network. This is how you see a runaway sandbox container, which the
+  # host-level view would only show as unexplained load.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: forgeflow-cadvisor
+    restart: always
+    logging: *default-logging
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8081:8080"
+    command:
+      # Trim the default collectors; the full set is expensive on a small box and none of the
+      # dropped ones feed the dashboard.
+      - "--docker_only=true"
+      - "--housekeeping_interval=15s"
+
+  # Probes the PUBLIC URL from outside the app. This is the only check that exercises the whole
+  # path — DNS, the OCI security list, nginx, TLS, the proxy, the container — so it is what the
+  # uptime panel is built on. An in-process metric cannot tell you the TLS cert expired.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: forgeflow-blackbox
+    restart: always
+    logging: *default-logging
+    volumes:
+      - ./blackbox/blackbox.yml:/config/blackbox.yml:ro
+    command:
+      - "--config.file=/config/blackbox.yml"
+    ports:
+      - "127.0.0.1:9115:9115"
+
+volumes:
+  prometheus-data:
+  grafana-data:

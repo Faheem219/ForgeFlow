@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost"
     log_level: str = "INFO"
     log_json: bool = True
+    # --- Metrics (devops) ---
+    # Prometheus scrape endpoint. Disable to stop exporting entirely; the middleware is then
+    # never installed, so there is no measurement overhead either.
+    metrics_enabled: bool = True
+    metrics_path: str = "/metrics"
 
     # --- Auth (phase-03) ---
     jwt_algorithm: str = "HS256"

@@ -1,0 +1,97 @@
+# Kubernetes rollout / rollback — the Step-3 orchestration deliverable.
+#
+# Separate from cd.yml on purpose. cd.yml ships the runtime that actually serves traffic
+# (docker-compose on the VM); this drives the k3s cluster that demonstrates orchestration. Keeping
+# them apart means a failed demo can never take production down, and the diagram stays honest about
+# which path is which.
+#
+# Everything here is manual (`workflow_dispatch`) — a demo should run when a human asks for it.
+name: K8s rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do"
+        required: true
+        type: choice
+        default: rollout
+        options: [rollout, rollback, status, demo]
+      image_tag:
+        description: "Image tag for 'rollout' (e.g. a commit SHA)"
+        required: false
+        type: string
+        default: latest
+      revision:
+        description: "Revision for 'rollback' (blank = previous)"
+        required: false
+        type: string
+
+concurrency:
+  group: k8s-rollout
+  cancel-in-progress: false
+
+jobs:
+  lint-manifests:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Schema validation against the real k8s OpenAPI definitions. `-strict` rejects unknown
+      # fields, which is what catches the classic typo (`replica:` for `replicas:`) that otherwise
+      # applies cleanly and silently does nothing.
+      - name: kubeconform (strict)
+        run: |
+          curl -sSL -o kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform.tar.gz kubeconform
+          ./kubeconform -summary -strict -kubernetes-version 1.31.0 infra/k8s/base
+
+  drive:
+    name: ${{ inputs.action }}
+    needs: lint-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.4
+
+      - name: Configure cluster access
+        run: |
+          install -m 700 -d ~/.kube
+          # A kubeconfig for the k3s cluster, base64-encoded so the newlines and the embedded
+          # certificate survive being stored as a secret.
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Rollout
+        if: inputs.action == 'rollout'
+        run: |
+          IMAGE="$(echo 'ghcr.io/${{ github.repository_owner }}/forgeflow-api' | tr '[:upper:]' '[:lower:]'):${{ inputs.image_tag }}"
+          chmod +x infra/k8s/scripts/*.sh
+          infra/k8s/scripts/rolling-update.sh "$IMAGE" "CD run ${{ github.run_number }} (${{ github.sha }})"
+
+      - name: Rollback
+        if: inputs.action == 'rollback'
+        run: |
+          chmod +x infra/k8s/scripts/*.sh
+          infra/k8s/scripts/rollback.sh ${{ inputs.revision }}
+
+      - name: Status
+        if: inputs.action == 'status'
+        run: |
+          kubectl -n forgeflow get all
+          kubectl -n forgeflow rollout history deploy/forgeflow-api
+
+      - name: Full demo (zero-downtime + auto-rollback)
+        if: inputs.action == 'demo'
+        run: |
+          IMAGE="$(echo 'ghcr.io/${{ github.repository_owner }}/forgeflow-api' | tr '[:upper:]' '[:lower:]')"
+          chmod +x infra/k8s/scripts/*.sh
+          infra/k8s/scripts/demo-rolling-update.sh \
+            "${IMAGE}:latest" "${IMAGE}:${{ inputs.image_tag }}" "${IMAGE}:deliberately-nonexistent"

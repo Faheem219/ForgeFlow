@@ -1,0 +1,7 @@
+---
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+  # `reloaded`, never `restarted`: a reload re-reads config without dropping a single connection,
+  # and this box serves another project. A restart would break its live requests too.

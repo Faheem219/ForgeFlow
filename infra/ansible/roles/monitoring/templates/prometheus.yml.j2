@@ -1,0 +1,101 @@
+{{ ansible_managed | comment }}
+# Rendered from roles/monitoring/templates/prometheus.yml.j2 — edit that, not this file.
+# Prometheus scrape configuration for ForgeFlow.
+#
+# Four targets, each answering a different question:
+#   forgeflow-api   — what is the APP doing?      (latency, error rate, throughput)
+#   node-exporter   — what is the VM doing?       (CPU, RAM, disk)
+#   cadvisor        — what is each CONTAINER doing? (a runaway sandbox)
+#   blackbox        — can a USER actually reach it? (DNS + TLS + nginx + proxy + app)
+#
+# Reload after an edit without losing the in-memory head block:
+#   curl -X POST http://127.0.0.1:9090/-/reload
+
+global:
+  # 15s is a deliberate compromise. Faster gives finer resolution but multiplies storage on a small
+  # boot volume; slower makes a 30-second outage invisible between samples.
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  # Stamped onto every series, so if these ever feed a shared Prometheus the source is unambiguous.
+  external_labels:
+    environment: production
+    project: forgeflow
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # ------------------------------------------------------------------ the application
+  - job_name: forgeflow-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:{{ forgeflow_api_port }}"]
+        labels:
+          service: forgeflow-api
+          component: control-plane
+    # Scraped over the host loopback, NOT the public URL: it avoids a round trip through nginx and
+    # means the scrape keeps working even when the public path is broken — which is exactly when
+    # the metrics matter most. (nginx denies /metrics publicly for the same reason.)
+
+  # ------------------------------------------------------------------ the host
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: oracle-vm
+
+  # ------------------------------------------------------------------ containers
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metric_relabel_configs:
+      # cAdvisor is by far the biggest cardinality source here — it emits per-container series for
+      # every sandbox ForgeFlow ever creates, and those are born and destroyed constantly. Keeping
+      # only the handful the dashboard uses is the difference between a stable TSDB and one that
+      # OOMs the VM in a week.
+      - source_labels: [__name__]
+        regex: "container_(cpu_usage_seconds_total|memory_usage_bytes|memory_working_set_bytes|network_receive_bytes_total|network_transmit_bytes_total|fs_usage_bytes|last_seen)"
+        action: keep
+      # Drop the cgroup-root/aggregate series, which carry an `id` but no `name`. Two reasons:
+      # they double-count inside any sum() over containers, and they are the only series for which
+      # `id` is the sole distinguishing label — so dropping `id` below would leave them with an
+      # empty label set and Prometheus would reject the scrape as a duplicate series.
+      - source_labels: [name]
+        regex: "^$"
+        action: drop
+      # `id` is the full cgroup path, which changes every time a container is recreated — keeping
+      # it would turn each restart into a brand-new time series. Safe to drop now that every
+      # remaining series is uniquely identified by `name`.
+      - regex: "^id$"
+        action: labeldrop
+
+  # ------------------------------------------------------------------ the user's view
+  # The relabeling dance below is the standard blackbox pattern and is genuinely confusing the
+  # first time. In order:
+  #   1. the target URL becomes the `__param_target` query parameter
+  #   2. that value is preserved as the `instance` label, so the series is named after the URL
+  #      probed rather than after the exporter
+  #   3. the actual scrape address is rewritten to the exporter itself
+  # Skip step 3 and Prometheus tries to scrape your website for Prometheus metrics.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [forgeflow_health]
+    static_configs:
+      - targets:
+          - https://{{ forgeflow_domain }}/health
+        labels:
+          service: forgeflow-api
+          probe: public-health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ------------------------------------------------------------------ prometheus itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,40 @@
+# Ingress for the in-cluster API.
+#
+# k3s ships Traefik as its default IngressController, so a plain networking.k8s.io/v1 Ingress works
+# with no extra install. No TLS section: on the VM your existing nginx already terminates TLS for
+# the public subdomain, and terminating it twice would mean a second cert for the same name and an
+# ACME challenge that nginx, not Traefik, would answer.
+#
+# k3s note: Traefik's Service is type LoadBalancer, which klipper-lb resolves by binding ports 80
+# and 443 on the HOST. If your nginx already owns :80/:443 (it does), the two will fight — see
+# infra/k8s/README.md §"Port conflict with nginx" for the two ways out (move Traefik's ports, or
+# reach the cluster over a NodePort instead). The demo scripts use `kubectl port-forward`, which
+# sidesteps the question entirely.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forgeflow-api
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+  annotations:
+    # WebSockets: ForgeFlow's realtime hub is a WS endpoint, and Traefik forwards the Upgrade
+    # handshake natively — but only if no middleware strips the hop-by-hop headers. Nothing here
+    # does. The equivalent care is needed in the nginx config (infra/nginx/), where it is NOT the
+    # default and is the single most likely thing to silently break live build streaming.
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    # Replace with the hostname you actually route to the cluster. Left as a placeholder rather
+    # than a guess: an Ingress with someone else's hostname silently matches nothing.
+    - host: forgeflow-k8s.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forgeflow-api
+                port:
+                  name: http

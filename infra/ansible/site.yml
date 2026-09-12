@@ -1,0 +1,86 @@
+---
+# ForgeFlow — Oracle ARM VM provisioning.
+#
+#   ansible-playbook site.yml                       # everything
+#   ansible-playbook site.yml --check --diff        # dry run: show what WOULD change
+#   ansible-playbook site.yml --tags nginx          # just one part
+#   ansible-playbook site.yml --skip-tags k3s,monitoring
+#
+# Run it twice. The second run should report `changed=0` — that is the whole promise of
+# configuration management, and any task that reports changed on a no-op run is a bug in this file.
+#
+# Role order is a dependency chain, not a preference:
+#   common    creates the forgeflow user  -> docker adds it to the docker group
+#   docker    discovers the docker gid    -> forgeflow writes it into .env
+#   forgeflow lays down /opt/forgeflow    -> k3s/monitoring put files under it
+#   firewall  runs LAST, so a mistake in it cannot lock us out mid-play
+
+- name: Provision the ForgeFlow VM
+  hosts: forgeflow
+  become: true
+
+  pre_tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Show what we are provisioning
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} —
+          {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+          on {{ ansible_facts['architecture'] }},
+          {{ ansible_facts['processor_vcpus'] }} vCPU,
+          {{ (ansible_facts['memtotal_mb'] / 1024) | round(1) }} GB RAM
+
+    - name: Refuse to run against a placeholder domain
+      # Checked up front rather than when nginx gets to it: failing after Docker is installed and
+      # half the system is configured is a much worse experience than failing in five seconds.
+      ansible.builtin.assert:
+        that:
+          - forgeflow_domain is defined
+          - "'CHANGE_ME' not in forgeflow_domain"
+        fail_msg: >-
+          Set `forgeflow_domain` in group_vars/all.yml (or pass -e forgeflow_domain=...) to the
+          subdomain your nginx already terminates TLS for.
+
+    - name: Warn when the API port may already be taken
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          ss -ltnp 2>/dev/null | awk '{print $4}' | grep -E ":{{ forgeflow_api_port }}$" || true
+        executable: /bin/bash
+      register: port_check
+      changed_when: false
+
+    - name: Report a port conflict
+      ansible.builtin.debug:
+        msg: >-
+          NOTE: something is already listening on port {{ forgeflow_api_port }}
+          ({{ port_check.stdout_lines | join(', ') }}). If that is your other FastAPI project, set
+          `forgeflow_api_port` to a free port in group_vars/all.yml AND update the proxy_pass in
+          the nginx server block for {{ forgeflow_domain }} to match.
+      when: port_check.stdout | length > 0
+
+  roles:
+    - { role: common, tags: [common, base] }
+    - { role: docker, tags: [docker] }
+    - { role: forgeflow, tags: [forgeflow, app] }
+    - { role: nginx, tags: [nginx, proxy] }
+    - { role: k3s, tags: [k3s, kubernetes] }
+    - { role: monitoring, tags: [monitoring, observability] }
+    # Last on purpose: everything above is reachable over the existing SSH session, and a firewall
+    # mistake here cannot strand the play half-finished.
+    - { role: firewall, tags: [firewall, security] }
+
+  post_tasks:
+    - name: Summarise
+      ansible.builtin.debug:
+        msg:
+          - "Provisioning complete."
+          - "API will serve on 127.0.0.1:{{ forgeflow_api_port }} behind nginx for {{ forgeflow_domain }}"
+          - "Next: push a deploy (GitHub Actions CD), or start manually with `systemctl start forgeflow`"
+          - >-
+            Grafana: ssh -L {{ monitoring_grafana_port }}:127.0.0.1:{{ monitoring_grafana_port }}
+            {{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}
+          - "k3s: `kubectl get nodes` on the VM; manifests in {{ forgeflow_root }}/k8s/base/"
+          - "REMEMBER: open TCP 80 + 443 in the OCI console security list — Ansible cannot do that."

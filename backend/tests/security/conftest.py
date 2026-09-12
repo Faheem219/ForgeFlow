@@ -26,6 +26,11 @@ PUBLIC_ROUTES = {
     ("POST", "/auth/register"),  # account creation
     ("POST", "/auth/login"),  # credential exchange
     ("GET", "/health"),  # liveness — no data, so operators can see the process is up
+    # Prometheus scrape target (devops step 4). Deliberately token-free: it exposes only method,
+    # route-template and status-code labels plus process counters — no user, project or secret
+    # data (asserted by tests/core/test_metrics.py). Kept off the public internet by the reverse
+    # proxy and firewall, which is the conventional split for an exposition endpoint.
+    ("GET", "/metrics"),
 }
 
 

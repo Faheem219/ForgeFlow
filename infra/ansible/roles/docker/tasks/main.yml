@@ -1,0 +1,122 @@
+---
+# Docker CE from Docker's own apt repository.
+#
+# Not Ubuntu's `docker.io` package: that ships an older engine and, more importantly, no
+# `docker compose` v2 plugin — and infra/docker-compose.prod.yml uses v2 syntax throughout
+# (`depends_on.condition`, `env_file.path`). The v1 `docker-compose` python script cannot parse it.
+#
+# The repo is added for the host's real architecture (arm64 on Ampere), because an apt source with
+# the wrong arch fails with a confusing "no installation candidate" rather than an arch error.
+
+- name: Ensure the apt keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Fetch the Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Add the Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_facts['distribution_release'] }} stable
+    filename: docker
+    state: present
+  # A changed repo definition must be visible to the install task in the SAME run.
+  register: docker_repo
+
+- name: Update apt cache after adding the Docker repo
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_repo.changed  # noqa: no-handler — the very next task needs the refreshed index
+
+- name: Install Docker Engine and the Compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Configure the Docker daemon
+  ansible.builtin.copy:
+    content: "{{ docker_daemon_config | to_nice_json }}"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Enable and start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+# Flush now rather than at the end of the play: everything below this line needs a running daemon
+# with the new config, and handlers would otherwise not fire until the whole play finished.
+- name: Apply any pending Docker restart
+  ansible.builtin.meta: flush_handlers
+
+- name: Add the forgeflow user to the docker group
+  ansible.builtin.user:
+    name: "{{ forgeflow_user }}"
+    groups: docker
+    append: true  # never replace the user's other groups
+
+- name: Add the login user to the docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  # So you can run `docker ps` after re-logging in without sudo. Note this is effectively granting
+  # root: anyone in the docker group can mount the host filesystem into a privileged container.
+  when: docker_add_login_user_to_group | bool
+
+# ------------------------------------------------------------------ the docker group id
+# Read back rather than assumed. The api container runs as uid 10001 and needs the host docker
+# group in its supplementary groups to use /var/run/docker.sock; that gid is 988, 999 or 1001
+# depending on the image, so hardcoding it is a guaranteed break on someone else's VM. The
+# forgeflow role writes this into .env as DOCKER_GID, which compose reads via `group_add`.
+- name: Discover the docker group id
+  ansible.builtin.getent:
+    database: group
+    key: docker
+
+- name: Record the docker gid as a fact
+  ansible.builtin.set_fact:
+    docker_gid: "{{ ansible_facts.getent_group['docker'][1] }}"
+
+- name: Show the discovered docker gid
+  ansible.builtin.debug:
+    msg: "docker group id on this host is {{ docker_gid }} (written to .env as DOCKER_GID)"
+
+# ------------------------------------------------------------------ the preview network
+# Created here, before the compose stack ever starts, because compose declares it `external: true`.
+# Two owners (compose and the sandbox manager) racing to create it is a real failure mode: if the
+# manager wins, compose refuses to start with "network forgeflow-preview was found but has
+# incorrect label com.docker.compose.network" and takes the proxy down with it.
+#
+# `--internal` is the isolation guarantee, not a nicety: containers on it have NO route to the host
+# or the internet, which is what makes it safe to run generated code there (D5).
+- name: Create the preview network
+  community.docker.docker_network:
+    name: forgeflow-preview
+    driver: bridge
+    internal: true
+    labels:
+      forgeflow.managed: "true"
+      forgeflow.role: preview
+    state: present

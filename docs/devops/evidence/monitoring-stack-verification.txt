@@ -1,0 +1,42 @@
+### Prometheus targets (all up)
+  blackbox-http      up
+  cadvisor           up
+  forgeflow-api      up
+  node               up
+  prometheus         up
+
+### Alert rules loaded
+  group: forgeflow-availability
+    - ForgeFlowDown [critical] state=firing
+    - ForgeFlowScrapeTargetDown [critical] state=inactive
+    - TLSCertificateExpiringSoon [warning] state=inactive
+  group: forgeflow-host
+    - DiskFillingUp [warning] state=inactive
+    - DiskCritical [critical] state=inactive
+    - HighMemoryPressure [warning] state=inactive
+    - HostHighCPU [warning] state=inactive
+  group: forgeflow-performance
+    - HighErrorRate [critical] state=inactive
+    - HighLatencyP95 [warning] state=inactive
+    - UnhandledExceptions [warning] state=inactive
+
+### Grafana dashboard panels
+  [row        ] Health at a glance
+  [stat       ] Uptime (24h)
+  [stat       ] Current status
+  [stat       ] Error rate (5m)
+  [stat       ] p95 latency (5m)
+  [stat       ] Version
+  [row        ] Golden signals
+  [timeseries ] Latency percentiles
+  [timeseries ] Request rate by status class
+  [timeseries ] Error ratio
+  [timeseries ] Slowest routes (p95)
+  [timeseries ] Requests in flight
+  [timeseries ] Unhandled exceptions
+  [timeseries ] Probe duration (public URL)
+  [row        ] The VM
+  [timeseries ] CPU utilisation
+  [timeseries ] Memory used
+  [gauge      ] Root disk used
+  [timeseries ] Memory by container

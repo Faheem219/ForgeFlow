@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import Response
 
 from app.api.admin.config_router import config_router
 from app.auth.router import router as auth_router
@@ -23,6 +24,7 @@ from app.core.cost_router import cost_router
 from app.core.errors import SystemError, register_exception_handlers  # noqa: A004 - taxonomy name
 from app.core.limits import BodySizeLimitMiddleware
 from app.core.logging import configure_logging
+from app.core.metrics import METRICS, MetricsMiddleware, metrics_response
 from app.core.observability import install_correlation_filter
 from app.data_browser.router import data_router
 from app.db.mongo import close_client, init_db
@@ -114,6 +116,16 @@ def create_app() -> FastAPI:
     # Outermost: refuse over-sized bodies before anything buffers them (phase-47).
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=int(config.get("max_request_bytes")))
 
+    # Metrics sit just inside the body-size cap: a request refused as too large never reached the
+    # application, so counting it as served latency would be a lie. Everything that DOES get
+    # handled is timed, including the CORS preflights and the error-envelope responses below.
+    metrics_enabled = bool(config.get("metrics_enabled"))
+    if metrics_enabled:
+        app.add_middleware(MetricsMiddleware)
+        METRICS.set_build_info(
+            version=str(config.get("app_version")), env=str(config.get("forgeflow_env"))
+        )
+
     origins = [o.strip() for o in str(config.get("cors_origins")).split(",") if o.strip()]
     allow_all = origins == ["*"]
     app.add_middleware(
@@ -154,6 +166,14 @@ def create_app() -> FastAPI:
             "env": config.get("forgeflow_env"),
             "version": config.get("app_version"),
         }
+
+    if metrics_enabled:
+        # Registered without auth on purpose: Prometheus scrapes it, and the endpoint exposes no
+        # secret or user data (see app/core/metrics.py). It is kept off the public internet by the
+        # reverse proxy / firewall rather than by a token, which is the conventional split.
+        @app.get(str(config.get("metrics_path")), include_in_schema=False)
+        async def metrics() -> Response:
+            return metrics_response()
 
     return app
 

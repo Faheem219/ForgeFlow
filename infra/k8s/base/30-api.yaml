@@ -1,0 +1,228 @@
+# The ForgeFlow control plane — the Deployment the rolling-update/rollback demo drives.
+#
+# SCOPE NOTE, stated plainly because it is the honest limitation of this manifest:
+# sandbox-backed stages (build / preview / test / deploy) do NOT work in this cluster. The control
+# plane creates per-project sandboxes on a *Docker* daemon and the preview proxy reaches them by
+# docker-DNS container name on the `forgeflow-preview` bridge network — neither of which exists for
+# a pod on the k3s CNI. The app is built to fail soft here and logs
+# "sandbox reconcile skipped — Docker unavailable" at startup; auth, projects, requirements,
+# artifacts, config, realtime and /metrics all serve normally.
+#
+# That is why docker-compose remains the production runtime on the VM (infra/docker-compose.prod.yml)
+# and this cluster is the orchestration deliverable. See docs/devops/README.md §"Why two runtimes".
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgeflow-api
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+  annotations:
+    # Picked up by a Prometheus configured with the standard kubernetes_sd scrape-annotation
+    # relabeling (infra/monitoring/prometheus/prometheus.yml has the matching job).
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgeflow-api
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: api
+  annotations:
+    # Populated by `kubectl annotate` in the CD workflow / rollout script. This is what makes
+    # `kubectl rollout history` readable instead of a list of anonymous revision numbers.
+    kubernetes.io/change-cause: "initial deployment"
+spec:
+  # Two replicas so a rolling update genuinely overlaps. With one replica, maxUnavailable/maxSurge
+  # have almost nothing to express and the "no dropped requests" claim is untestable.
+  replicas: 2
+
+  # Keep enough history for the rollback demo. The default (10) is fine; set explicitly because
+  # `kubectl rollout undo --to-revision` silently has nothing to go to once history is trimmed.
+  revisionHistoryLimit: 10
+
+  # A pod must stay Ready this long before it counts as available. Without it, a container that
+  # passes its first readiness probe and then crashes still lets the rollout march on, so a broken
+  # image can replace every healthy pod before anyone notices. This is the single most important
+  # line for making the rollback demo realistic.
+  minReadySeconds: 10
+
+  # Fail the rollout rather than hanging forever on a broken image. `kubectl rollout status`
+  # returns non-zero once this elapses, which is what lets CD auto-rollback (see cd.yml).
+  progressDeadlineSeconds: 180
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # 0 unavailable + 1 surge = strictly additive: a new pod must be Ready before an old one is
+      # taken down, so capacity never dips below `replicas` during the update.
+      maxUnavailable: 0
+      maxSurge: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgeflow
+      app.kubernetes.io/component: api
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgeflow
+        app.kubernetes.io/component: api
+        # Read back into APP_VERSION via the downward API below. Kept OUT of the selector on
+        # purpose: a selector is immutable after create, so a version in it would make every
+        # release require deleting and recreating the Deployment.
+        app.kubernetes.io/version: "0.1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Beat the 30s default. uvicorn exits promptly on SIGTERM (tini is PID 1 in the image and
+      # forwards it), so a long grace period only slows every rollout down.
+      terminationGracePeriodSeconds: 30
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      # The API hangs in startup if Mongo is unreachable — `init_db()` blocks on server selection
+      # before uvicorn finishes booting (verified against the real image). A startupProbe alone
+      # would just restart-loop it; waiting here means the pod comes up once, cleanly, and the
+      # rollout is not polluted by crash-loop noise while the database is still electing.
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for mongo..."
+              until nc -z forgeflow-mongo-0.forgeflow-mongo.forgeflow.svc.cluster.local 27017; do
+                sleep 2
+              done
+              echo "mongo is up"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: api
+          # Overwritten per-release by `kubectl set image` (see scripts/rolling-update.sh). Pinned
+          # to an immutable tag by CD — never `latest`, or `rollout undo` would roll back to a tag
+          # that now points at the broken build.
+          image: ghcr.io/faheem219/forgeflow-api:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8000
+
+          envFrom:
+            - configMapRef:
+                name: forgeflow-config
+            - secretRef:
+                name: forgeflow-secrets
+
+          env:
+            # Surfaced on /health and as a forgeflow_build_info label, so Grafana can show which
+            # version is serving and `count by (version)` exposes a half-finished rollout.
+            - name: APP_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app.kubernetes.io/version']
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+
+          # Three probes, three different questions — conflating them is the classic k8s bug:
+          #
+          #   startup   — "has it finished booting?"  Guards the other two so a slow boot is not
+          #               mistaken for a failure. 30 x 5s = up to 150s to come up.
+          #   readiness — "should it get traffic right now?"  This is what makes the rolling
+          #               update safe: a pod is only sent requests once it answers.
+          #   liveness  — "is it wedged and unrecoverable?"  Deliberately SLACKER than readiness.
+          #               If liveness were as tight as readiness, a transient slowdown would kill
+          #               a pod that would have recovered, turning a blip into an outage.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            # readOnlyRootFilesystem is on, so anything that writes needs an explicit emptyDir.
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# Spread pods across nodes and keep at least one serving during a voluntary disruption (a node
+# drain, a cluster upgrade). Without this, `kubectl drain` on a single-node k3s box would evict
+# both replicas at once and the "zero downtime" property would hold for rollouts but not for
+# maintenance.
+#
+# NOTE for a single-node cluster: a PDB with minAvailable: 1 will BLOCK `kubectl drain` on the only
+# node, because k8s cannot satisfy it elsewhere. That is correct behaviour, not a bug — use
+# `kubectl drain --disable-eviction` or delete the PDB when intentionally taking the node down.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: forgeflow-api
+  namespace: forgeflow
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgeflow
+      app.kubernetes.io/component: api

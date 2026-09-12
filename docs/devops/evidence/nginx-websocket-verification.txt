@@ -1,0 +1,36 @@
+nginx reverse-proxy verification (rendered from roles/nginx/templates/forgeflow.conf.j2)
+Run against nginx:1.27 with a stub RFC6455 backend on :8000.
+
+### Config validity
+forgeflow-no-preview:     nginx: configuration file /etc/nginx/nginx.conf test is successful
+forgeflow-with-preview:   nginx: configuration file /etc/nginx/nginx.conf test is successful
+
+### Plain HTTPS through the proxy
+$ curl -k -H 'Host: api.example.com' https://localhost/
+plain-http-ok
+
+### WebSocket upgrade WITH the three headers (proxy_http_version 1.1 + Upgrade + Connection)
+$ curl -k -i -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+       -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+       https://localhost/ws/projects/test
+HTTP/1.1 101 Switching Protocols
+Server: nginx/1.27.5
+Connection: upgrade
+Upgrade: websocket
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+
+### NEGATIVE CONTROL — identical config with those three lines removed
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+
+  ^^^ This is the failure this config exists to prevent. The upgrade is silently swallowed and the
+      client gets a plain HTTP response instead of a WebSocket. Every REST call still works, so the
+      symptom is only "live build/test streaming never connects" — with nothing in any error log.
+
+### /metrics is not publicly reachable
+$ curl -k -o /dev/null -w '%{http_code}' https://localhost/metrics
+403
+
+### HTTP redirects to HTTPS
+$ curl -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost/anything
+301 https://api.example.com/anything

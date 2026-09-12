@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: forgeflow
+    orgId: 1
+    folder: ForgeFlow
+    type: file
+    disableDeletion: false
+    # Re-read the JSON from disk periodically, so editing a dashboard file and committing it is
+    # enough — no restart, no manual import.
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

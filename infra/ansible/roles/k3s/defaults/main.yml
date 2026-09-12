@@ -1,0 +1,5 @@
+---
+# Rewrite the kubeconfig's server address from 127.0.0.1 to the VM's address, so the same file can
+# be used from a laptop or stored as the KUBECONFIG_B64 CI secret. Set false if you only ever use
+# kubectl on the box itself or reach it through an SSH tunnel.
+k3s_rewrite_kubeconfig_server: true

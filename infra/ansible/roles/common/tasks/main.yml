@@ -1,0 +1,125 @@
+---
+# Base system: packages, users, timezone, swap, automatic security updates.
+# This is the "configure the runtime environment" half of the assignment's Step 2.
+
+- name: Assert we are on a Debian-family host
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] == 'Debian'
+    fail_msg: >-
+      This playbook targets Ubuntu (Debian family); found {{ ansible_facts['os_family'] }}.
+      Oracle Linux uses dnf/firewalld and would need the package and firewall roles reworked.
+    success_msg: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['architecture'] }})"
+
+- name: Update the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    # An hour's grace stops every run paying for a cache refresh while still keeping it fresh
+    # enough that a package installed below is not resolved from a week-old index.
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Set the timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+  notify: Restart cron
+
+# --------------------------------------------------------------------------------- users
+# The assignment asks for user management explicitly. This account owns the app directory and is
+# added to the docker group so it can drive compose; it has no shell, because nothing should log in
+# as it. The api CONTAINER runs as its own unprivileged uid (10001, baked into Dockerfile.prod) and
+# is unrelated to this host user.
+- name: Create the forgeflow group
+  ansible.builtin.group:
+    name: "{{ forgeflow_group }}"
+    state: present
+
+- name: Create the forgeflow service user
+  ansible.builtin.user:
+    name: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    shell: "{{ forgeflow_user_shell }}"
+    # A system account: uid below 1000, no home-directory skeleton, never expires.
+    system: true
+    create_home: true
+    home: "{{ forgeflow_root }}"
+    state: present
+
+# --------------------------------------------------------------------------------- swap
+- name: Check whether the swap file already exists
+  ansible.builtin.stat:
+    path: /swapfile
+  register: common_swapfile_stat
+
+- name: Create the swap file
+  when:
+    - common_swap_size_mb | int > 0
+    - not common_swapfile_stat.stat.exists
+  block:
+    # fallocate, not `dd`: instant, and it does not read 2 GB of zeroes through the page cache.
+    - name: Allocate /swapfile
+      ansible.builtin.command:
+        cmd: "fallocate -l {{ common_swap_size_mb }}M /swapfile"
+        creates: /swapfile
+
+    - name: Restrict permissions on /swapfile
+      ansible.builtin.file:
+        path: /swapfile
+        # 0600 is mandatory, not tidiness: mkswap refuses a world-readable swap file, because
+        # anything paged out would otherwise be readable by any local user.
+        mode: "0600"
+        owner: root
+        group: root
+
+    - name: Format the swap file
+      ansible.builtin.command:
+        cmd: mkswap /swapfile
+      register: common_mkswap_result
+      changed_when: common_mkswap_result.rc == 0
+
+    - name: Enable the swap file
+      ansible.builtin.command:
+        cmd: swapon /swapfile
+      register: common_swapon_result
+      changed_when: common_swapon_result.rc == 0
+      failed_when:
+        - common_swapon_result.rc != 0
+        - "'already active' not in common_swapon_result.stderr"
+
+- name: Persist swap across reboots
+  # ansible.posix, not ansible.builtin: the `mount` module lives in the ansible.posix collection
+  # (see requirements.yml). It was never a builtin in ansible-core 2.10+.
+  ansible.posix.mount:
+    path: none
+    src: /swapfile
+    fstype: swap
+    opts: sw
+    state: present
+  when: common_swap_size_mb | int > 0
+
+# --------------------------------------------------------------------------------- auto-updates
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+  when: common_enable_unattended_upgrades | bool
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    # Security updates only, and explicitly NO automatic reboot: a box that reboots itself at 06:00
+    # takes the API down with no warning and no one watching.
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+      Unattended-Upgrade::Automatic-Reboot "false";
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+  when: common_enable_unattended_upgrades | bool

@@ -1,0 +1,97 @@
+# Standalone nginx reference — for when you'd rather NOT let Ansible manage the site file.
+#
+# Use this if your subdomain is already served by an existing server block and you want to add
+# ForgeFlow to it by hand instead of having a second block claim the same server_name. In that
+# case run the playbook with `--skip-tags nginx` and copy the pieces below into your block.
+#
+# THE ONE THING PEOPLE MISS: the three WebSocket lines. ForgeFlow's realtime hub is a WebSocket,
+# and without them every REST call works perfectly while live build/test streaming silently never
+# connects. If your existing block was written for a plain request/response API, it almost
+# certainly lacks them.
+
+# ---------------------------------------------------------------------------------------------
+# 1. AT THE TOP LEVEL (http context — outside any server block, e.g. in /etc/nginx/nginx.conf or
+#    its own file in conf.d/). Define it once per nginx instance; defining it twice is an error.
+#
+#    Why a map and not a fixed header: `Connection: upgrade` must be sent ONLY for requests that
+#    actually carry an Upgrade header. Sending it unconditionally breaks keepalive for every
+#    ordinary HTTP request through the proxy.
+# ---------------------------------------------------------------------------------------------
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# ---------------------------------------------------------------------------------------------
+# 2. INSIDE the server block that already terminates TLS for your subdomain.
+# ---------------------------------------------------------------------------------------------
+#
+# server {
+#     listen 443 ssl;
+#     server_name YOUR.SUBDOMAIN.HERE;
+#     ... your existing ssl_certificate lines ...
+
+      # ForgeFlow accepts design-image batches; its own cap is MAX_REQUEST_BYTES (64 MiB).
+      # nginx defaults to 1 MiB, so without this an upload dies at the proxy with a 413 and the
+      # application's error envelope never gets a chance to explain why.
+      client_max_body_size 64m;
+
+      location / {
+          # Match FORGEFLOW_API_PORT in /opt/forgeflow/.env — 8000 unless you changed it because
+          # another service already holds that port.
+          proxy_pass http://127.0.0.1:8000;
+
+          # ---- the WebSocket three ----------------------------------------------------------
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade           $http_upgrade;
+          proxy_set_header Connection        $connection_upgrade;
+
+          # ---- forwarded identity -----------------------------------------------------------
+          # uvicorn runs with --proxy-headers and trusts these to reconstruct the caller's real
+          # scheme and address. Without X-Forwarded-Proto the app believes it is on plain HTTP,
+          # and any absolute URL it builds comes back as http:// — which the browser then blocks
+          # as mixed content on your HTTPS page.
+          proxy_set_header Host              $host;
+          proxy_set_header X-Real-IP         $remote_addr;
+          proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+
+          # ---- timeouts ---------------------------------------------------------------------
+          # A ForgeFlow build streams for minutes. nginx's 60s default would sever the WebSocket
+          # mid-build; the app heartbeats every 20s (REALTIME_HEARTBEAT_S) to hold it open.
+          proxy_connect_timeout 10s;
+          proxy_send_timeout    3600s;
+          proxy_read_timeout    3600s;
+
+          # Progress events must reach the browser as they happen, not buffered into 4 KB chunks.
+          proxy_buffering off;
+      }
+
+      # Keep the scrape endpoint off the public internet. Prometheus reaches the API over the
+      # VM's loopback, so nothing outside needs this — and it is cheap to poll and reveals your
+      # route table and traffic shape.
+      location /metrics {
+          allow 127.0.0.1;
+          allow ::1;
+          deny all;
+          proxy_pass http://127.0.0.1:8000/metrics;
+      }
+#
+# }
+
+# ---------------------------------------------------------------------------------------------
+# 3. VERIFY — always, before reloading. A bad config plus `systemctl reload` takes your OTHER
+#    project down too.
+#
+#      sudo nginx -t && sudo systemctl reload nginx
+#
+#    Then confirm the WebSocket upgrade actually works end to end (101 = success):
+#
+#      curl -i -N -o /dev/null -w '%{http_code}\n' \
+#           -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+#           -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+#           https://YOUR.SUBDOMAIN.HERE/ws/projects/test
+#
+#    A 400 or 426 means the Upgrade headers are not reaching uvicorn. A 403/401 is FINE — it means
+#    the handshake got through and the app rejected an unauthenticated socket, which is correct.
+# ---------------------------------------------------------------------------------------------

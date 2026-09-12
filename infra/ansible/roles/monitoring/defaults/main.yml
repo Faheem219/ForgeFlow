@@ -1,0 +1,5 @@
+---
+monitoring_root: "{{ forgeflow_root }}/monitoring"
+# The scrape target for the control plane. `host.docker.internal` does not exist on Linux, so the
+# monitoring compose file maps it to the docker bridge gateway explicitly (extra_hosts).
+monitoring_api_scrape_target: "host.docker.internal:{{ forgeflow_api_port }}"

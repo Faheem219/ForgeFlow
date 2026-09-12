@@ -1,0 +1,99 @@
+# Control-plane MongoDB.
+#
+# A StatefulSet, not a Deployment, and the difference matters for a database: a StatefulSet gives a
+# stable network identity (forgeflow-mongo-0.forgeflow-mongo) and binds each replica to its OWN
+# PersistentVolumeClaim for the life of that ordinal. A Deployment with a shared PVC would let a
+# rolling update run two mongod processes against the same data directory — mongod takes an
+# exclusive lock, so the new pod crash-loops on "Unable to lock the lock file", and if the lock
+# ever were bypassed the data would be corrupted.
+#
+# Single replica: this is a demo cluster, not an HA deployment. A real replica set needs an
+# initiator job and three members; that is out of scope here and is called out in the report.
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgeflow-mongo
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: mongo
+spec:
+  # Headless (clusterIP: None): DNS resolves straight to the pod IP, which is what gives the
+  # StatefulSet member its stable per-ordinal hostname.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: forgeflow-mongo
+  namespace: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/component: mongo
+spec:
+  serviceName: forgeflow-mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgeflow
+      app.kubernetes.io/component: mongo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgeflow
+        app.kubernetes.io/component: mongo
+    spec:
+      securityContext:
+        # The mongo image's own uid. Set at pod level so the mounted volume is group-owned
+        # correctly on first boot — otherwise mongod cannot write to its data dir.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: mongo
+          image: mongo:7
+          ports:
+            - name: mongo
+              containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # No CPU limit on purpose: CFS throttling a database produces latency spikes that
+              # look exactly like application slowness and are miserable to diagnose. The memory
+              # limit stays, because an OOM is preferable to swapping the whole node.
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+        # No storageClassName: k3s ships local-path as the default StorageClass and will fill it
+        # in. Pinning a name here is the usual reason these manifests fail on someone else's
+        # cluster, so it is left to the cluster's default deliberately.

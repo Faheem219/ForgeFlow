@@ -1,0 +1,126 @@
+# Deployment
+
+Backend → Oracle ARM VM · Frontend → Vercel · CI/CD → GitHub Actions.
+Full detail: [`docs/devops/README.md`](docs/devops/README.md).
+
+---
+
+## 1. Values to fill in
+
+### `infra/ansible/inventory.ini` (copy from `inventory.example.ini`, gitignored)
+
+| Key | Value |
+|---|---|
+| `ansible_host` | VM public IP |
+| `ansible_user` | `ubuntu` |
+| `ansible_ssh_private_key_file` | path to your VM SSH key |
+
+### `infra/ansible/group_vars/all.yml`
+
+| Key | Value |
+|---|---|
+| `forgeflow_domain` | **required** — your API subdomain, no scheme (currently `CHANGE_ME.example.com`) |
+| `forgeflow_cors_origins` | your Vercel URL, e.g. `https://forgeflow.vercel.app` |
+| `forgeflow_image` | `ghcr.io/<owner>/forgeflow-api:latest` |
+| `monitoring_grafana_admin_password` | anything but the default |
+| `forgeflow_api_port` | `8000` — change only if another service holds it |
+
+Generated automatically on the VM, do not set: `SECRET_KEY`, `FERNET_KEY`, `DOCKER_GID`.
+Provider keys (`ANTHROPIC_API_KEY`) are left blank on purpose — set them in `/admin` after first boot.
+
+### GitHub → Settings → Secrets and variables → Actions
+
+**Secrets**
+
+| Name | How to get it |
+|---|---|
+| `VM_HOST` | VM public IP |
+| `VM_USER` | `ubuntu` |
+| `VM_SSH_KEY` | full private key incl. `-----BEGIN/END-----` |
+| `VM_SSH_KNOWN_HOSTS` | `ssh-keyscan <vm-ip>` |
+| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `.vercel/project.json` after `vercel link` |
+| `VERCEL_PROJECT_ID` | same file |
+| `KUBECONFIG_B64` | *optional (k8s workflow)* — `base64 -w0 ~/.kube/config` |
+
+`GITHUB_TOKEN` is built in — no PAT needed for GHCR.
+
+**Variables**
+
+| Name | Value |
+|---|---|
+| `FORGEFLOW_DOMAIN` | API subdomain, no scheme |
+| `VM_SSH_PORT` | *optional*, default `22` |
+
+---
+
+## 2. One-time setup
+
+**a. OCI console** — open ingress TCP **80** and **443** on the instance's Security List/NSG.
+Ansible cannot do this, and nothing reaches the VM without it.
+
+**b. DNS + TLS** — point your subdomain at the VM, then on the VM:
+```bash
+sudo certbot --nginx -d <your-subdomain>
+```
+
+**c. Provision** (from macOS or WSL — no native Windows control node):
+```bash
+cd infra/ansible
+cp inventory.example.ini inventory.ini      # then edit both files above
+ansible-galaxy collection install -r requirements.yml
+ansible forgeflow -m ping                   # check SSH first
+ansible-playbook site.yml --check --diff    # dry run
+ansible-playbook site.yml
+```
+Run it twice — the second run must report `changed=0`.
+
+**d. GHCR access** — make the package public (Packages → forgeflow-api → Change visibility),
+or add an imagePullSecret on the VM. Otherwise the VM can't pull.
+
+**e. Vercel** — create the project from `frontend/`, then `vercel link` to get the two IDs.
+`VITE_API_BASE_URL` is injected by the workflow from `FORGEFLOW_DOMAIN`; no need to set it in the dashboard.
+
+**f. WebSocket headers** — if your existing nginx block already serves this subdomain, skip the
+nginx role (`--skip-tags nginx`) and copy the three upgrade headers from
+[`infra/nginx/forgeflow.conf.example`](infra/nginx/forgeflow.conf.example) into it.
+Without them REST works and live build streaming silently never connects.
+
+---
+
+## 3. Deploy
+
+```bash
+git push origin main     # CI → CD → VM + Vercel
+```
+Or **Actions → CD → Run workflow** to redeploy a specific `image_tag`.
+
+Deploy fails → previous image is restored automatically, production unchanged.
+
+---
+
+## 4. Verify
+
+```bash
+curl https://<your-subdomain>/health          # {"status":"ok",...}
+ssh <vm> 'systemctl status forgeflow'
+ssh -L 3000:127.0.0.1:3000 <vm>               # Grafana → http://localhost:3000
+```
+
+---
+
+## 5. Blocker
+
+CI is currently **red on `main`** — 4 pre-existing `mypy` errors in `tests/design/` and 2 failing
+tests, unrelated to the DevOps work. **CD gates on CI, so nothing deploys until these are fixed.**
+
+---
+
+## Optional
+
+| Want | Do |
+|---|---|
+| Kubernetes demo | `make k8s-apply`, then `make k8s-demo V1=<img> V2=<img>` |
+| Skip k3s / monitoring | `ansible-playbook site.yml --skip-tags k3s,monitoring` |
+| Preview subdomains | set `forgeflow_preview_domain` + wildcard DNS + DNS-01 wildcard cert |
+| Lint everything | `make devops-lint` |

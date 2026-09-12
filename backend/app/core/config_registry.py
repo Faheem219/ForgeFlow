@@ -1230,12 +1230,28 @@ _KEYS: tuple[ConfigKey, ...] = (
         locked=True,
         locked_reason=BOOTSTRAP_SECRET,
     ),
+    ConfigKey(
+        "metrics_path",
+        Cat.core,
+        "str",
+        "Path the Prometheus exposition endpoint is served on. Must start with '/'.",
+        restart_required=True,
+        extra=_leading_slash,
+    ),
     # ---------------------------------------------------------------- feature flags
     ConfigKey(
         "log_json",
         Cat.feature_flags,
         "bool",
         "Emit structured JSON logs (off = human-readable console logs).",
+        restart_required=True,
+    ),
+    ConfigKey(
+        "metrics_enabled",
+        Cat.feature_flags,
+        "bool",
+        "Expose Prometheus metrics and time every request. Off removes both the endpoint and the "
+        "measurement overhead.",
         restart_required=True,
     ),
 )

@@ -1,0 +1,139 @@
+---
+# Host firewall — and the single most common way an Oracle Cloud VM ends up "unreachable for no
+# reason".
+#
+# THE ORACLE TRAP: Oracle's Ubuntu images ship with a pre-populated iptables ruleset whose INPUT
+# chain ends in a blanket REJECT, persisted in /etc/iptables/rules.v4. ufw inserts its own rules
+# into a *different* chain, so `ufw allow 443` reports success, `ufw status` shows the port open,
+# and the packet is still rejected by the earlier rule. People then spend hours on the OCI Security
+# List — which is a real second firewall, but not the one blocking them.
+#
+# This role handles it explicitly: detect the REJECT rules, remove them, persist the result, then
+# let ufw be the single source of truth.
+#
+# The OTHER firewall (the OCI Security List / NSG in the console) is outside Ansible's reach. Open
+# 80 and 443 there as well — see README.md §Oracle networking.
+
+- name: Install ufw and iptables-persistent
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - iptables-persistent
+    state: present
+  when: firewall_enabled | bool
+
+# ------------------------------------------------------------------ defuse the Oracle REJECT rules
+- name: Look for Oracle's blanket REJECT rules in the INPUT chain
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      iptables -S INPUT | grep -E '^-A INPUT -j REJECT' || true
+    executable: /bin/bash
+  register: firewall_oracle_reject_rules
+  changed_when: false
+  when: firewall_enabled | bool
+
+- name: Report what was found
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Found Oracle blanket REJECT rule(s) — removing so ufw can take effect: '
+         + firewall_oracle_reject_rules.stdout_lines | join(' | ')
+         if firewall_oracle_reject_rules.stdout | length > 0
+         else 'No blanket REJECT in INPUT — nothing to defuse.' }}
+  when: firewall_enabled | bool
+
+- name: Remove the blanket REJECT rules
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      # Delete by SPEC (-D with the full rule) rather than by index. Deleting by index while the
+      # chain is shifting under you removes the wrong rule, and the wrong rule here is the one
+      # keeping SSH open.
+      while iptables -S INPUT | grep -qE '^-A INPUT -j REJECT'; do
+        rule="$(iptables -S INPUT | grep -E '^-A INPUT -j REJECT' | head -1 | sed 's/^-A /-D /')"
+        # shellcheck disable=SC2086 — the rule spec must word-split into separate arguments.
+        iptables $rule
+      done
+    executable: /bin/bash
+  when:
+    - firewall_enabled | bool
+    - firewall_oracle_reject_rules.stdout | length > 0
+  register: firewall_reject_removal
+  changed_when: firewall_reject_removal.rc == 0
+
+# ------------------------------------------------------------------ ufw
+- name: Allow SSH before anything else
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+  when: firewall_enabled | bool
+  # Ordered first and called out on its own: enabling ufw with a default-deny policy and no SSH
+  # rule locks you out of the VM permanently. There is no console recovery on a free-tier shape
+  # that is worth relying on.
+
+- name: Allow the configured TCP ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ firewall_allowed_tcp_ports }}"
+  when: firewall_enabled | bool
+
+# Two explicit tasks rather than a loop over {direction, policy} pairs. `policy` is a choice
+# field, and a templated value defeats static validation of it — ansible-lint flags the loop form,
+# and more practically a typo in the data would only surface at run time on the live firewall.
+- name: Default-deny inbound
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+  when: firewall_enabled | bool
+
+- name: Allow outbound
+  # Egress stays open: the control plane calls the LLM provider, Vercel and the container registry.
+  # A default-deny egress policy would need an allowlist that changes every time a provider moves
+  # an endpoint — a guaranteed source of mysterious breakage for no real gain here.
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+  when: firewall_enabled | bool
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
+  when: firewall_enabled | bool
+
+# ------------------------------------------------------------------ persistence
+- name: Persist the iptables rules across reboots
+  # Without this the REJECT rules come straight back from /etc/iptables/rules.v4 on reboot, and the
+  # VM becomes unreachable again — the classic "it worked until I restarted it".
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      netfilter-persistent save
+    executable: /bin/bash
+  when:
+    - firewall_enabled | bool
+    - firewall_oracle_reject_rules.stdout | length > 0
+  register: firewall_persist_rules
+  changed_when: firewall_persist_rules.rc == 0
+
+- name: Show the resulting firewall state
+  ansible.builtin.command:
+    cmd: ufw status verbose
+  register: firewall_ufw_state
+  changed_when: false
+  when: firewall_enabled | bool
+
+- name: Report the firewall state
+  ansible.builtin.debug:
+    msg: "{{ firewall_ufw_state.stdout_lines }}"
+  when: firewall_enabled | bool
+
+- name: Remind about the second firewall
+  ansible.builtin.debug:
+    msg: >-
+      REMINDER: Oracle Cloud has a SECOND firewall that Ansible cannot configure. In the OCI
+      console, open ingress for TCP 80 and 443 on this instance's Security List (or NSG), or the
+      host firewall above is irrelevant because packets never arrive.
+  when: firewall_enabled | bool

@@ -117,3 +117,19 @@ infra/caddy/config/
 # --- ForgeFlow: eval run artifacts (phase-44) ---
 # Reports are generated measurement output, not source. Phase-45 reads whatever is here.
 eval/results/*.json
+
+# --- DevOps (infra) -------------------------------------------------------------
+# The real inventory holds the VM's address and SSH key path. An inventory in a public repo is a
+# free target list — only the .example is committed.
+infra/ansible/inventory.ini
+infra/ansible/*.retry
+# ansible-vault files are encrypted, but the habit of not committing secret material is worth more
+# than the encryption. Keep the vault password file out of the repo unconditionally.
+infra/ansible/group_vars/vault.yml
+infra/ansible/.vault_pass
+infra/ansible/vault_pass.txt
+# Galaxy pulls these in from requirements.yml; they are dependencies, not source.
+infra/ansible/collections/
+# A kubeconfig embeds a cluster-admin client certificate.
+infra/k8s/kubeconfig*
+*.kubeconfig

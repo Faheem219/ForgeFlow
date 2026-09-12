@@ -1,0 +1,18 @@
+{{ ansible_managed | comment }}
+# Nightly mongodump of the control-plane database into {{ forgeflow_root }}/backups.
+#
+# Backs up `mongo` (project metadata, artifacts, users) and NOT `appdb` (generated-app data):
+# generated app data is reproducible by re-running a build, whereas the control-plane database is
+# the only copy of a user's project history.
+[Unit]
+Description=ForgeFlow control-plane MongoDB backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ forgeflow_root }}
+ExecStart=/bin/bash -c 'set -euo pipefail; \
+  STAMP=$(date -u +%%Y%%m%%dT%%H%%M%%SZ); \
+  docker exec forgeflow-mongo mongodump --archive --gzip --db={{ forgeflow_meta_db | default("forgeflow_meta") }} > {{ forgeflow_root }}/backups/meta-$STAMP.archive.gz; \
+  find {{ forgeflow_root }}/backups -name "meta-*.archive.gz" -mtime +14 -delete'

@@ -1,0 +1,39 @@
+### kubectl get all -n forgeflow
+NAME                                 READY   STATUS    RESTARTS   AGE
+pod/forgeflow-api-5cbc6c4774-psp4r   1/1     Running   0          2m34s
+pod/forgeflow-api-5cbc6c4774-wkhs9   1/1     Running   0          2m18s
+pod/forgeflow-mongo-0                1/1     Running   0          5m56s
+pod/rollout-probe                    1/1     Running   0          3m2s
+
+NAME                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)     AGE
+service/forgeflow-api     ClusterIP   10.43.230.239   <none>        80/TCP      5m56s
+service/forgeflow-mongo   ClusterIP   None            <none>        27017/TCP   5m56s
+
+NAME                            READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/forgeflow-api   2/2     2            2           5m57s
+
+NAME                                       DESIRED   CURRENT   READY   AGE
+replicaset.apps/forgeflow-api-59f66c4755   0         0         0       5m57s
+replicaset.apps/forgeflow-api-5cbc6c4774   2         2         2       2m35s
+replicaset.apps/forgeflow-api-6ff44cfbc7   0         0         0       88s
+replicaset.apps/forgeflow-api-c7cbd4c4b    0         0         0       5m57s
+
+NAME                               READY   AGE
+statefulset.apps/forgeflow-mongo   1/1     5m57s
+
+### rollout history
+deployment.apps/forgeflow-api 
+REVISION  CHANGE-CAUSE
+1         initial deployment
+2         initial deployment
+4         demo: deliberately broken release
+5         rolling update to v2
+
+
+### availability tally (in-cluster probe, 0.2s interval, whole demo)
+ok=807 fail=0
+
+### deployment strategy in effect
+{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0},"type":"RollingUpdate"}
+### minReadySeconds / progressDeadlineSeconds
+minReadySeconds=10 progressDeadlineSeconds=60

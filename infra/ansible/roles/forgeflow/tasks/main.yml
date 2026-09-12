@@ -1,0 +1,142 @@
+---
+# Lay down the application: directory tree, environment file, compose file, proxy config, and a
+# systemd unit so the stack comes back after a reboot.
+#
+# This role deliberately does NOT run `docker compose up`. Starting the stack is the CD pipeline's
+# job (.github/workflows/cd.yml). Ansible's job is to make the machine *ready* for it — that split
+# is what keeps "provision the host" and "ship a release" independently repeatable.
+
+- name: Create the ForgeFlow directory tree
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    mode: "0750"
+  loop:
+    - "{{ forgeflow_root }}"
+    - "{{ forgeflow_root }}/caddy"
+    - "{{ forgeflow_root }}/backups"
+
+# ------------------------------------------------------------------ secrets, generated once
+# SECRET_KEY and FERNET_KEY are generated ON THE HOST and then never regenerated. Regenerating
+# FERNET_KEY is unrecoverable: it decrypts every stored provider credential, so a new key turns the
+# whole credential vault into undecryptable bytes. Hence `creates:` and the explicit read-back —
+# the playbook must be safe to re-run.
+- name: Check whether the env file already exists
+  ansible.builtin.stat:
+    path: "{{ forgeflow_root }}/.env"
+  register: forgeflow_env_file_stat
+
+- name: Generate SECRET_KEY (first run only)
+  ansible.builtin.command:
+    cmd: openssl rand -hex 32
+  register: forgeflow_generated_secret_key
+  changed_when: not forgeflow_env_file_stat.stat.exists
+  when: not forgeflow_env_file_stat.stat.exists
+
+- name: Generate FERNET_KEY (first run only)
+  ansible.builtin.command:
+    # Fernet keys are a specific format — 32 url-safe base64 bytes — not arbitrary random hex.
+    cmd: python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+  register: forgeflow_generated_fernet_key
+  changed_when: not forgeflow_env_file_stat.stat.exists
+  when: not forgeflow_env_file_stat.stat.exists
+
+- name: Read back the existing secrets (subsequent runs)
+  # Re-reading rather than re-templating is what makes this idempotent. Without it, every run would
+  # write fresh keys and invalidate every stored credential.
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      grep -E '^{{ item.key }}=' {{ forgeflow_root }}/.env | head -1 | cut -d= -f2-
+    executable: /bin/bash
+  register: forgeflow_existing_secrets
+  changed_when: false
+  when: forgeflow_env_file_stat.stat.exists
+  loop:
+    - { key: SECRET_KEY }
+    - { key: FERNET_KEY }
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Resolve the secret values to use
+  ansible.builtin.set_fact:
+    forgeflow_secret_key: >-
+      {{ forgeflow_existing_secrets.results[0].stdout
+         if forgeflow_env_file_stat.stat.exists
+         else forgeflow_generated_secret_key.stdout }}
+    forgeflow_fernet_key: >-
+      {{ forgeflow_existing_secrets.results[1].stdout
+         if forgeflow_env_file_stat.stat.exists
+         else forgeflow_generated_fernet_key.stdout }}
+
+- name: Write the environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ forgeflow_root }}/.env"
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    # 0640: it holds SECRET_KEY, FERNET_KEY and any provider tokens. Not world-readable, ever.
+    mode: "0640"
+    # Never clobber a file whose secrets we could not read back.
+    backup: true
+  no_log: true  # the whole file is secret material
+  notify: Restart forgeflow
+
+- name: Install the production compose file
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../docker-compose.prod.yml"
+    dest: "{{ forgeflow_root }}/docker-compose.prod.yml"
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    mode: "0640"
+  notify: Restart forgeflow
+
+- name: Install the preview proxy config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../caddy/Caddyfile.prod"
+    dest: "{{ forgeflow_root }}/caddy/Caddyfile.prod"
+    owner: "{{ forgeflow_user }}"
+    group: "{{ forgeflow_group }}"
+    mode: "0640"
+  notify: Restart forgeflow
+
+# ------------------------------------------------------------------ lifecycle
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: forgeflow.service.j2
+    dest: /etc/systemd/system/forgeflow.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart forgeflow
+
+- name: Enable the forgeflow service
+  ansible.builtin.systemd:
+    name: forgeflow
+    enabled: true
+    daemon_reload: true
+  # Enabled but NOT started: there is no image to run until CD has pushed one, and a failed start
+  # here would leave a red unit on an otherwise correct provision.
+
+- name: Install the backup timer
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/systemd/system/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: forgeflow-backup.service.j2, dest: forgeflow-backup.service }
+    - { src: forgeflow-backup.timer.j2, dest: forgeflow-backup.timer }
+  notify: Reload systemd
+
+- name: Enable the nightly Mongo backup timer
+  ansible.builtin.systemd:
+    name: forgeflow-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

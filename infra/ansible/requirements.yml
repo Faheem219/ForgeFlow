@@ -1,0 +1,16 @@
+---
+# Collection dependencies. ansible-core ships almost nothing beyond the builtins, so these must be
+# installed before the playbook will even parse:
+#
+#   ansible-galaxy collection install -r requirements.yml
+#
+collections:
+  # timezone, ufw
+  - name: community.general
+    version: ">=9.0.0"
+  # docker_network (and docker_container, if you extend this)
+  - name: community.docker
+    version: ">=3.10.0"
+  # mount — moved out of ansible-core long ago; using ansible.builtin.mount fails to resolve.
+  - name: ansible.posix
+    version: ">=1.5.0"

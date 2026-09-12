@@ -1,0 +1,146 @@
+# Alert rules.
+#
+# Every rule has a `for:` clause, and that is the point. A threshold crossed for one scrape is
+# noise — a GC pause, a deploy, a single slow request. A threshold held for minutes is a signal.
+# Alerts that fire on instantaneous spikes get muted by humans within a week, after which they may
+# as well not exist.
+groups:
+  # ------------------------------------------------------------------ availability
+  - name: forgeflow-availability
+    rules:
+      - alert: ForgeFlowDown
+        # The blackbox probe, not an app metric: if the process is dead there is nothing to scrape,
+        # so an app-metric-based rule would go stale rather than fire. `probe_success` is 0 whether
+        # the app, nginx, TLS or DNS is the thing that broke.
+        expr: probe_success{probe="public-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ForgeFlow is unreachable from the public internet"
+          description: >-
+            The blackbox probe of {{ $labels.instance }} has failed for 2 minutes. Check, in order:
+            `systemctl status forgeflow`, `docker ps`, `nginx -t`, and the OCI security list.
+
+      - alert: ForgeFlowScrapeTargetDown
+        # Distinct from the above on purpose: this fires when the CONTAINER is unreachable on the
+        # loopback while the public probe may still be served from somewhere. The pair together
+        # tells you which layer failed.
+        expr: up{job="forgeflow-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The ForgeFlow API is not answering its metrics scrape"
+          description: "Prometheus cannot reach {{ $labels.instance }}/metrics."
+
+      - alert: TLSCertificateExpiringSoon
+        # 21 days is chosen to be comfortably more than certbot's 30-day renewal window, so this
+        # only fires when automatic renewal has actually FAILED — not on every normal renewal cycle.
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 21
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expires in under 21 days"
+          description: >-
+            {{ $labels.instance }} expires in {{ $value | humanizeDuration }}. certbot renewal has
+            probably failed — check `systemctl status certbot.timer` and `certbot renew --dry-run`.
+
+  # ------------------------------------------------------------------ the golden signals
+  - name: forgeflow-performance
+    rules:
+      - alert: HighErrorRate
+        # A RATIO, not a count. An absolute threshold means a busy period looks like an outage and
+        # a quiet outage looks fine. The `> 0.05` is 5% of requests failing.
+        #
+        # The denominator is guarded implicitly: with no traffic both sides are 0, the division is
+        # NaN, and the comparison is false — so a quiet night cannot page anyone.
+        expr: |
+          sum(rate(forgeflow_http_requests_total{status=~"5.."}[5m]))
+            /
+          sum(rate(forgeflow_http_requests_total[5m]))
+            > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Over 5% of requests are returning 5xx"
+          description: "Error ratio is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighLatencyP95
+        # histogram_quantile over a rate() of the _bucket series is the standard shape. Note it
+        # reads the BUCKETS, not the _sum/_count — an average would hide exactly the tail this is
+        # meant to catch.
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(forgeflow_http_request_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 2s"
+          description: >-
+            p95 is {{ $value | humanizeDuration }}. Expected for build/test routes, which do real
+            work; suspicious if it is the CRUD routes.
+
+      - alert: UnhandledExceptions
+        expr: increase(forgeflow_http_unhandled_exceptions_total[10m]) > 5
+        for: 0m  # already a 10-minute window; a `for:` on top would double-delay it
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unhandled exceptions escaping route handlers"
+          description: >-
+            {{ $value }} in 10 minutes on {{ $labels.path }}. These bypassed the error taxonomy —
+            check the logs for a stack trace.
+
+  # ------------------------------------------------------------------ the box
+  - name: forgeflow-host
+    rules:
+      - alert: DiskFillingUp
+        # The most likely way this specific VM dies. Docker images, sandbox volumes, Mongo data and
+        # logs all grow on one small boot volume, and a full disk breaks deploys in ways that look
+        # completely unrelated to disk.
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Root filesystem under 15% free"
+          description: >-
+            {{ $value | humanizePercentage }} free. Try `docker system prune -af` and check
+            {{ "/opt/forgeflow/backups" }}.
+
+      - alert: DiskCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Root filesystem under 5% free — deploys will fail"
+
+      - alert: HighMemoryPressure
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 90% of memory in use"
+          description: "Likely a sandbox container; check cAdvisor for the culprit."
+
+      - alert: HostHighCPU
+        # Deliberately slack (85% for 15m). This box runs builds and test suites; a busy CPU is the
+        # system working, not failing. Only a *sustained* pin is worth a human looking.
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU above 85% for 15 minutes"

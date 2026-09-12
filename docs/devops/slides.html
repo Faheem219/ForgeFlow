@@ -1,0 +1,1052 @@
+<title>ForgeFlow Delivery Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  /* ============================================================================
+     Tokens. The full light palette is declared on bare :root; the dark blocks
+     redefine ONLY these values, never component rules. Mirrors ForgeFlow's own
+     --ff-* semantic vocabulary (canvas/surface/raised, fg/-muted/-faint, edge).
+     ========================================================================= */
+  :root {
+    --canvas:      #FBFBFD;
+    --surface:     #FFFFFF;
+    --raised:      #F3F4F8;
+    --sunken:      #EDEEF3;
+
+    --fg:          #14161C;
+    --fg-muted:    #565C6B;
+    --fg-faint:    #878D9C;
+
+    --edge:        #E2E4EC;
+    --edge-strong: #C9CCD8;
+
+    --brand:       #5457E0;
+    --brand-soft:  rgba(84, 87, 224, 0.09);
+    --brand-ring:  rgba(84, 87, 224, 0.22);
+    --violet:      #7C4DDB;
+
+    --pass:        #15803D;
+    --pass-soft:   rgba(21, 128, 61, 0.10);
+    --fail:        #C02626;
+    --fail-soft:   rgba(192, 38, 38, 0.10);
+    --warn:        #A96208;
+
+    --shadow: 0 1px 2px rgba(20, 22, 28, .05), 0 8px 24px -12px rgba(20, 22, 28, .16);
+
+    --slide-w: 1180px;
+    color-scheme: light dark;
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --canvas:      #0B0D12;
+      --surface:     #12151D;
+      --raised:      #171B25;
+      --sunken:      #0E111A;
+
+      --fg:          #E9EBF2;
+      --fg-muted:    #9BA1B2;
+      --fg-faint:    #6C7283;
+
+      --edge:        #232838;
+      --edge-strong: #333A4E;
+
+      --brand:       #7D80F5;
+      --brand-soft:  rgba(125, 128, 245, 0.13);
+      --brand-ring:  rgba(125, 128, 245, 0.30);
+      --violet:      #A77BF0;
+
+      --pass:        #4ADE80;
+      --pass-soft:   rgba(74, 222, 128, 0.12);
+      --fail:        #F87171;
+      --fail-soft:   rgba(248, 113, 113, 0.12);
+      --warn:        #FBBF24;
+
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+    }
+  }
+
+  /* Fallback for browsers without native CSS nesting, plus the explicit toggle. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --canvas: #0B0D12;  --surface: #12151D;  --raised: #171B25;  --sunken: #0E111A;
+      --fg: #E9EBF2;      --fg-muted: #9BA1B2; --fg-faint: #6C7283;
+      --edge: #232838;    --edge-strong: #333A4E;
+      --brand: #7D80F5;   --brand-soft: rgba(125,128,245,.13); --brand-ring: rgba(125,128,245,.30);
+      --violet: #A77BF0;
+      --pass: #4ADE80;    --pass-soft: rgba(74,222,128,.12);
+      --fail: #F87171;    --fail-soft: rgba(248,113,113,.12);
+      --warn: #FBBF24;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --canvas: #0B0D12;  --surface: #12151D;  --raised: #171B25;  --sunken: #0E111A;
+    --fg: #E9EBF2;      --fg-muted: #9BA1B2; --fg-faint: #6C7283;
+    --edge: #232838;    --edge-strong: #333A4E;
+    --brand: #7D80F5;   --brand-soft: rgba(125,128,245,.13); --brand-ring: rgba(125,128,245,.30);
+    --violet: #A77BF0;
+    --pass: #4ADE80;    --pass-soft: rgba(74,222,128,.12);
+    --fail: #F87171;    --fail-soft: rgba(248,113,113,.12);
+    --warn: #FBBF24;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------------------------------------------------------------- deck frame */
+  .deck {
+    min-height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .rail {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--edge);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .mark svg { display: block; }
+
+  .rail-sep {
+    width: 1px; height: 20px; background: var(--edge); flex: none;
+  }
+
+  .rail-title {
+    font-size: 13px;
+    color: var(--fg-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rail-spacer { flex: 1 1 auto; }
+
+  .dots { display: flex; gap: 6px; align-items: center; }
+  .dot {
+    appearance: none;
+    border: 1px solid var(--edge-strong);
+    background: transparent;
+    width: 26px; height: 6px; padding: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color .18s ease, border-color .18s ease;
+  }
+  .dot:hover { border-color: var(--brand); }
+  .dot[aria-current="true"] { background: var(--brand); border-color: var(--brand); }
+  .dot:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+  .counter {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--fg-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .stage { display: grid; align-items: start; }
+
+  .slide {
+    grid-area: 1 / 1;
+    width: min(var(--slide-w), 100%);
+    margin: 0 auto;
+    padding: 40px 28px 48px;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity .22s ease;
+  }
+  .slide[data-active="true"] { visibility: visible; opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+  }
+
+  /* ---------------------------------------------------------------- type */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    margin: 0 0 18px;
+  }
+  .eyebrow::before,
+  .eyebrow::after {
+    content: "";
+    height: 1px;
+    background: var(--edge);
+  }
+  .eyebrow::before { width: 22px; flex: none; }
+  .eyebrow::after { flex: 1 1 auto; }
+
+  h1 {
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.06;
+    letter-spacing: -0.032em;
+    font-weight: 680;
+    margin: 0 0 12px;
+    text-wrap: balance;
+    color: var(--fg);
+  }
+  h1 .quiet { color: var(--fg-muted); font-weight: 600; }
+
+  h2 {
+    font-size: 17px;
+    letter-spacing: -0.012em;
+    font-weight: 640;
+    margin: 0 0 8px;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+    margin: 0 0 5px;
+  }
+
+  .lede {
+    font-size: 16px;
+    color: var(--fg-muted);
+    max-width: 62ch;
+    margin: 0 0 26px;
+    text-wrap: pretty;
+  }
+
+  p { margin: 0 0 10px; }
+  p:last-child { margin-bottom: 0; }
+
+  code, .mono {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.86em;
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    background: var(--sunken);
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    padding: 0.08em 0.36em;
+    color: var(--fg);
+  }
+
+  .small { font-size: 13px; color: var(--fg-muted); }
+  .faint { color: var(--fg-faint); }
+
+  /* ---------------------------------------------------------------- primitives */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 5px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    box-shadow: inset 0 0 0 1px var(--brand-ring);
+  }
+  .chip.pass { background: var(--pass-soft); color: var(--pass); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pass) 30%, transparent); }
+  .chip.fail { background: var(--fail-soft); color: var(--fail); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fail) 30%, transparent); }
+
+  .scroll-x { overflow-x: auto; }
+
+  /* ---------------------------------------------------------------- slide 1 */
+  .arch {
+    display: grid;
+    grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
+    gap: 26px;
+    align-items: start;
+  }
+  .arch-figure {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .arch-figure svg { width: 100%; height: auto; display: block; }
+
+  .note {
+    border-left: 2px solid var(--brand);
+    padding: 2px 0 2px 16px;
+  }
+  .note + .note { margin-top: 20px; }
+
+  .stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .stat {
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    padding: 9px 13px;
+    background: var(--surface);
+    min-width: 0;
+  }
+  .stat .k {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .stat .v {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  /* ---------------------------------------------------------------- slide 2 */
+  .pipe-figure {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 22px;
+  }
+  .pipe-figure svg { width: 100%; height: auto; display: block; }
+
+  .why {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0;
+    border-top: 1px solid var(--edge);
+  }
+  .why > div {
+    padding: 15px 20px 15px 0;
+    border-right: 1px solid var(--edge);
+  }
+  .why > div:last-child { border-right: 0; }
+  .why > div + div { padding-left: 20px; }
+
+  /* ---------------------------------------------------------------- slide 3 */
+  .focal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.88fr);
+    gap: 24px;
+    align-items: stretch;
+    margin-bottom: 20px;
+  }
+  .focal-main {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-left: 3px solid var(--brand);
+    border-radius: 10px;
+    padding: 22px 24px;
+  }
+  .focal-main h2 { font-size: 20px; letter-spacing: -0.018em; margin-bottom: 10px; }
+
+  .cmp {
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 14px;
+  }
+  .cmp-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 13px;
+    font-size: 13px;
+  }
+  .cmp-row + .cmp-row { border-top: 1px solid var(--edge); }
+  .cmp-row .lab { color: var(--fg-muted); min-width: 0; }
+  .cmp-row .out {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .cmp-row.good { background: var(--pass-soft); }
+  .cmp-row.good .out { color: var(--pass); }
+  .cmp-row.bad { background: var(--fail-soft); }
+  .cmp-row.bad .out { color: var(--fail); }
+
+  .minor {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+    gap: 1px;
+    background: var(--edge);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .minor > div {
+    background: var(--surface);
+    padding: 15px 17px;
+  }
+
+  /* ---------------------------------------------------------------- slide 4 */
+  .lessons {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+  }
+  .pull {
+    background: var(--raised);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 24px 26px;
+  }
+  .pull .q {
+    font-size: 21px;
+    line-height: 1.3;
+    letter-spacing: -0.022em;
+    font-weight: 620;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .pull .q em { font-style: normal; color: var(--brand); }
+
+  .lesson-list { display: flex; flex-direction: column; }
+  .lesson-list > div { padding: 15px 0; border-top: 1px solid var(--edge); }
+  .lesson-list > div:first-child { border-top: 0; padding-top: 0; }
+
+  /* ---------------------------------------------------------------- slide 5 */
+  .results {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 26px;
+    align-items: start;
+  }
+
+  .headline-metric {
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 22px 24px;
+  }
+  .headline-metric .n {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 44px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .headline-metric .n .zero { color: var(--pass); }
+  .headline-metric .cap {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    font-weight: 600;
+    padding: 0 10px 8px 0;
+    border-bottom: 1px solid var(--edge-strong);
+  }
+  tbody td {
+    padding: 7px 10px 7px 0;
+    border-bottom: 1px solid var(--edge);
+    vertical-align: baseline;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.res {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--pass);
+    white-space: nowrap;
+    padding-right: 0;
+  }
+  td.tool { color: var(--fg-muted); white-space: nowrap; }
+
+  .caveat {
+    margin-top: 18px;
+    border-left: 2px solid var(--warn);
+    padding-left: 14px;
+  }
+
+  /* ---------------------------------------------------------------- footer */
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 28px;
+    border-top: 1px solid var(--edge);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--fg-faint);
+  }
+  .nav-btn {
+    appearance: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--fg-muted);
+    background: var(--surface);
+    border: 1px solid var(--edge-strong);
+    border-radius: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+  }
+  .nav-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--fg); background: var(--brand-soft); }
+  .nav-btn:disabled { opacity: .4; cursor: default; }
+  .nav-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  kbd {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    border: 1px solid var(--edge-strong);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--fg-muted);
+    background: var(--raised);
+  }
+
+  /* ---------------------------------------------------------------- responsive */
+  @media (max-width: 900px) {
+    .arch, .focal, .lessons, .results { grid-template-columns: minmax(0, 1fr); }
+    .rail-title { display: none; }
+  }
+
+  /* ---------------------------------------------------------------- print: one slide per page */
+  @media print {
+    .rail, .foot { display: none; }
+    .stage { display: block; }
+    .slide {
+      visibility: visible !important;
+      opacity: 1 !important;
+      page-break-after: always;
+      break-after: page;
+      padding: 24px 0;
+      width: 100%;
+    }
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+    body { background: #fff; color: #14161C; }
+  }
+</style>
+
+<div class="deck">
+  <header class="rail">
+    <span class="mark">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M3 13.5 9 2.5l6 11" stroke="var(--brand)" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M5.9 12.2h6.2" stroke="var(--violet)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="9" cy="15.4" r="1.3" fill="var(--brand)"/>
+      </svg>
+      ForgeFlow
+    </span>
+    <span class="rail-sep" aria-hidden="true"></span>
+    <span class="rail-title" id="railTitle">Architecture</span>
+    <span class="rail-spacer"></span>
+    <nav class="dots" id="dots" aria-label="Slides"></nav>
+    <span class="counter" id="counter">01 / 05</span>
+  </header>
+
+  <main class="stage" id="stage">
+
+    <!-- ===================================================== 1. ARCHITECTURE -->
+    <section class="slide" data-title="Architecture" data-active="true" aria-label="Architecture">
+      <p class="eyebrow">Deployment architecture</p>
+      <h1>Two runtimes, <span class="quiet">for one specific reason</span></h1>
+      <p class="lede">
+        ForgeFlow runs untrusted generated code in a Docker container per project, and routes
+        previews to those containers <em>by name</em> over Docker's embedded DNS. That single fact
+        decides the whole topology.
+      </p>
+
+      <div class="arch">
+        <div class="arch-figure">
+          <svg viewBox="0 0 700 370" role="img" aria-label="Architecture diagram: GitHub builds an arm64 image to GHCR, which deploys to the Oracle ARM VM behind nginx; Vercel serves the frontend; k3s and the monitoring stack run alongside on the VM.">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="var(--fg-faint)"/>
+              </marker>
+            </defs>
+
+            <!-- GitHub -->
+            <rect x="8" y="14" width="170" height="62" rx="7" fill="var(--raised)" stroke="var(--edge-strong)"/>
+            <text x="22" y="36" font-size="12" font-weight="650" fill="var(--fg)">GitHub</text>
+            <text x="22" y="52" font-size="10.5" fill="var(--fg-muted)">CI  lint · types · tests</text>
+            <text x="22" y="66" font-size="10.5" fill="var(--fg-muted)">CD  build · push · deploy</text>
+
+            <!-- GHCR -->
+            <rect x="8" y="104" width="170" height="48" rx="7" fill="var(--brand-soft)" stroke="var(--brand-ring)"/>
+            <text x="22" y="124" font-size="11.5" font-weight="650" fill="var(--brand)">GHCR</text>
+            <text x="22" y="140" font-size="10" fill="var(--fg-muted)" font-family="JetBrains Mono, monospace">arm64 + amd64</text>
+            <path d="M93 76 L93 102" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar)"/>
+
+            <!-- Vercel -->
+            <rect x="8" y="186" width="170" height="54" rx="7" fill="var(--surface)" stroke="var(--edge-strong)"/>
+            <text x="22" y="206" font-size="11.5" font-weight="650" fill="var(--fg)">Vercel</text>
+            <text x="22" y="222" font-size="10" fill="var(--fg-muted)">React + Vite PWA</text>
+            <text x="22" y="234" font-size="9" fill="var(--fg-faint)" font-family="JetBrains Mono, monospace">VITE_API_BASE_URL</text>
+            <path d="M93 76 C 60 130, 60 150, 93 184" stroke="var(--fg-faint)" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+
+            <!-- VM -->
+            <rect x="218" y="14" width="470" height="342" rx="9" fill="none" stroke="var(--edge-strong)" stroke-dasharray="3 3"/>
+            <text x="234" y="33" font-size="10.5" font-weight="650" letter-spacing="0.08em" fill="var(--fg-faint)">ORACLE ARM VM · aarch64</text>
+
+            <!-- nginx -->
+            <rect x="234" y="46" width="438" height="38" rx="6" fill="var(--raised)" stroke="var(--edge-strong)"/>
+            <text x="248" y="63" font-size="11.5" font-weight="650" fill="var(--fg)">nginx :443</text>
+            <text x="330" y="63" font-size="10" fill="var(--fg-muted)">TLS termination · WebSocket upgrade</text>
+            <text x="248" y="77" font-size="9.5" fill="var(--fg-faint)" font-family="JetBrains Mono, monospace">→ 127.0.0.1:8000</text>
+            <path d="M178 128 C 205 128, 205 66, 232 66" stroke="var(--fg-faint)" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+            <path d="M178 210 C 205 210, 205 70, 232 68" stroke="var(--fg-faint)" stroke-width="1.3" fill="none" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+
+            <!-- compose -->
+            <rect x="234" y="100" width="438" height="104" rx="7" fill="var(--surface)" stroke="var(--brand)" stroke-width="1.4"/>
+            <text x="248" y="119" font-size="11" font-weight="650" fill="var(--brand)">docker compose · PRODUCTION</text>
+            <text x="248" y="138" font-size="10.5" fill="var(--fg)">api</text>
+            <text x="282" y="138" font-size="10.5" fill="var(--fg-muted)">mongo (metadata) · appdb (generated apps)</text>
+            <text x="248" y="156" font-size="10.5" fill="var(--fg)">caddy :8080</text>
+            <text x="330" y="156" font-size="10.5" fill="var(--fg-muted)">preview routing by container name</text>
+            <rect x="248" y="166" width="410" height="28" rx="5" fill="var(--sunken)" stroke="var(--edge)"/>
+            <text x="258" y="184" font-size="9.5" fill="var(--fg-muted)" font-family="JetBrains Mono, monospace">/var/run/docker.sock → forgeflow-sb-* sandboxes</text>
+            <path d="M453 84 L453 98" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar)"/>
+
+            <!-- k3s -->
+            <rect x="234" y="222" width="212" height="120" rx="7" fill="var(--surface)" stroke="var(--edge-strong)"/>
+            <text x="248" y="241" font-size="11" font-weight="650" fill="var(--fg)">k3s · orchestration demo</text>
+            <text x="248" y="260" font-size="10" fill="var(--fg-muted)">Deployment (2 replicas)</text>
+            <text x="248" y="276" font-size="10" fill="var(--fg-muted)">StatefulSet mongo + PVC</text>
+            <text x="248" y="292" font-size="10" fill="var(--fg-muted)">Service · Ingress · PDB</text>
+            <text x="248" y="310" font-size="10" fill="var(--fg-muted)">rolling update · rollback</text>
+            <text x="248" y="330" font-size="9" fill="var(--fg-faint)">sandbox stages inert here</text>
+
+            <!-- monitoring -->
+            <rect x="460" y="222" width="212" height="120" rx="7" fill="var(--surface)" stroke="var(--edge-strong)"/>
+            <text x="474" y="241" font-size="11" font-weight="650" fill="var(--fg)">monitoring</text>
+            <text x="474" y="260" font-size="10" fill="var(--fg-muted)">prometheus ← /metrics</text>
+            <text x="474" y="276" font-size="10" fill="var(--fg-muted)">node-exporter · cAdvisor</text>
+            <text x="474" y="292" font-size="10" fill="var(--fg-muted)">blackbox → public URL</text>
+            <text x="474" y="310" font-size="10" fill="var(--fg-muted)">grafana :3000</text>
+            <text x="474" y="330" font-size="9" fill="var(--fg-faint)">loopback only · SSH tunnel</text>
+            <path d="M566 204 L566 220" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar)"/>
+          </svg>
+        </div>
+
+        <div>
+          <div class="note">
+            <h3>Why not Kubernetes for production</h3>
+            <p class="small">
+              Mounting the Docker socket into a pod solves sandbox <em>creation</em>. It does not
+              solve sandbox <em>routing</em> — a pod on the CNI cannot resolve
+              <code>forgeflow-sb-&lt;id&gt;</code>. Fixing that means rewriting preview discovery to
+              use IP addresses: a change to how the application works, not how it is deployed.
+            </p>
+          </div>
+
+          <div class="note">
+            <h3>So the split is deliberate</h3>
+            <p class="small">
+              Compose serves production with every stage functional. k3s carries the orchestration
+              deliverable. A failed demo can never take production down.
+            </p>
+          </div>
+
+          <div class="note">
+            <h3>One API replica, on purpose</h3>
+            <p class="small">
+              The control plane keeps WebSocket subscribers, the realtime replay ring and its
+              rate-limiter counters in <em>process</em> memory. <code>--workers 2</code> would
+              silently halve the limits and drop half the subscribers — a bug, not a speedup.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><span class="k">Control plane</span><span class="v">FastAPI · Python 3.11</span></div>
+        <div class="stat"><span class="k">Image</span><span class="v">multi-arch · non-root uid 10001</span></div>
+        <div class="stat"><span class="k">Provisioning</span><span class="v">Ansible · 7 roles</span></div>
+        <div class="stat"><span class="k">Ingress</span><span class="v">nginx → 127.0.0.1:8000</span></div>
+      </div>
+    </section>
+
+    <!-- ===================================================== 2. PIPELINE -->
+    <section class="slide" data-title="Pipeline flow" aria-label="Pipeline flow">
+      <p class="eyebrow">Pipeline flow</p>
+      <h1>CI proves it. <span class="quiet">CD ships it — or puts it back.</span></h1>
+
+      <div class="pipe-figure">
+        <svg viewBox="0 0 720 224" role="img" aria-label="Pipeline: push triggers CI; only a green CI triggers CD, which builds a multi-arch image, pushes to GHCR, deploys to the VM, health-checks, and either verifies the public endpoint and deploys the frontend, or restores the previous image.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--fg-faint)"/>
+            </marker>
+            <marker id="ar2f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--fail)"/>
+            </marker>
+          </defs>
+
+          <!-- CI band -->
+          <rect x="6" y="30" width="196" height="106" rx="7" fill="var(--raised)" stroke="var(--edge-strong)"/>
+          <text x="18" y="24" font-size="9.5" font-weight="650" letter-spacing="0.09em" fill="var(--fg-faint)">CI</text>
+          <text x="18" y="50" font-size="10" fill="var(--fg-muted)">backend · ruff black mypy pytest</text>
+          <text x="18" y="68" font-size="10" fill="var(--fg-muted)">frontend · lint tsc vitest build</text>
+          <text x="18" y="86" font-size="10" fill="var(--fg-muted)">sandbox image · build + smoke</text>
+          <text x="18" y="104" font-size="10" fill="var(--fg-muted)">security · gitleaks · audits</text>
+          <text x="18" y="122" font-size="10" fill="var(--fg-muted)">skeleton · unit + Playwright E2E</text>
+
+          <!-- gate -->
+          <path d="M244 83 L276 60 L308 83 L276 106 Z" fill="var(--surface)" stroke="var(--brand)" stroke-width="1.4"/>
+          <text x="276" y="87" font-size="9.5" font-weight="650" fill="var(--brand)" text-anchor="middle">gate</text>
+          <path d="M202 83 L242 83" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar2)"/>
+          <text x="222" y="77" font-size="8.5" fill="var(--fg-faint)" text-anchor="middle">run</text>
+
+          <!-- stop -->
+          <text x="276" y="130" font-size="9" fill="var(--fail)" text-anchor="middle">red → nothing ships</text>
+          <path d="M276 106 L276 120" stroke="var(--fail)" stroke-width="1.2" marker-end="url(#ar2f)"/>
+
+          <!-- CD band -->
+          <rect x="336" y="30" width="378" height="106" rx="7" fill="var(--surface)" stroke="var(--edge-strong)"/>
+          <text x="348" y="24" font-size="9.5" font-weight="650" letter-spacing="0.09em" fill="var(--fg-faint)">CD</text>
+
+          <rect x="348" y="44" width="78" height="34" rx="5" fill="var(--brand-soft)" stroke="var(--brand-ring)"/>
+          <text x="387" y="59" font-size="9.5" font-weight="600" fill="var(--brand)" text-anchor="middle">buildx</text>
+          <text x="387" y="71" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">arm64+amd64</text>
+
+          <rect x="436" y="44" width="70" height="34" rx="5" fill="var(--raised)" stroke="var(--edge-strong)"/>
+          <text x="471" y="59" font-size="9.5" font-weight="600" fill="var(--fg)" text-anchor="middle">GHCR</text>
+          <text x="471" y="71" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">:sha tag</text>
+
+          <rect x="516" y="44" width="88" height="34" rx="5" fill="var(--raised)" stroke="var(--edge-strong)"/>
+          <text x="560" y="59" font-size="9.5" font-weight="600" fill="var(--fg)" text-anchor="middle">deploy to VM</text>
+          <text x="560" y="71" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">record previous</text>
+
+          <path d="M308 83 C 322 83, 330 61, 346 61" stroke="var(--fg-faint)" stroke-width="1.3" fill="none" marker-end="url(#ar2)"/>
+          <path d="M426 61 L434 61" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar2)"/>
+          <path d="M506 61 L514 61" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar2)"/>
+
+          <!-- health decision -->
+          <path d="M614 61 L646 61" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar2)"/>
+          <path d="M648 44 L680 61 L648 78 Z" fill="var(--surface)" stroke="var(--edge-strong)"/>
+          <text x="655" y="64" font-size="8" fill="var(--fg-muted)">ok?</text>
+
+          <!-- success path -->
+          <rect x="348" y="92" width="126" height="32" rx="5" fill="var(--pass-soft)" stroke="color-mix(in srgb, var(--pass) 32%, transparent)"/>
+          <text x="411" y="106" font-size="9.5" font-weight="600" fill="var(--pass)" text-anchor="middle">verify PUBLIC /health</text>
+          <text x="411" y="117" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">through nginx + TLS</text>
+
+          <rect x="484" y="92" width="120" height="32" rx="5" fill="var(--pass-soft)" stroke="color-mix(in srgb, var(--pass) 32%, transparent)"/>
+          <text x="544" y="106" font-size="9.5" font-weight="600" fill="var(--pass)" text-anchor="middle">vercel --prod</text>
+          <text x="544" y="117" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">frontend last</text>
+          <path d="M474 108 L482 108" stroke="var(--fg-faint)" stroke-width="1.3" marker-end="url(#ar2)"/>
+          <path d="M680 70 C 680 108, 620 108, 606 108" stroke="var(--pass)" stroke-width="1.3" fill="none" marker-end="url(#ar2)"/>
+
+          <!-- failure path -->
+          <rect x="500" y="166" width="214" height="34" rx="5" fill="var(--fail-soft)" stroke="color-mix(in srgb, var(--fail) 32%, transparent)"/>
+          <text x="607" y="181" font-size="9.5" font-weight="600" fill="var(--fail)" text-anchor="middle">restore previous image · fail the run</text>
+          <text x="607" y="193" font-size="8.5" fill="var(--fg-muted)" text-anchor="middle">production unchanged</text>
+          <path d="M682 78 C 690 130, 660 150, 640 164" stroke="var(--fail)" stroke-width="1.3" fill="none" marker-end="url(#ar2f)"/>
+          <text x="700" y="126" font-size="8.5" fill="var(--fail)" text-anchor="end">unhealthy</text>
+        </svg>
+      </div>
+
+      <div class="why">
+        <div>
+          <h3><code>workflow_run</code>, not <code>push</code></h3>
+          <p class="small">A push-triggered deploy <em>races</em> CI — it can be serving traffic while the test that would have failed it is still running.</p>
+        </div>
+        <div>
+          <h3>Immutable SHA tags</h3>
+          <p class="small">If the VM tracked <code>latest</code>, rolling back after a bad deploy would roll back <em>to</em> the bad deploy.</p>
+        </div>
+        <div>
+          <h3>Health is polled, not slept on</h3>
+          <p class="small">The deploy watches the image's own <code>HEALTHCHECK</code> — the same signal Docker uses — and treats the timeout as failure.</p>
+        </div>
+        <div>
+          <h3>Two health checks</h3>
+          <p class="small">Loopback proves the container is up. The public HTTPS check proves a <em>user</em> can reach it — catching a healthy container behind a broken proxy.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================== 3. CHALLENGES -->
+    <section class="slide" data-title="Challenges" aria-label="Challenges">
+      <p class="eyebrow">Challenges</p>
+      <h1>Every config parsed correctly <span class="quiet">while being wrong</span></h1>
+
+      <div class="focal">
+        <div class="focal-main">
+          <h2>The WebSocket that isn't</h2>
+          <p class="small">
+            ForgeFlow's realtime hub is a WebSocket. A standard nginx <code>proxy_pass</code> block
+            does <strong>not</strong> forward the upgrade handshake — and the failure is silent.
+            Every REST call works, nothing appears in any error log, and the only symptom is that
+            live build and test streaming never connects.
+          </p>
+          <p class="small" style="margin-top:10px">
+            Tested both ways against a real nginx, with the same request:
+          </p>
+          <div class="cmp">
+            <div class="cmp-row good">
+              <span class="lab">With <code>proxy_http_version 1.1</code> + <code>Upgrade</code> + <code>Connection</code></span>
+              <span class="out">101 Switching Protocols</span>
+            </div>
+            <div class="cmp-row bad">
+              <span class="lab">Identical config, those three lines removed</span>
+              <span class="out">200 OK</span>
+            </div>
+          </div>
+          <p class="small faint" style="margin-top:10px">
+            Proving the headers work is half the evidence. Removing them and watching the handshake
+            degrade is what proves they are load-bearing rather than cargo-culted.
+          </p>
+        </div>
+
+        <div class="panel">
+          <h2>Oracle Cloud has two firewalls</h2>
+          <p class="small">
+            Oracle's Ubuntu images ship an iptables ruleset whose <code>INPUT</code> chain ends in a
+            blanket <code>REJECT</code>. ufw writes to a <em>different</em> chain — so
+            <code>ufw allow 443</code> succeeds, <code>ufw status</code> shows the port open, and
+            packets are still dropped.
+          </p>
+          <p class="small" style="margin-top:10px">
+            The playbook removes those rules by <strong>specification</strong>, not by index —
+            deleting by index while the chain shifts removes the wrong rule, and the wrong rule is
+            the one keeping SSH open — then persists with <code>netfilter-persistent save</code>,
+            without which they return on reboot.
+          </p>
+          <p class="small faint" style="margin-top:10px">
+            The OCI Security List is a genuinely separate firewall that no playbook can reach.
+          </p>
+        </div>
+      </div>
+
+      <div class="minor">
+        <div>
+          <h3>Caddy label indexing</h3>
+          <p class="small">Host labels count <em>right-to-left</em>, so the dev config's hardcoded index silently resolves to the TLD on a real domain. Re-anchored the regex on the left.</p>
+        </div>
+        <div>
+          <h3>Caddy bound :443</h3>
+          <p class="small">With <code>auto_https off</code>, a bare hostname still listens on 443 — so it never saw the plain HTTP nginx forwards. Fixed by pinning <code>http://</code>.</p>
+        </div>
+        <div>
+          <h3>Metric cardinality</h3>
+          <p class="small">A raw path label mints a series per project, and a scanner mints one per probe. The label is the route <em>template</em>; unmatched requests collapse to <code>&lt;unmatched&gt;</code>.</p>
+        </div>
+        <div>
+          <h3>A panel blank when healthy</h3>
+          <p class="small"><code>sum(rate(...5xx))</code> returns an <em>empty</em> vector with no errors, and empty ÷ anything is empty — so a healthy service read "No data". Fixed with <code>or vector(0)</code>.</p>
+        </div>
+        <div>
+          <h3>arm64 under emulation</h3>
+          <p class="small">Runners are amd64, the VM is aarch64; an amd64-only image pulls fine then dies with <code>exec format error</code>. QEMU + buildx, with a registry cache because emulation dominates build time.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================== 4. LESSONS -->
+    <section class="slide" data-title="Lessons learned" aria-label="Lessons learned">
+      <p class="eyebrow">Lessons learned</p>
+      <h1>Validate by execution, <span class="quiet">not by inspection</span></h1>
+
+      <div class="lessons">
+        <div class="pull">
+          <p class="q">
+            Spinning up a throwaway k3s cluster and a real Prometheus cost about an hour —
+            and found <em>five genuine bugs</em> that every linter had passed.
+          </p>
+          <p class="small">
+            The Caddy label bug, the <code>:443</code> bind, the missing WebSocket headers, the
+            blank error-rate panel, the cAdvisor relabel collision. All syntactically valid. All
+            obvious within seconds of sending a real request.
+          </p>
+          <div class="stat-row" style="margin-top:18px">
+            <div class="stat"><span class="k">k3s cluster</span><span class="v">real, v1.31.4</span></div>
+            <div class="stat"><span class="k">Bugs found</span><span class="v">5</span></div>
+            <div class="stat"><span class="k">Found by linting</span><span class="v">0</span></div>
+          </div>
+        </div>
+
+        <div class="lesson-list">
+          <div>
+            <h3>“Zero downtime” is a measurement, not an adjective</h3>
+            <p class="small">A rolling update that looks fine proves nothing. Counting 807 requests with 0 failures across an update, a failed release and a rollback is a claim; watching pods change colour is an anecdote.</p>
+          </div>
+          <div>
+            <h3>A deploy command that returns is not a deploy that worked</h3>
+            <p class="small"><code>kubectl set image</code> and <code>compose up -d</code> both return before anything is serving. Every deploy path here waits on a real health signal — and that timeout is the only thing that makes automatic rollback possible.</p>
+          </div>
+          <div>
+            <h3>Make the dangerous thing loud</h3>
+            <p class="small">Regenerating <code>FERNET_KEY</code> is unrecoverable — it decrypts the credential vault. The playbook reads the existing value back rather than re-templating it. Idempotency here is the difference between a re-run and data loss.</p>
+          </div>
+          <div>
+            <h3>Automation that shares a box must be a good neighbour</h3>
+            <p class="small">The VM already runs another project. The nginx role writes exactly one new file, never touches <code>nginx.conf</code>, warns on a <code>server_name</code> collision, validates before reloading, and reloads rather than restarts.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================== 5. RESULTS -->
+    <section class="slide" data-title="Verified results" aria-label="Verified results">
+      <p class="eyebrow">Verified results</p>
+      <h1>Executed, <span class="quiet">not asserted</span></h1>
+
+      <div class="results">
+        <div>
+          <div class="headline-metric">
+            <div class="n">807 <span class="faint" style="font-size:26px">/</span> <span class="zero">0</span></div>
+            <p class="cap">
+              Requests served <strong>/ failures</strong>, measured by an in-cluster probe at 0.2s
+              intervals across a rolling update, a deliberately broken release, <em>and</em> the
+              rollback.
+            </p>
+          </div>
+          <p class="small" style="margin-top:14px">
+            <code>maxUnavailable: 0</code> plus a readiness probe means the broken pod never became
+            Ready, so it was never added to the Service endpoints and never received a single
+            request.
+          </p>
+
+          <div class="caveat">
+            <h3>Known limitation, stated up front</h3>
+            <p class="small">
+              CI is currently red on <code>main</code> for reasons unrelated to this work — 4
+              pre-existing <code>mypy</code> errors and 2 pre-existing test failures, confirmed by
+              stashing every DevOps change and re-running. Since CD gates on CI, these must be
+              fixed before the pipeline can deploy.
+            </p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="scroll-x">
+            <table>
+              <thead>
+                <tr><th>Check</th><th>Tool</th><th style="text-align:right">Result</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Workflow syntax + embedded shell</td><td class="tool">actionlint</td><td class="res" style="text-align:right">0 findings</td></tr>
+                <tr><td>Kubernetes manifests</td><td class="tool">kubeconform&nbsp;-strict</td><td class="res" style="text-align:right">9 / 9 valid</td></tr>
+                <tr><td>Ansible, <span class="faint">production profile</span></td><td class="tool">ansible-lint</td><td class="res" style="text-align:right">0 / 0</td></tr>
+                <tr><td>Prometheus config + rules</td><td class="tool">promtool</td><td class="res" style="text-align:right">10 rules</td></tr>
+                <tr><td>nginx config, both variants</td><td class="tool">nginx -t</td><td class="res" style="text-align:right">valid</td></tr>
+                <tr><td>WebSocket upgrade</td><td class="tool">live handshake</td><td class="res" style="text-align:right">101</td></tr>
+                <tr><td>Production image</td><td class="tool">docker run</td><td class="res" style="text-align:right">healthy</td></tr>
+                <tr><td>Rolling update</td><td class="tool">real k3s</td><td class="res" style="text-align:right">0 dropped</td></tr>
+                <tr><td>Broken release</td><td class="tool">real k3s</td><td class="res" style="text-align:right">auto-rolled back</td></tr>
+                <tr><td>Monitoring targets</td><td class="tool">prometheus</td><td class="res" style="text-align:right">5 / 5 up</td></tr>
+                <tr><td>Grafana dashboard</td><td class="tool">provisioned</td><td class="res" style="text-align:right">16 panels</td></tr>
+                <tr><td>Backend test suite</td><td class="tool">pytest</td><td class="res" style="text-align:right">1648 passed</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small faint" style="margin-top:14px">
+            Raw output committed under <code>docs/devops/evidence/</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <button class="nav-btn" id="prev" type="button">← Prev</button>
+    <button class="nav-btn" id="next" type="button">Next →</button>
+    <span class="rail-spacer"></span>
+    <span>Navigate with <kbd>←</kbd> <kbd>→</kbd> · <kbd>Ctrl</kbd>+<kbd>P</kbd> prints one slide per page</span>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const dotsBox = document.getElementById('dots');
+    const counter = document.getElementById('counter');
+    const railTitle = document.getElementById('railTitle');
+    const prev = document.getElementById('prev');
+    const next = document.getElementById('next');
+    let index = 0;
+
+    const pad = (n) => String(n).padStart(2, '0');
+
+    slides.forEach((slide, i) => {
+      const b = document.createElement('button');
+      b.className = 'dot';
+      b.type = 'button';
+      b.setAttribute('aria-label', `Slide ${i + 1}: ${slide.dataset.title}`);
+      b.addEventListener('click', () => go(i));
+      dotsBox.appendChild(b);
+    });
+    const dots = Array.from(dotsBox.children);
+
+    function go(n) {
+      index = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach((s, i) => s.dataset.active = String(i === index));
+      dots.forEach((d, i) => d.setAttribute('aria-current', String(i === index)));
+      counter.textContent = `${pad(index + 1)} / ${pad(slides.length)}`;
+      railTitle.textContent = slides[index].dataset.title;
+      prev.disabled = index === 0;
+      next.disabled = index === slides.length - 1;
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+
+    prev.addEventListener('click', () => go(index - 1));
+    next.addEventListener('click', () => go(index + 1));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); go(index + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(index - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); go(0); }
+      else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+    });
+
+    go(0);
+  })();
+</script>

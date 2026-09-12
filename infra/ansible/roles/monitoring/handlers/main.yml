@@ -1,0 +1,19 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Reload prometheus
+  # A hot reload, not a restart: restarting drops the in-memory head block (up to 2h of samples
+  # not yet flushed to disk). --web.enable-lifecycle in the compose command makes this possible.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_prometheus_port }}/-/reload"
+    method: POST
+    status_code: [200, 204]
+  failed_when: false  # nothing to reload before the first start
+
+- name: Restart monitoring
+  ansible.builtin.systemd:
+    name: forgeflow-monitoring
+    state: restarted
+  failed_when: false

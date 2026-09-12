@@ -4,3 +4,17 @@
 sandbox/Dockerfile   text eol=lf
 sandbox/entrypoint.sh text eol=lf
 sandbox/smoke/*.cjs  text eol=lf
+
+# --- DevOps (infra/) ------------------------------------------------------------
+# Everything below is consumed by Linux tooling on the VM or inside a container, where a stray
+# CR is at best noise and at worst fatal (`#!/usr/bin/env bash\r` -> "bad interpreter"). The
+# `*.sh` rule above already covers the rollout scripts; these close the remaining gaps, which
+# would otherwise depend on each developer's core.autocrlf setting.
+backend/Dockerfile*        text eol=lf
+infra/**/*.yml             text eol=lf
+infra/**/*.yaml            text eol=lf
+infra/**/*.j2              text eol=lf
+infra/**/*.ini             text eol=lf
+infra/**/*.cfg             text eol=lf
+infra/caddy/Caddyfile*     text eol=lf
+infra/nginx/*.example      text eol=lf

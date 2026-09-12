@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Nightly ForgeFlow MongoDB backup
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+# Run on next boot if the VM was off at 03:17 — otherwise a machine that is shut down overnight
+# would silently never be backed up.
+Persistent=true
+# Spread the load so the backup does not collide with anything else scheduled on the hour.
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

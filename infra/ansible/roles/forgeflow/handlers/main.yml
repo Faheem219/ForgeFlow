@@ -1,0 +1,12 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart forgeflow
+  ansible.builtin.systemd:
+    name: forgeflow
+    state: restarted
+  # Only meaningful once CD has deployed an image; a provisioning run on a fresh box has nothing
+  # to restart and should not fail because of it.
+  failed_when: false

@@ -1,0 +1,96 @@
+---
+# Every knob the playbook has. Override per-host in inventory.ini, or on the command line with
+# `-e key=value`. Nothing secret belongs in this file — it is committed.
+#
+# Secrets (API keys, SECRET_KEY, FERNET_KEY) go in `vault.yml`, encrypted with ansible-vault:
+#
+#   ansible-vault create group_vars/vault.yml
+#   ansible-playbook site.yml --ask-vault-pass
+#
+# See README.md §Secrets. The playbook runs fine without a vault — it generates SECRET_KEY and
+# FERNET_KEY on first run and leaves provider keys blank for you to set from the /admin panel.
+
+# ----------------------------------------------------------------------------- identity & paths
+forgeflow_user: forgeflow
+forgeflow_group: forgeflow
+# A system account, not a login: it owns the app directory and is added to the docker group. No
+# shell, because nothing should ever log in as it — the container runs as its own uid anyway.
+forgeflow_user_shell: /usr/sbin/nologin
+
+forgeflow_root: /opt/forgeflow
+forgeflow_repo_url: "https://github.com/Faheem219/ForgeFlow.git"
+
+# ----------------------------------------------------------------------------- public surface
+# YOUR subdomain — the one nginx already terminates TLS for. Used by the nginx site template and
+# written into CORS_ORIGINS. Override this; the placeholder is deliberately invalid so a forgotten
+# value fails loudly instead of silently serving on the wrong name.
+forgeflow_domain: "CHANGE_ME.example.com"
+
+# Where the API listens on the VM's loopback. Your existing nginx already forwards the subdomain to
+# 8000, so that is the default. If your other FastAPI project already holds 8000, change this to
+# (say) 8010 AND update the proxy_pass in your existing nginx server block to match.
+forgeflow_api_port: 8000
+
+# Origin(s) the browser will call the API from — your Vercel deployment. Wildcards are not usable:
+# the app enables credentialed CORS whenever origins != ["*"], and browsers reject a wildcard with
+# credentials.
+forgeflow_cors_origins: "https://forgeflow.vercel.app"
+
+# Wildcard domain for per-project sandbox previews. Leave blank to skip preview exposure entirely
+# (everything else still works) — it needs a wildcard DNS record and a wildcard TLS cert, which is
+# a bigger commitment than the rest of this playbook.
+forgeflow_preview_domain: ""
+
+# ----------------------------------------------------------------------------- container image
+# Overridden per-deploy by the CD pipeline, which writes an immutable SHA tag into .env.
+forgeflow_image: "ghcr.io/faheem219/forgeflow-api:latest"
+
+# ----------------------------------------------------------------------------- base system
+common_timezone: "Asia/Kolkata"
+common_packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - htop
+  - jq
+  - unzip
+  - python3-pip
+  # Required by ansible's `community.docker` modules and by the compose healthcheck helpers.
+  - python3-docker
+
+# Oracle's free-tier Ampere shapes have plenty of RAM, but the boot volume is small and docker
+# builds are hungry. A swap file is cheap insurance against an OOM during a pull.
+common_swap_size_mb: 2048
+common_enable_unattended_upgrades: true
+
+# ----------------------------------------------------------------------------- firewall
+# Oracle Cloud has TWO firewalls and they are independent. This playbook configures the one ON the
+# VM. The Security List / NSG in the OCI console is the other, and the playbook cannot touch it —
+# open 80 and 443 there too or nothing reaches the box. README.md §Oracle networking spells it out.
+firewall_enabled: true
+firewall_allowed_tcp_ports:
+  - 22
+  - 80
+  - 443
+
+# ----------------------------------------------------------------------------- k3s (step 3 demo)
+# The orchestration deliverable. Independent of the compose stack that serves production.
+k3s_enabled: true
+k3s_version: "v1.31.4+k3s1"
+# Traefik is disabled because k3s exposes it via a LoadBalancer service that binds host :80/:443 —
+# ports your nginx already owns. The demo reaches the cluster through `kubectl port-forward`.
+k3s_disable_components:
+  - traefik
+
+# ----------------------------------------------------------------------------- monitoring (step 4)
+monitoring_enabled: true
+# Loopback-bound like everything else; reach them over an SSH tunnel:
+#   ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 ubuntu@<vm>
+monitoring_prometheus_port: 9090
+monitoring_grafana_port: 3000
+monitoring_grafana_admin_user: admin
+# Change this. It is the Grafana admin login; left as a well-known default it is a real hole the
+# moment anyone exposes port 3000.
+monitoring_grafana_admin_password: "changeme-before-you-expose-grafana"
+monitoring_prometheus_retention: "15d"

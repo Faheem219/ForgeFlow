@@ -12,10 +12,10 @@ PREVIEW_NETWORK ?= forgeflow-preview
 DOTENV := $(wildcard $(CURDIR)/.env)
 ENV_FILE_ARG := $(if $(DOTENV),--env-file $(DOTENV),)
 
-.PHONY: help dev preview-net proxy host-deps down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify
+.PHONY: help dev preview-net proxy host-deps down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify devops-lint ansible-check ansible-deploy ansible-ping k8s-validate k8s-apply k8s-rollout k8s-rollback k8s-demo monitoring-up monitoring-down prod-build
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 dev: preview-net ## Boot api + web + mongo + proxy (needs Colima/Docker running)
 	$(COMPOSE) up --build
@@ -114,3 +114,60 @@ skeleton-test: ## Run the generated-app skeleton unit suites (Vitest + Jest)
 	cd templates/app-skeleton && $(PNPM) run test:unit
 
 skeleton-verify: skeleton-install skeleton-build skeleton-test ## Full skeleton check (install + build + unit tests)
+
+# ==================================================================== DevOps (infra/)
+# Provisioning, orchestration and monitoring. See docs/devops/README.md for the full runbook.
+#
+# Ansible needs a POSIX control node: macOS (`brew install ansible`) or Linux/WSL
+# (`pipx install ansible`). There is no native Windows control node.
+ANSIBLE_DIR := infra/ansible
+K8S_DIR := infra/k8s
+MONITORING_DIR := infra/monitoring
+
+devops-lint: ## Lint every devops artifact (workflows, k8s manifests, ansible, prometheus)
+	@echo "--- actionlint (GitHub workflows) ---"
+	docker run --rm -v "$(CURDIR)":/repo -w /repo rhysd/actionlint:latest -color
+	@echo "--- kubeconform (k8s manifests) ---"
+	docker run --rm -v "$(CURDIR)/$(K8S_DIR)":/work ghcr.io/yannh/kubeconform:latest 		-summary -strict -kubernetes-version 1.31.0 /work/base
+	@echo "--- promtool (prometheus config + alert rules) ---"
+	docker run --rm -v "$(CURDIR)/$(MONITORING_DIR)/prometheus":/etc/prometheus 		--entrypoint promtool prom/prometheus:v2.54.1 check config /etc/prometheus/prometheus.yml
+	@echo "--- ansible-lint ---"
+	cd $(ANSIBLE_DIR) && ansible-lint site.yml roles/
+
+ansible-ping: ## Check SSH connectivity to the VM
+	cd $(ANSIBLE_DIR) && ansible forgeflow -m ping
+
+ansible-check: ## Dry run: show exactly what provisioning WOULD change (safe, changes nothing)
+	cd $(ANSIBLE_DIR) && ansible-playbook site.yml --check --diff
+
+ansible-deploy: ## Provision the Oracle VM (idempotent — a second run should be changed=0)
+	cd $(ANSIBLE_DIR) && ansible-playbook site.yml
+
+k8s-validate: ## Schema-validate the Kubernetes manifests
+	docker run --rm -v "$(CURDIR)/$(K8S_DIR)":/work ghcr.io/yannh/kubeconform:latest 		-summary -verbose -strict -kubernetes-version 1.31.0 /work/base
+
+k8s-apply: ## Apply the manifests to the current kubectl context
+	kubectl apply -f $(K8S_DIR)/base/
+
+k8s-rollout: ## Roll to a new image: make k8s-rollout IMAGE=ghcr.io/<owner>/forgeflow-api:<tag>
+	@test -n "$(IMAGE)" || { echo "usage: make k8s-rollout IMAGE=<image>"; exit 2; }
+	bash $(K8S_DIR)/scripts/rolling-update.sh "$(IMAGE)" "make k8s-rollout"
+
+k8s-rollback: ## Roll back the API deployment (REVISION=n optional; blank = previous)
+	bash $(K8S_DIR)/scripts/rollback.sh $(REVISION)
+
+k8s-demo: ## Zero-downtime + auto-rollback demo: make k8s-demo V1=<image> V2=<image>
+	@test -n "$(V1)" -a -n "$(V2)" || { echo "usage: make k8s-demo V1=<image> V2=<image>"; exit 2; }
+	bash $(K8S_DIR)/scripts/demo-rolling-update.sh "$(V1)" "$(V2)"
+
+monitoring-up: ## Start Prometheus + Grafana + exporters (needs GRAFANA_ADMIN_PASSWORD)
+	@test -n "$$GRAFANA_ADMIN_PASSWORD" || { echo "export GRAFANA_ADMIN_PASSWORD first"; exit 2; }
+	docker compose -f $(MONITORING_DIR)/docker-compose.monitoring.yml up -d
+	@echo "Grafana  -> http://localhost:3000"
+	@echo "Prometheus -> http://localhost:9090"
+
+monitoring-down: ## Stop the monitoring stack
+	docker compose -f $(MONITORING_DIR)/docker-compose.monitoring.yml down
+
+prod-build: ## Build the production backend image locally (native arch)
+	docker build -f backend/Dockerfile.prod -t forgeflow-api:local backend/

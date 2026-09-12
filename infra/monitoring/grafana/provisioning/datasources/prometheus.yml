@@ -1,0 +1,20 @@
+# Declarative datasource. Provisioned as a file rather than clicked in the UI so a rebuilt Grafana
+# comes back identical — a UI-created datasource lives only in the grafana-data volume.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Service name on the monitoring compose network, not localhost — inside the Grafana container
+    # "localhost" is Grafana itself.
+    url: http://prometheus:9090
+    isDefault: true
+    # Must match the dashboard's datasource uid, or every panel loads with "datasource not found".
+    uid: forgeflow-prometheus
+    editable: false
+    jsonData:
+      # Tells Grafana the server's scrape interval so $__rate_interval resolves sensibly; a
+      # rate() window shorter than 2 scrape intervals produces empty graphs.
+      timeInterval: 15s
+      httpMethod: POST

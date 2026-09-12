@@ -1,0 +1,9 @@
+# All ForgeFlow k8s objects live in one namespace so the whole demo is `kubectl delete ns forgeflow`
+# away from being cleaned up.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgeflow
+  labels:
+    app.kubernetes.io/name: forgeflow
+    app.kubernetes.io/part-of: forgeflow

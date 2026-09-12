@@ -1,0 +1,80 @@
+# ForgeFlow control plane — PRODUCTION image (multi-arch: linux/amd64 + linux/arm64).
+#
+# Deliberately a SEPARATE file from `Dockerfile`, which stays the dev image that
+# infra/docker-compose.yml bind-mounts and runs with `--reload`. Two images, two jobs: touching the
+# dev one to make it production-shaped is how hot-reload quietly breaks for everyone.
+#
+# What differs from the dev image:
+#   - multi-stage, so the uv toolchain and build caches never reach the runtime layer
+#   - source is COPIED IN, not bind-mounted, and there is no `--reload` (a reloader in production
+#     both wastes a watcher thread and can restart mid-request)
+#   - runs as a non-root user
+#   - a real HEALTHCHECK, so `docker compose`/k8s can tell "process up" from "actually serving"
+#
+# Build:  docker buildx build --platform linux/arm64 -f backend/Dockerfile.prod backend/
+# The Oracle Ampere A1 VM is aarch64, so arm64 is the platform that matters here; amd64 is kept so
+# the same tag runs on a developer laptop and on GitHub's runners.
+
+# ---------------------------------------------------------------------------- builder
+FROM python:3.11-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+
+WORKDIR /build
+
+# Dependencies first, so a source-only change reuses this layer. `--frozen` makes the build fail
+# on a stale lockfile rather than silently resolving something different from what CI tested.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY . .
+RUN uv sync --frozen --no-dev
+
+# ---------------------------------------------------------------------------- runtime
+FROM python:3.11-slim AS runtime
+
+# `docker.sock` note: the control plane talks to the host daemon through the Python docker SDK over
+# the unix socket, so it needs *socket access*, not the docker CLI. Access is granted at run time by
+# adding the container user to the host docker group (compose `group_add`, k8s `supplementalGroups`)
+# — never by baking a uid/gid in here, which would break the moment the host group id differs.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    VIRTUAL_ENV=/opt/venv \
+    FORGEFLOW_ENV=prod
+
+# curl is for the HEALTHCHECK below; tini gives a real PID 1 so SIGTERM reaches uvicorn and the
+# rolling update drains cleanly instead of being killed at the grace-period deadline.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin forgeflow
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder --chown=forgeflow:forgeflow /build /app
+
+USER forgeflow
+
+EXPOSE 8000
+
+# `/health` is the readiness truth: it answers even when Mongo is degraded (see app/api/app.py),
+# which is what we want — a control plane that cannot reach Mongo should still be reachable and
+# reporting, not silently removed from service with no way to diagnose it.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Single worker on purpose. The control plane keeps per-project WebSocket subscribers and the
+# realtime replay ring in *process* memory (app/realtime), and the rate limiters are in-process
+# fixed-window counters (app/core/limits.py) — a second worker would silently halve the limits and
+# drop half the realtime subscribers. Scale by making that state shared first, not by adding -w.
+CMD ["uvicorn", "app.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
