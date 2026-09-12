@@ -18,7 +18,7 @@
         </mxCell>
 
         <!-- 2 TEST SUITE -->
-        <mxCell id="t" value="② TestSuite  (test-generation agent, claude-sonnet-5)&#10;every acceptance criterion yields ≥ 1 executable test, tagged with its criterion_id" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7FA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;align=left;spacingLeft=10;" vertex="1" parent="1">
+        <mxCell id="t" value="② TestSuite  (test-generation agent, MODEL_CODEGEN)&#10;every acceptance criterion yields ≥ 1 executable test, tagged with its criterion_id" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7FA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;align=left;spacingLeft=10;" vertex="1" parent="1">
           <mxGeometry x="630" y="95" width="480" height="185" as="geometry" />
         </mxCell>
         <mxCell id="t1" value="unit — Vitest (FE) · Jest + supertest (BE)&#10;   ▸ AC-01 → rejects empty title            [unit]&#10;   ▸ AC-03 → orders by createdAt desc        [unit]&#10;&#10;E2E — Playwright against the sandbox preview&#10;   ▸ AC-02 → create → reload → still present [e2e]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;fontFamily=Courier New;" vertex="1" parent="1">

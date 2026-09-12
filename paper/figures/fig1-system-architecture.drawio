@@ -69,7 +69,7 @@
           <mxGeometry x="635" y="425" width="120" height="42" as="geometry" />
         </mxCell>
 
-        <mxCell id="ag" value="Agents: Codegen · Test-gen · Repair&#10;Model router — Sonnet (codegen) / Haiku (routing) + token &amp; ₹ cost accounting, budget caps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">
+        <mxCell id="ag" value="Agents: Codegen · Test-gen · Repair&#10;Model router — MODEL_CODEGEN (codegen) / MODEL_ROUTING (routing) + token &amp; ₹ cost accounting, budget caps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="50" y="485" width="330" height="60" as="geometry" />
         </mxCell>
         <mxCell id="sm" value="Sandbox manager&#10;(docker SDK)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">
@@ -106,7 +106,7 @@
         <mxCell id="xp" value="EXTERNAL PROVIDERS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#333333;strokeWidth=2;verticalAlign=top;fontSize=13;fontStyle=1;align=left;spacingLeft=10;spacingTop=6;dashed=1;" vertex="1" parent="1">
           <mxGeometry x="820" y="30" width="290" height="755" as="geometry" />
         </mxCell>
-        <mxCell id="xp1" value="Anthropic API&#10;claude-sonnet-5 (codegen / test-gen / repair)&#10;claude-haiku-4-5 (routing, classification, summaries)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">
+        <mxCell id="xp1" value="LLM provider (vendor-native or OpenAI-compatible)&#10;MODEL_CODEGEN (codegen / test-gen / repair)&#10;MODEL_ROUTING / MODEL_CLASSIFY (routing, classification, summaries)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="840" y="80" width="250" height="80" as="geometry" />
         </mxCell>
         <mxCell id="xp2" value="Design providers (pluggable)&#10;Stitch MCP (default) · Figma MCP (alt)&#10;image → UI · text → UI · fetch HTML/CSS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=11;" vertex="1" parent="1">

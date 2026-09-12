@@ -32,7 +32,7 @@
         </mxCell>
 
         <!-- STEP 2 : PATCH -->
-        <mxCell id="patch" value="② TARGETED PATCH — repair agent (claude-sonnet-5)&#10;instruction: fix the failing behaviour WITHOUT breaking passing tests&#10;→ apply to the sandbox workspace → git commit" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+        <mxCell id="patch" value="② TARGETED PATCH — repair agent (MODEL_CODEGEN)&#10;instruction: fix the failing behaviour WITHOUT breaking passing tests&#10;→ apply to the sandbox workspace → git commit" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
           <mxGeometry x="60" y="385" width="480" height="70" as="geometry" />
         </mxCell>
 
