@@ -5,84 +5,76 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <!-- INPUT -->
-        <mxCell id="src" value="Passing build in the&#10;project sandbox&#10;(hard prereq: deploy ⇐ build)" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="40" y="60" width="200" height="70" as="geometry" />
+        <!-- Entry -->
+        <mxCell id="start" value="Passing build in the sandbox" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="430" y="26" width="290" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="prereq" value="deploy ⇐ build" style="text;html=1;align=left;fontSize=10;fontColor=#B00000;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="740" y="38" width="140" height="20" as="geometry" />
         </mxCell>
 
-        <!-- ANALYZER -->
-        <mxCell id="an" value="① INFRA ANALYZER&#10;statically inspects the workspace — FE build target, presence of a&#10;persistent BE, DB usage, required env — and emits an infra_plan artifact" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF1F8;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
-          <mxGeometry x="285" y="45" width="440" height="100" as="geometry" />
-        </mxCell>
-        <mxCell id="an1" value="classification ∈ { static FE · FE + persistent BE · FE + BE + DB }&#10;→ recommended targets + the exact env / secrets each one needs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="300" y="95" width="410" height="40" as="geometry" />
+        <!-- 1. infra analyzer -->
+        <mxCell id="infra" value="①  Infra analyzer&#10;classify:  static FE  |  FE + BE  |  FE + BE + DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="108" width="470" height="56" as="geometry" />
         </mxCell>
 
-        <!-- MODE SWITCH -->
-        <mxCell id="mode" value="② CREDENTIAL MODE" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="790" y="45" width="180" height="100" as="geometry" />
+        <!-- 2. credentials -->
+        <mxCell id="creds" value="②  Credentials — dual mode" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7FA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="290" y="196" width="570" height="102" as="geometry" />
         </mxCell>
-        <mxCell id="m1" value="SEAMLESS&#10;platform-owned tokens —&#10;beginner path, zero setup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="1000" y="40" width="130" height="52" as="geometry" />
+        <mxCell id="cr1" value="SEAMLESS&#10;platform-owned tokens" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="306" y="238" width="260" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="m2" value="BRING-YOUR-OWN&#10;user tokens, Fernet-encrypted&#10;at rest, decrypted only at&#10;call time, never returned&#10;to the client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="1000" y="100" width="130" height="72" as="geometry" />
-        </mxCell>
-
-        <!-- TOPOLOGY -->
-        <mxCell id="topo" value="③ LIVE DEPLOYMENT TOPOLOGY — rendered in-app as an interactive React Flow graph;&#10;each node carries live status, health, URL, a log drawer and a redeploy control" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7FA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="40" y="200" width="1090" height="260" as="geometry" />
+        <mxCell id="cr2" value="BRING-YOUR-OWN&#10;encrypted at rest, decrypted at call time" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="584" y="238" width="260" height="46" as="geometry" />
         </mxCell>
 
-        <mxCell id="fe" value="FRONTEND&#10;Vercel&#10;&#10;React + Vite SPA&#10;static build output&#10;&#10;● healthy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
-          <mxGeometry x="110" y="265" width="185" height="150" as="geometry" />
+        <!-- 3. ordered deploy topology -->
+        <mxCell id="topo" value="③  Ordered deploy — provision DB, then BE, then FE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="170" y="330" width="810" height="136" as="geometry" />
         </mxCell>
-        <mxCell id="be" value="BACKEND&#10;Render&#10;&#10;Node + Express + TS&#10;persistent web service&#10;&#10;● healthy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
-          <mxGeometry x="455" y="265" width="185" height="150" as="geometry" />
+        <mxCell id="db" value="DATABASE&#10;MongoDB Atlas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="190" y="382" width="220" height="62" as="geometry" />
         </mxCell>
-        <mxCell id="db" value="DATABASE&#10;MongoDB Atlas&#10;&#10;one isolated database&#10;PER PROJECT&#10;(or a user-supplied URI)&#10;&#10;● healthy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
-          <mxGeometry x="800" y="265" width="185" height="150" as="geometry" />
+        <mxCell id="be" value="BACKEND&#10;Render" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="465" y="382" width="220" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="fe" value="FRONTEND&#10;Vercel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="740" y="382" width="220" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="w1" value="MONGODB_URI" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="db" target="be"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="w2" value="VITE_API_URL" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="be" target="fe"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- 4. live validation -->
+        <mxCell id="val" value="④  Live validation — the same Playwright suite,&#10;re-pointed at the deployed URL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="506" width="470" height="56" as="geometry" />
         </mxCell>
 
-        <mxCell id="w1" value="env wiring: VITE_API_URL ← BE public URL" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="fe" target="be"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="w2" value="env wiring: MONGODB_URI ← provisioned DB" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="be" target="db"><mxGeometry relative="1" as="geometry" /></mxCell>
-
-        <mxCell id="ord" value="ORDERED DEPLOY: provision DB → deploy BE (inject DB URI) → deploy FE (inject BE URL) → health-check every node → record a Deployment artifact + topology snapshot" style="text;html=1;align=center;fontSize=11;fontStyle=2;" vertex="1" parent="1">
-          <mxGeometry x="60" y="425" width="1050" height="26" as="geometry" />
+        <!-- decision -->
+        <mxCell id="dec" value="live green?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="475" y="600" width="200" height="76" as="geometry" />
         </mxCell>
 
-        <!-- LIVE VALIDATION -->
-        <mxCell id="val" value="④ POST-DEPLOY LIVE VALIDATION — the SAME Playwright suite, re-pointed at the deployed URL&#10;passing locally is not evidence that the deployed artifact works" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF1F8;strokeColor=#1A1A1A;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
-          <mxGeometry x="40" y="505" width="640" height="90" as="geometry" />
-        </mxCell>
-        <mxCell id="val1" value="smoke checks + the critical E2E criteria → a structured live TestRun&#10;(same normalised shape as the in-sandbox run, so the repair path is identical)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="58" y="550" width="604" height="36" as="geometry" />
+        <!-- deliver -->
+        <mxCell id="ok" value="Live, validated URL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0E8;strokeColor=#1A6A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="850" y="608" width="230" height="60" as="geometry" />
         </mxCell>
 
-        <mxCell id="dv" value="live suite&#10;green?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="730" y="500" width="150" height="100" as="geometry" />
+        <!-- 5. live failure repair -->
+        <mxCell id="rep" value="⑤  Live-failure repair — bounded loop (Fig. 3) → redeploy → re-validate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF0F0;strokeColor=#B00000;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="240" y="720" width="470" height="60" as="geometry" />
         </mxCell>
 
-        <mxCell id="ok" value="DELIVER THE LIVE, VALIDATED URL&#10;stage → complete" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#E8F0E8;strokeColor=#1A6A1A;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="930" y="512" width="200" height="76" as="geometry" />
-        </mxCell>
-
-        <mxCell id="loop" value="⑤ LIVE-FAILURE REPAIR PATH&#10;diagnose → re-enter BUILD → bounded diff-aware repair (Fig. 3) → REDEPLOY → RE-VALIDATE&#10;the loop closes on the deployed artifact, not on the local one" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5E9D8;strokeColor=#8A5A00;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="230" y="660" width="670" height="80" as="geometry" />
-        </mxCell>
-
-        <!-- EDGES -->
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="src" target="an"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="an" target="mode"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1;endArrow=classic;strokeColor=#333333;" edge="1" parent="1" source="mode" target="m1"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1;endArrow=classic;strokeColor=#333333;" edge="1" parent="1" source="mode" target="m2"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="mode" target="topo"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="topo" target="val"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="val" target="dv"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e8" value="YES" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#1A6A1A;fontSize=11;fontStyle=1;fontColor=#1A6A1A;" edge="1" parent="1" source="dv" target="ok"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e9" value="NO" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#8A5A00;fontSize=11;fontStyle=1;fontColor=#8A5A00;" edge="1" parent="1" source="dv" target="loop"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e10" value="redeploy" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#8A5A00;dashed=1;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="loop" target="topo">
-          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="20" y="700" /><mxPoint x="20" y="460" /></Array></mxGeometry>
+        <!-- Edges -->
+        <mxCell id="d1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="start" target="infra"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="infra" target="creds"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="creds" target="topo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d4" value="health-checked" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;" edge="1" parent="1" source="topo" target="val"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d5" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="val" target="dec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d6" value="YES" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#1A6A1A;fontColor=#1A6A1A;fontSize=10;fontStyle=1" edge="1" parent="1" source="dec" target="ok"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d7" value="NO" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#B00000;fontColor=#B00000;fontSize=10;fontStyle=1" edge="1" parent="1" source="dec" target="rep"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d8" value="redeploy" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#B00000;fontColor=#B00000;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="rep" target="topo">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="100" y="750" /><mxPoint x="100" y="398" /></Array></mxGeometry>
         </mxCell>
 
       </root>

@@ -1,76 +1,76 @@
 <mxfile host="app.diagrams.net" agent="ForgeFlow" version="24.7.17">
   <diagram id="fig6-hero" name="Fig 6 - Hero Path Sequence">
-    <mxGraphModel dx="1600" dy="1100" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1150" pageHeight="1060" math="0" shadow="0">
+    <mxGraphModel dx="1600" dy="1100" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1150" pageHeight="740" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="title" value="End-to-end hero path — a screenshot or a spec in, a live URL that has been re-tested against production out" style="text;html=1;align=center;fontSize=13;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="15" width="1070" height="26" as="geometry" />
+        <!-- Actors -->
+        <mxCell id="a1" value="USER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="FORGEFLOW&#10;control plane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="320" y="30" width="200" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="SANDBOX&#10;per project" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#000000;strokeWidth=2;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="640" y="30" width="160" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="PROVIDERS&#10;design · hosting · DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#333333;strokeWidth=2;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="920" y="30" width="190" height="48" as="geometry" />
         </mxCell>
 
-        <!-- LIFELINE HEADERS -->
-        <mxCell id="a1" value="USER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="40" y="55" width="130" height="40" as="geometry" />
+        <!-- Lifelines -->
+        <mxCell id="l1" style="endArrow=none;dashed=1;html=1;strokeWidth=1;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="120" y="82" as="sourcePoint" /><mxPoint x="120" y="660" as="targetPoint" /></mxGeometry>
         </mxCell>
-        <mxCell id="a2" value="PWA&#10;workspace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="215" y="55" width="130" height="40" as="geometry" />
+        <mxCell id="l2" style="endArrow=none;dashed=1;html=1;strokeWidth=1;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="82" as="sourcePoint" /><mxPoint x="420" y="660" as="targetPoint" /></mxGeometry>
         </mxCell>
-        <mxCell id="a3" value="CONDUCTOR&#10;+ stage handlers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="390" y="55" width="140" height="40" as="geometry" />
+        <mxCell id="l3" style="endArrow=none;dashed=1;html=1;strokeWidth=1;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="720" y="82" as="sourcePoint" /><mxPoint x="720" y="660" as="targetPoint" /></mxGeometry>
         </mxCell>
-        <mxCell id="a4" value="AGENTS&#10;codegen · test-gen · repair" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="575" y="55" width="150" height="40" as="geometry" />
-        </mxCell>
-        <mxCell id="a5" value="SANDBOX&#10;(Docker)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="770" y="55" width="130" height="40" as="geometry" />
-        </mxCell>
-        <mxCell id="a6" value="PROVIDERS&#10;Stitch · Vercel · Render · Atlas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDE3F0;strokeColor=#1A1A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="945" y="55" width="165" height="40" as="geometry" />
+        <mxCell id="l4" style="endArrow=none;dashed=1;html=1;strokeWidth=1;strokeColor=#666666;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1015" y="82" as="sourcePoint" /><mxPoint x="1015" y="660" as="targetPoint" /></mxGeometry>
         </mxCell>
 
-        <!-- LIFELINES -->
-        <mxCell id="l1" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="105" y="95" as="sourcePoint" /><mxPoint x="105" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="l2" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="95" as="sourcePoint" /><mxPoint x="280" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="l3" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="95" as="sourcePoint" /><mxPoint x="460" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="l4" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="650" y="95" as="sourcePoint" /><mxPoint x="650" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="l5" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="835" y="95" as="sourcePoint" /><mxPoint x="835" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="l6" style="endArrow=none;html=1;strokeWidth=1;dashed=1;strokeColor=#666666;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1027" y="95" as="sourcePoint" /><mxPoint x="1027" y="1000" as="targetPoint" /></mxGeometry></mxCell>
-
-        <!-- STEPS -->
-        <mxCell id="s1" value="1 · upload screenshots and / or a freeform description" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="105" y="130" as="sourcePoint" /><mxPoint x="460" y="130" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s2" value="2 · REQUIREMENTS — guided form, or an AI-drafted feature list (routing model) that the user edits; never auto-saved" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="175" as="sourcePoint" /><mxPoint x="105" y="175" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s3" value="3 · DESIGN — image→UI via the pluggable DesignProvider; finalized requirements folded into the prompt" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="230" as="sourcePoint" /><mxPoint x="1027" y="230" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s3b" value="HTML / CSS → versioned design artifact; refine ×N conversationally, each round a new version" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1027" y="270" as="sourcePoint" /><mxPoint x="105" y="270" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s4" value="4 · BUILD — instantiate the fixed skeleton by deterministic copy (no tokens spent rescaffolding)" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="330" as="sourcePoint" /><mxPoint x="835" y="330" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s5" value="5 · codegen agent writes ONLY feature code through sandbox-bound tools (read/write/exec/test/commit)" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="650" y="375" as="sourcePoint" /><mxPoint x="835" y="375" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s6" value="6 · file-write events stream live into the Monaco editor; terminal and preview stream over the same WS hub" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="835" y="420" as="sourcePoint" /><mxPoint x="280" y="420" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s7" value="7 · TEST — each acceptance criterion compiled into unit + Playwright E2E tests, tagged by criterion_id" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="490" as="sourcePoint" /><mxPoint x="650" y="490" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s8" value="8 · suites execute in the sandbox → normalised per-test results" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="650" y="535" as="sourcePoint" /><mxPoint x="835" y="535" as="targetPoint" /></mxGeometry></mxCell>
-
-        <!-- REPAIR BOX -->
-        <mxCell id="rep" value="9 · BOUNDED, DIFF-AWARE SELF-HEALING REPAIR LOOP  (Fig. 3)&#10;minimal context → targeted patch → re-run · guards: regression → stall → cap → budget&#10;green ⇒ continue     ·     any guard trips ⇒ escalate to the user with a &quot;here is where I am stuck&quot; summary" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=3;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="380" y="565" width="600" height="80" as="geometry" />
+        <!-- Messages -->
+        <mxCell id="m1" value="1 · screenshots or spec" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="120" y="130" as="sourcePoint" /><mxPoint x="420" y="130" as="targetPoint" /></mxGeometry>
         </mxCell>
-        <mxCell id="s9" value="escalation surfaces failing tests + diffs tried; user guidance re-enters BUILD" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#8A5A00;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="380" y="670" as="sourcePoint" /><mxPoint x="105" y="670" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s10" value="10 · DEPLOY — infra analyzer → provision DB → Render (BE) → Vercel (FE) → env wiring → health checks" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="725" as="sourcePoint" /><mxPoint x="1027" y="725" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s11" value="live URLs + topology snapshot → React Flow graph with per-node status and logs" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1027" y="770" as="sourcePoint" /><mxPoint x="280" y="770" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="s12" value="11 · VALIDATE — the same Playwright suite re-pointed at the DEPLOYED URL" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;align=left;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="460" y="825" as="sourcePoint" /><mxPoint x="1027" y="825" as="targetPoint" /></mxGeometry></mxCell>
-        <mxCell id="s13" value="on live failure: diagnose → repair (Fig. 3) → redeploy → re-validate" style="html=1;endArrow=classic;strokeWidth=2;strokeColor=#8A5A00;fontSize=11;verticalAlign=bottom;align=left;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1027" y="865" as="sourcePoint" /><mxPoint x="460" y="865" as="targetPoint" /></mxGeometry></mxCell>
-
-        <mxCell id="done" value="12 · LIVE, VALIDATED URL DELIVERED — proven against production, not merely against the sandbox" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#E8F0E8;strokeColor=#1A6A1A;strokeWidth=3;fontSize=12;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="105" y="900" width="875" height="50" as="geometry" />
+        <mxCell id="m2" value="2 · requirements + design" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="185" as="sourcePoint" /><mxPoint x="1015" y="185" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m3" value="3 · build — copy skeleton, then codegen" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="240" as="sourcePoint" /><mxPoint x="720" y="240" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m4" value="4 · files + logs stream back" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;dashed=1;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="720" y="295" as="sourcePoint" /><mxPoint x="420" y="295" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m5" value="5 · generate and run tests" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="350" as="sourcePoint" /><mxPoint x="720" y="350" as="targetPoint" /></mxGeometry>
         </mxCell>
 
-        <!-- SIDE NOTE -->
-        <mxCell id="note" value="At every numbered step the user may refine conversationally, skip the stage outright, or jump to any other stage;&#10;the sequence above is the DEFAULT path, not a required one.  Only deploy ⇐ build and validate ⇐ deploy are enforced." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#333333;dashed=1;fontSize=11;fontStyle=2;" vertex="1" parent="1">
-          <mxGeometry x="105" y="965" width="875" height="45" as="geometry" />
+        <!-- Bounded repair region -->
+        <mxCell id="loop" value="6 · bounded, diff-aware repair loop  (Fig. 3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;dashed=1;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="330" y="382" width="480" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m6" value="7 · escalate if a guard trips" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#B00000;fontColor=#B00000;dashed=1;fontSize=11;fontStyle=1;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="470" as="sourcePoint" /><mxPoint x="120" y="470" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m7" value="8 · deploy — Vercel · Render · Atlas" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="525" as="sourcePoint" /><mxPoint x="1015" y="525" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m8" value="9 · validate against the live URL" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#000000;fontSize=11;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="580" as="sourcePoint" /><mxPoint x="1015" y="580" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="m9" value="10 · live, validated URL" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#1A6A1A;fontColor=#1A6A1A;fontSize=11;fontStyle=1;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="420" y="635" as="sourcePoint" /><mxPoint x="120" y="635" as="targetPoint" /></mxGeometry>
+        </mxCell>
+
+        <!-- Invariant -->
+        <mxCell id="note" value="every numbered step may be refined, skipped or re-entered" style="text;html=1;align=center;fontSize=11;fontColor=#333333;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="200" y="690" width="750" height="24" as="geometry" />
         </mxCell>
 
       </root>

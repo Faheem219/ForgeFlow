@@ -1,105 +1,79 @@
 <mxfile host="app.diagrams.net" agent="ForgeFlow" version="24.7.17">
   <diagram id="fig3-repair" name="Fig 3 - Bounded Diff-Aware Repair Loop">
-    <mxGraphModel dx="1600" dy="1000" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1150" pageHeight="1000" math="0" shadow="0">
+    <mxGraphModel dx="1600" dy="1000" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1150" pageHeight="820" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <!-- START -->
-        <mxCell id="start" value="TestRun with ≥ 1 failing test&#10;(from Test stage, or from live validation)" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="40" width="270" height="55" as="geometry" />
+        <!-- Entry -->
+        <mxCell id="start" value="Failing tests" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="430" y="30" width="290" height="50" as="geometry" />
         </mxCell>
 
-        <!-- STEP 1 : CONTEXT -->
-        <mxCell id="ctx" value="① ASSEMBLE MINIMAL, DIFF-AWARE REPAIR CONTEXT&#10;(deterministic — model-free)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF1F8;strokeColor=#1A1A1A;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
-          <mxGeometry x="60" y="125" width="480" height="230" as="geometry" />
+        <!-- 1. context -->
+        <mxCell id="ctx" value="①  Assemble minimal, diff-aware repair context&#10;(deterministic — model-free)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="112" width="470" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="ctx1" value="failing tests only&#10;name · assertion · stack ·&#10;criterion_id · files referenced" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="75" y="175" width="220" height="60" as="geometry" />
+        <mxCell id="ctxin" value="failing tests · files they exercise · diff since the last-passing ref · requirement text via criterion_id" style="text;html=1;align=center;fontSize=10;fontColor=#333333;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="290" y="172" width="570" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="ctx2" value="only the files those tests exercise&#10;(test source + sources named in the stack)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="305" y="175" width="220" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="ctx3" value="git diff since the `last-passing` ref&#10;— a MOVING ref advanced on every green run,&#10;so the diff means &quot;what changed since it worked&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=10;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="75" y="245" width="450" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="ctx4" value="requirement snippets for the failing criteria, joined by criterion_id&#10;→ the agent repairs against the acceptance text, not a guess" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="75" y="303" width="450" height="42" as="geometry" />
+        <mxCell id="caps" value="hard caps&#10;24k total · 8k file · 8k diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#666666;dashed=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="880" y="112" width="200" height="56" as="geometry" />
         </mxCell>
 
-        <mxCell id="excl" value="EXCLUDED BY CONSTRUCTION&#10;• the rest of the repository&#10;• passing tests&#10;• untouched modules&#10;&#10;HARD CAPS (config-resolved)&#10;24 000 chars total context&#10;8 000 chars per file&#10;8 000 chars of diff&#10;&#10;Anything trimmed is RECORDED —&#10;a trimmed context is never&#10;silently lossy." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#B00000;strokeWidth=2;dashed=1;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="575" y="125" width="220" height="230" as="geometry" />
+        <!-- 2. patch -->
+        <mxCell id="patch" value="②  Targeted patch  (MODEL_CODEGEN)  →  commit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="218" width="470" height="52" as="geometry" />
         </mxCell>
 
-        <!-- STEP 2 : PATCH -->
-        <mxCell id="patch" value="② TARGETED PATCH — repair agent (MODEL_CODEGEN)&#10;instruction: fix the failing behaviour WITHOUT breaking passing tests&#10;→ apply to the sandbox workspace → git commit" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="385" width="480" height="70" as="geometry" />
+        <!-- 3. re-run -->
+        <mxCell id="rerun" value="③  Re-run affected suite, then the full suite" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="310" width="470" height="52" as="geometry" />
         </mxCell>
 
-        <!-- STEP 3 : RERUN -->
-        <mxCell id="rerun" value="③ RE-RUN — affected suite first (fast path), then the full suite&#10;normalised results: per-test pass / fail, failure detail, stdout" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="480" width="480" height="60" as="geometry" />
+        <!-- decision -->
+        <mxCell id="dec" value="all green?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="475" y="402" width="200" height="80" as="geometry" />
         </mxCell>
 
-        <!-- DECISION: GREEN -->
-        <mxCell id="dgreen" value="all&#10;green?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="230" y="570" width="140" height="80" as="geometry" />
+        <!-- success -->
+        <mxCell id="fixed" value="Fixed&#10;last-passing ref advances" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0E8;strokeColor=#1A6A1A;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="850" y="410" width="230" height="64" as="geometry" />
         </mxCell>
 
-        <!-- SUCCESS -->
-        <mxCell id="fixed" value="OUTCOME = fixed&#10;`last-passing` ref advances&#10;Run closed with cost + metrics" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#E8F0E8;strokeColor=#1A6A1A;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="575" y="573" width="240" height="74" as="geometry" />
+        <!-- 4. guards -->
+        <mxCell id="guards" value="④  Termination guards — evaluated in precedence order" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5E9D8;strokeColor=#8A5A00;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="530" width="770" height="118" as="geometry" />
+        </mxCell>
+        <mxCell id="g1" value="G1&#10;REGRESSION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8A5A00;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="206" y="574" width="174" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" value="G2&#10;STALL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8A5A00;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="396" y="574" width="174" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" value="G3&#10;ITERATION CAP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8A5A00;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="586" y="574" width="174" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="g4" value="G4&#10;BUDGET / CANCEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8A5A00;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="776" y="574" width="174" height="56" as="geometry" />
         </mxCell>
 
-        <!-- TERMINATION GUARDS -->
-        <mxCell id="guards" value="④ TERMINATION GUARDS — evaluated in this precedence order, every iteration" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAF0F0;strokeColor=#B00000;strokeWidth=2;fontSize=12;fontStyle=1;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
-          <mxGeometry x="60" y="685" width="755" height="185" as="geometry" />
+        <!-- 5. escalation -->
+        <mxCell id="esc" value="⑤  Escalate to the user — a terminal state, not an error" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF0F0;strokeColor=#B00000;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="710" width="470" height="60" as="geometry" />
         </mxCell>
 
-        <mxCell id="g1" value="G1 · REGRESSION GUARD&#10;second attempt that breaks a&#10;previously-passing test&#10;&#10;evaluated FIRST: &quot;my patches keep&#10;breaking working code&quot; is a more&#10;precise diagnosis than &quot;no progress&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B00000;strokeWidth=2;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="75" y="730" width="175" height="125" as="geometry" />
+        <!-- Edges -->
+        <mxCell id="ed1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="start" target="ctx"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="ctx" target="patch"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="patch" target="rerun"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed4" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="rerun" target="dec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed5" value="YES" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#1A6A1A;fontColor=#1A6A1A;fontSize=10;fontStyle=1" edge="1" parent="1" source="dec" target="fixed"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed6" value="NO" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;fontStyle=1" edge="1" parent="1" source="dec" target="guards"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed7" value="any guard trips" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#B00000;fontColor=#B00000;fontSize=10;fontStyle=1" edge="1" parent="1" source="guards" target="esc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ed8" value="no guard trips — next iteration" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="guards" target="ctx">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="100" y="589" /><mxPoint x="100" y="140" /></Array></mxGeometry>
         </mxCell>
-        <mxCell id="g2" value="G2 · STALL GUARD&#10;failing set fails to SHRINK for&#10;stall_threshold = 2 consecutive&#10;iterations&#10;&#10;an oscillating same-size set counts&#10;as no progress; a genuine shrink&#10;resets the counter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B00000;strokeWidth=2;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="262" y="730" width="175" height="125" as="geometry" />
-        </mxCell>
-        <mxCell id="g3" value="G3 · ITERATION CAP&#10;max_iterations = 5&#10;&#10;the loop can never run&#10;unbounded — this bound is&#10;checked before every&#10;model call" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B00000;strokeWidth=2;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="449" y="730" width="175" height="125" as="geometry" />
-        </mxCell>
-        <mxCell id="g4" value="G4 · BUDGET / CANCEL&#10;per-project or global ₹ cap&#10;reached, user cancellation,&#10;or the agent reports&#10;&quot;nothing safe to patch&quot;&#10;&#10;all land in escalation, never&#10;in a crash" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B00000;strokeWidth=2;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="636" y="730" width="165" height="125" as="geometry" />
-        </mxCell>
-
-        <!-- ESCALATION -->
-        <mxCell id="esc" value="⑤ HUMAN ESCALATION — a first-class TERMINAL STATE, not an error&#10;stage → awaiting_user · emit repair.escalation&#10;payload = { reason, &quot;here is where I am stuck&quot; summary, failing tests, diffs tried,&#10;convergence metrics, resume contract }" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#F5E9D8;strokeColor=#8A5A00;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="60" y="900" width="480" height="80" as="geometry" />
-        </mxCell>
-        <mxCell id="resume" value="user guidance&#10;re-enters BUILD&#10;→ repair may resume" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8A5A00;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
-          <mxGeometry x="575" y="905" width="240" height="70" as="geometry" />
-        </mxCell>
-
-        <!-- AUDIT TRAIL SIDEBAR -->
-        <mxCell id="audit" value="AUDIT TRAIL — the evaluation unit&#10;&#10;per ITERATION → RepairAttempt&#10;  { iteration, target_files, diff_ref,&#10;    resulting_run_id,&#10;    outcome ∈ fixed | no_progress | regressed }&#10;  (regression dominates: an attempt that fixes&#10;   and breaks is still the dangerous kind)&#10;&#10;per LOOP → one costed Run&#10;  { outcome ∈ fixed | escalated, tokens, ₹ }&#10;&#10;CONVERGENCE METRICS&#10;  initial_failing → final_failing&#10;  failing_by_iteration [ ]&#10;  regressions_introduced&#10;  iterations · tokens_spent&#10;  cost_inr · wall_clock_s&#10;&#10;STREAMED EVENTS&#10;  repair.iteration { i, failing_count,&#10;                     regressions, tokens }&#10;  repair.done | repair.escalation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7FA;strokeColor=#333333;strokeWidth=2;fontSize=10;align=left;spacingLeft=10;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
-          <mxGeometry x="850" y="125" width="270" height="520" as="geometry" />
-        </mxCell>
-
-        <mxCell id="inv" value="INVARIANTS&#10;• never feed the whole repo when a diff suffices&#10;• never loop unbounded&#10;• always leave an auditable trail&#10;• always prefer escalation over silent failure" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;fontSize=11;fontStyle=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="850" y="685" width="270" height="120" as="geometry" />
-        </mxCell>
-
-        <!-- EDGES -->
-        <mxCell id="e0" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="start" target="ctx"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="ctx" target="patch"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="patch" target="rerun"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;" edge="1" parent="1" source="rerun" target="dgreen"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e4" value="YES" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#1A6A1A;fontSize=11;fontStyle=1;fontColor=#1A6A1A;" edge="1" parent="1" source="dgreen" target="fixed"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e5" value="NO" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;fontSize=11;fontStyle=1;" edge="1" parent="1" source="dgreen" target="guards"><mxGeometry relative="1" as="geometry" /></mxCell>
-
-        <mxCell id="e6" value="no guard trips → NEXT ITERATION&#10;(re-assemble context against the new diff)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#000000;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;align=left;" edge="1" parent="1" source="guards" target="ctx">
-          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="25" y="777" /><mxPoint x="25" y="240" /></Array></mxGeometry>
-        </mxCell>
-
-        <mxCell id="e7" value="ANY guard trips" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=3;endArrow=classic;strokeColor=#8A5A00;fontSize=11;fontStyle=1;fontColor=#8A5A00;" edge="1" parent="1" source="guards" target="esc"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;endArrow=classic;strokeColor=#8A5A00;" edge="1" parent="1" source="esc" target="resume"><mxGeometry relative="1" as="geometry" /></mxCell>
 
       </root>
     </mxGraphModel>
