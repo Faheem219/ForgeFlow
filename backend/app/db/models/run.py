@@ -14,6 +14,8 @@ from app.db.models.common import utcnow
 class Cost(BaseModel):
     tokens: int = 0
     inr: float = 0.0
+    # phase-64: reasoning tokens counted inside `tokens` (defaulted so older Runs load unchanged).
+    reasoning_tokens: int = 0
 
 
 class RunProgress(BaseModel):

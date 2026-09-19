@@ -318,6 +318,46 @@ describe('BuildPanel', () => {
     expect(rail).toHaveTextContent('Routing');
   });
 
+  it('shows each phase\'s evidence — file count and note (phase-64)', async () => {
+    const phased = {
+      ...REPORT,
+      phases: [
+        {
+          id: 'data',
+          title: 'Models',
+          kind: 'data',
+          status: 'done',
+          files: ['backend/src/models/User.ts', 'backend/src/models/Post.ts'],
+          note: '',
+        },
+        {
+          id: 'be-auth',
+          title: 'Auth API',
+          kind: 'backend',
+          status: 'failed',
+          files: [],
+          note: 'wrote nothing after 2 attempt(s)',
+        },
+      ],
+      outcome: 'partial',
+      stop_reason: 'no_feature_code',
+    };
+    state.reportDetail = { ...reportArtifact(), content: JSON.stringify(phased) };
+    installFetch(state);
+    renderPanel();
+
+    const rail = await screen.findByTestId('build-phase-list');
+    const evidence = within(rail).getAllByTestId('build-phase-evidence');
+    expect(evidence.map((e) => e.textContent)).toEqual([
+      '2 files',
+      '0 files · wrote nothing after 2 attempt(s)',
+    ]);
+    fireEvent.click(screen.getByTestId('build-report-toggle'));
+    expect(screen.getByTestId('build-stop-reason')).toHaveTextContent(
+      'the app is still the template',
+    );
+  });
+
   it('shows the stop reason in plain English when the build did not complete', async () => {
     state.reportDetail = {
       ...reportArtifact(),

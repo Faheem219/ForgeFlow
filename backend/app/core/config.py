@@ -105,8 +105,10 @@ class Settings(BaseSettings):
             return None
         return value
 
-    # Agent client tuning (phase-20).
-    anthropic_max_output_tokens: int = 4096
+    # Agent client tuning (phase-20). The output cap was raised 4096 → 16384 in phase-64: a
+    # reasoning model spends part of it *thinking*, and a cap that holds a thought but not the
+    # tool call after it is how a build phase came to write nothing.
+    anthropic_max_output_tokens: int = 16384
     # Safety bound on the tool-use loop. A real full-stack build writes a file per tool turn and
     # then installs/boots/tests, so a low bound aborts large projects mid-build; the loop stays
     # bounded (D7) and every turn is still budget-checked.
@@ -143,11 +145,26 @@ class Settings(BaseSettings):
     openai_max_param_repairs: int = 4  # per-call cap on request repairs (separate from retries)
     openai_param_learning: bool = True  # off → seed table only; nothing learned or written
 
+    # --- Reasoning models & truncated turns (phase-64) ---
+    # A turn the provider cuts off at the output cap (a reasoning model thinking past max_tokens)
+    # or returns empty is NOT the model finishing. The loop appends a corrective turn and continues,
+    # at most this many times per loop, then stops with `max_tokens` so the caller records the work
+    # as unfinished rather than done.
+    llm_max_truncated_turns: int = 2
+    # How much the model should think, sent as the OpenAI-compatible `reasoning` object
+    # (OpenRouter's unified shape; endpoints that reject it get it dropped by the phase-57 ladder).
+    # Blank = provider default (a byte-identical request). `none` | `low` | `medium` | `high`.
+    llm_reasoning_effort: str = ""
+    # A hard token budget for the model's thinking; 0 = unset. Combines with the effort level.
+    llm_reasoning_max_tokens: int = 0
+
     # --- Agent tools (phase-21) ---
     # Prebuilt generated-app skeleton copied into /workspace by instantiate_skeleton (phase-22/23).
     # Relative paths resolve from the repo root; absolute paths are used as-is.
     app_skeleton_dir: str = "templates/app-skeleton"
-    tool_output_max_chars: int = 8000  # cap command output fed back to the model (keep the tail)
+    # Cap on command output fed back to the model (the tail is kept). 8000 → 16000 in phase-64: a
+    # truncated typecheck tail hid the very errors a phase was asked to fix.
+    tool_output_max_chars: int = 16000
 
     # --- Codegen (phase-23) ---
     # Per-artifact cap on the design/requirements context fed to the codegen agent (cost discipline
@@ -377,6 +394,10 @@ class Settings(BaseSettings):
     build_phase_max_fix_attempts: int = 2  # per-phase typecheck fix sub-loop
     build_plan_dir: str = "phase-plan"  # workspace folder holding the plan (a FE/BE sibling)
     build_plan_in_workspace: bool = True  # also write the plan into the workspace, not just Mongo
+    # phase-64: a phase is `done` only with evidence — at least one file written and a closing
+    # summary — never merely "the loop ended and the (unchanged) workspace still typechecks".
+    build_phase_noop_retries: int = 1  # extra attempts, with explicit feedback, for a no-op phase
+    build_phase_require_summary: bool = True  # off → a missing closing line is synthesised
 
 
 @runtime_checkable

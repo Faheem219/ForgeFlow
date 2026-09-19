@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.agents.build_phases import NOTE_WROTE_NOTHING, PhaseOutcome
 from app.agents.build_plan import PHASE_DONE
 from app.agents.build_scope import BuildScope
 from app.agents.codegen import BUILD_REPORT_KIND, BuildReport, CodegenAgent
@@ -40,7 +41,11 @@ from app.db.models.common import utcnow
 from app.db.models.enums import ArtifactType, MessageRole, Stage, StageStatus
 from app.db.repos import RunRepo
 from app.orchestrator.schemas import Intent, IntentAction, OutboundMessage, StageResult
-from app.orchestrator.stages.build_verify import BuildVerificationController, BuildVerifyReport
+from app.orchestrator.stages.build_verify import (
+    BuildVerificationController,
+    BuildVerifyReport,
+    FeatureCodeExpectation,
+)
 
 #: phase-56's addition to phase-55's fixed stop_reason vocabulary.
 STOP_PHASES = "phases_incomplete"
@@ -111,6 +116,12 @@ class BuildStageHandler:
                 ctx=tool_ctx,
                 channel=channel,
                 written_files=report.files_changed,
+                # phase-64: the structural check demands only the halves the plan set out to
+                # build, and its hint names how many phases wrote nothing.
+                expect=_expectation(report.phases),
+                phases_wrote_nothing=sum(
+                    1 for p in report.phases if p.note.startswith(NOTE_WROTE_NOTHING)
+                ),
             )
         finally:
             run.finished_at = utcnow()
@@ -196,6 +207,26 @@ def _forced_scope(value: object) -> BuildScope | None:
         return None
 
 
+#: Phase kinds that put code in each half of the stack (phase-56's `data|backend|frontend|wiring`).
+_BACKEND_KINDS = frozenset({"data", "backend"})
+_FRONTEND_KINDS = frozenset({"frontend", "wiring"})
+
+
+def _expectation(phases: list[PhaseOutcome]) -> FeatureCodeExpectation:
+    """Which halves the structural check may demand (phase-64).
+
+    A planned build declares its halves through its phase kinds. Anything else — an unphased
+    report, or the `small` path's single synthetic phase, which presupposes an app already built —
+    expects both, since a finished app has both.
+    """
+    kinds = {p.kind for p in phases}
+    if not kinds or not (kinds & (_BACKEND_KINDS | _FRONTEND_KINDS)):
+        return FeatureCodeExpectation()
+    return FeatureCodeExpectation(
+        backend=bool(kinds & _BACKEND_KINDS), frontend=bool(kinds & _FRONTEND_KINDS)
+    )
+
+
 def _summarize(report: BuildReport, verify: BuildVerifyReport) -> str:
     lines = [report.summary or "Build complete."]
     if report.features_built:
@@ -204,8 +235,13 @@ def _summarize(report: BuildReport, verify: BuildVerifyReport) -> str:
         done = sum(1 for p in report.phases if p.status == PHASE_DONE)
         lines.append(f"Phases: {done}/{len(report.phases)} complete.")
     if not report.phases_complete:
-        # phase-56's addition to the fixed stop_reason vocabulary.
-        unfinished = [p.title for p in report.phases if p.status != PHASE_DONE]
+        # phase-56's addition to the fixed stop_reason vocabulary. Each unfinished phase carries
+        # its own reason (phase-64: "wrote nothing after 2 attempt(s)" is the one that matters).
+        unfinished = [
+            f"{p.title} ({p.note})" if p.note else p.title
+            for p in report.phases
+            if p.status != PHASE_DONE
+        ]
         lines.append(
             "Some planned phases did not finish: " + ", ".join(unfinished) + ". Run Build again "
             "to continue from the first unfinished one."

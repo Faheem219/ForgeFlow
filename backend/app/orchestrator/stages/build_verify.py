@@ -1,8 +1,13 @@
 """Build verification & bounded self-heal (phase-55 task 12).
 
 After codegen writes the app this proves it actually works — **install → typecheck → boot →
-placeholder check** — and self-heals what is broken through the *existing* bounded repair loop
-(phase-31), reused via its Build parameters rather than a second loop (D7 / Golden Rule 5).
+placeholder check → feature-code check** — and self-heals what is broken through the *existing*
+bounded repair loop (phase-31), reused via its Build parameters rather than a second loop (D7 /
+Golden Rule 5).
+
+The feature-code check (phase-64) is *structural*: the string-only placeholder gate was satisfied
+by a build that wrote no feature code at all and then re-worded the template ("My App", "Welcome to
+the app."). Its findings never reach the repair loop — missing code is not a patch.
 
 The discipline the user asked for is structural, not a policy the loop is trusted to follow: every
 step's failure is **classified before** any synthetic ``TestRun`` is built (:mod:`app.agents.
@@ -16,9 +21,10 @@ LiveValidationController`), so the whole flow is exercised without Docker, a mod
 
 from __future__ import annotations
 
+import re
 import shlex
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,6 +51,9 @@ STOP_PLACEHOLDER = "placeholder_left"
 #: phase-54's demo tests were never rewritten. Its own stop_reason because, unlike every
 #: other code-class failure, the repair loop is structurally unable to fix it.
 STOP_DEMO_TEST = "demo_test_left"
+#: phase-64: the app is still the template — no feature code exists, no feature router is mounted,
+#: or the route table renders nothing of the app. Structural, and never handed to the repair loop.
+STOP_NO_FEATURE_CODE = "no_feature_code"
 STOP_BOOT = "boot_unhealthy"
 STOP_REPAIR = "repair_escalated"
 STOP_NO_TARGET = "no_repair_target"
@@ -79,6 +88,97 @@ _DEMO_TEST_FILES = (
     "frontend/e2e/home.spec.ts",
 )
 
+# --- phase-64: the structural template-replacement check ---------------------------------
+#: Where the codegen prompt says feature code lives (phase-23/54 conventions).
+_FEATURE_ROOT_BE = "backend/src/features"
+_FEATURE_ROOT_FE = "frontend/src/features"
+_APP_FILE = "backend/src/app.ts"
+_INDEX_PAGE = "frontend/src/pages/HomePage.tsx"
+_SOURCE_SUFFIXES = (".ts", ".tsx")
+#: `from './features/x'`, `from '../features/x'`, `from '@/features/x'` — any import that reaches
+#: into a features folder.
+_IMPORTS_FEATURES = re.compile(r"""from\s+['"](?:\.{1,2}/)*(?:@/)?features/""")
+#: A router mounted on a path other than the skeleton's own `/health`.
+_MOUNTS_ROUTER = re.compile(r"""app\.use\(\s*['"`]/(?!health['"`])""")
+#: The skeleton's own index route: `{ index: true, element: <HomePage /> }`.
+_INDEX_IS_HOMEPAGE = re.compile(r"""index:\s*true[^}]*<HomePage\b""")
+
+
+@dataclass(frozen=True)
+class FeatureCodeExpectation:
+    """Which halves of the stack the plan said it would build — the check demands only those."""
+
+    backend: bool = True
+    frontend: bool = True
+
+
+def is_feature_source(path: str) -> bool:
+    """A non-test TypeScript source file — what "feature code" means to the check."""
+    name = path.rsplit("/", 1)[-1]
+    if not name.endswith(_SOURCE_SUFFIXES):
+        return False
+    lowered = name.lower()
+    return not (".test." in lowered or ".spec." in lowered or "/__tests__/" in path)
+
+
+def feature_files(paths: Iterable[str], root: str) -> list[str]:
+    """The feature source files under ``root`` (READMEs, tests and configs never count)."""
+    prefix = root.rstrip("/") + "/"
+    return sorted(p for p in paths if p.startswith(prefix) and is_feature_source(p))
+
+
+_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _code_only(src: str) -> str:
+    """``src`` without comments — the skeleton's own comments show the model what to write
+    (``//   app.use('/api/todos', todosRouter)``), which must not count as having written it."""
+    without_blocks = _BLOCK_COMMENT.sub("", src)
+    return "\n".join(
+        line for line in without_blocks.splitlines() if not line.lstrip().startswith("//")
+    )
+
+
+def app_mounts_feature_router(app_src: str) -> bool:
+    """``backend/src/app.ts`` reaches into ``features/`` or mounts a router beyond ``/health``."""
+    code = _code_only(app_src)
+    return bool(_IMPORTS_FEATURES.search(code) or _MOUNTS_ROUTER.search(code))
+
+
+def routes_render_feature_code(routes_src: str, index_page_src: str | None) -> bool:
+    """The route table renders the app: it imports from ``features/``, or its index route is no
+    longer the skeleton's ``<HomePage />``, or that page itself imports from ``features/``."""
+    routes = _code_only(routes_src)
+    if _IMPORTS_FEATURES.search(routes):
+        return True
+    if not _INDEX_IS_HOMEPAGE.search(routes):
+        return True
+    return bool(index_page_src and _IMPORTS_FEATURES.search(_code_only(index_page_src)))
+
+
+def feature_code_findings(
+    *,
+    paths: Iterable[str],
+    app_src: str | None,
+    routes_src: str | None,
+    index_page_src: str | None,
+    expect: FeatureCodeExpectation,
+) -> list[str]:
+    """Every way the workspace is still the template, in plain words. Pure."""
+    listed = list(paths)
+    findings: list[str] = []
+    if expect.backend:
+        if not feature_files(listed, _FEATURE_ROOT_BE):
+            findings.append(f"{_FEATURE_ROOT_BE}/ holds no feature code")
+        if app_src is not None and not app_mounts_feature_router(app_src):
+            findings.append(f"{_APP_FILE} mounts no feature router")
+    if expect.frontend:
+        if not feature_files(listed, _FEATURE_ROOT_FE):
+            findings.append(f"{_FEATURE_ROOT_FE}/ holds no feature code")
+        if routes_src is not None and not routes_render_feature_code(routes_src, index_page_src):
+            findings.append(f"{_ROUTES_FILE} does not render feature code")
+    return findings
+
 
 @dataclass
 class StepProbe:
@@ -108,6 +208,7 @@ class BuildVerifyReport:
     hint: str = ""
     typecheck_ok: bool = False
     placeholder_ok: bool = False
+    feature_code_ok: bool = False  # phase-64
     fe_status: str = "unknown"
     be_status: str = "unknown"
     repaired: bool = False
@@ -121,6 +222,7 @@ class BuildVerifyReport:
             "hint": self.hint,
             "typecheck_ok": self.typecheck_ok,
             "placeholder_ok": self.placeholder_ok,
+            "feature_code_ok": self.feature_code_ok,
             "fe_status": self.fe_status,
             "be_status": self.be_status,
             "repaired": self.repaired,
@@ -134,6 +236,7 @@ TypecheckStep = Callable[[Project, ToolContext], Awaitable[StepProbe]]
 BootStep = Callable[[Project, ToolContext], Awaitable[BootProbe]]
 PlaceholderStep = Callable[[Project, ToolContext], Awaitable[list[str]]]
 DemoTestStep = Callable[[Project, ToolContext], Awaitable[list[str]]]
+FeatureCodeStep = Callable[[Project, ToolContext, FeatureCodeExpectation], Awaitable[list[str]]]
 ContainerState = Callable[[str], Awaitable[str]]
 AnalyzerFactory = Callable[[list[str]], Any]  # (written_files) -> ContextAnalyzer
 RepairFactory = Callable[[Any], RepairLoopController]  # (analyzer) -> loop
@@ -148,6 +251,7 @@ class BuildVerificationController:
         boot: BootStep | None = None,
         placeholder: PlaceholderStep | None = None,
         demo_test: DemoTestStep | None = None,
+        feature_code: FeatureCodeStep | None = None,
         container_state: ContainerState | None = None,
         analyzer_factory: AnalyzerFactory | None = None,
         repair_factory: RepairFactory | None = None,
@@ -157,6 +261,7 @@ class BuildVerificationController:
         self._boot = boot or _default_boot
         self._placeholder = placeholder or _default_placeholder
         self._demo_test = demo_test or _default_demo_test
+        self._feature_code = feature_code or _default_feature_code
         self._container_state = container_state or _default_container_state
         self._analyzer_factory = analyzer_factory or _default_analyzer_factory
         self._repair_factory = repair_factory or _default_repair_factory
@@ -170,6 +275,8 @@ class BuildVerificationController:
         channel: str | None = None,
         written_files: list[str] | None = None,
         cancel: Any = None,
+        expect: FeatureCodeExpectation | None = None,
+        phases_wrote_nothing: int = 0,
     ) -> BuildVerifyReport:
         project_id = project.id
         if project_id is None:  # pragma: no cover - a persisted project always carries an id
@@ -278,7 +385,17 @@ class BuildVerificationController:
         if findings:
             synthetic.append(_placeholder_result(findings))
 
-        # 4b) skeleton demo tests still asserting the placeholder --------------------------
+        # 4b) the app is still the template (phase-64) --------------------------------------
+        #
+        # Structural, and the FIRST short-circuit: a build whose phases wrote no feature code has
+        # nothing for the repair loop to patch, and handing it "the placeholder is still there"
+        # is how the loop came to re-word the template instead of building the app. Zero repair
+        # iterations, zero tokens; the hint names the resume path (the phases that wrote nothing).
+        missing = await self._feature_code(project, ctx, expect or FeatureCodeExpectation())
+        if missing:
+            return await self._stop_no_feature_code(channel, missing, phases_wrote_nothing)
+
+        # 4c) skeleton demo tests still asserting the placeholder --------------------------
         #
         # Short-circuited like an `environment` verdict — zero repair iterations, zero tokens —
         # because the loop provably cannot win here, not merely because it is expensive:
@@ -321,6 +438,7 @@ class BuildVerificationController:
             ),
             typecheck_ok=typecheck_ok,
             placeholder_ok=placeholder_ok,
+            feature_code_ok=True,  # or 4b would have returned
             fe_status=boot.fe_status,
             be_status=boot.be_status,
             repaired=repaired,
@@ -440,6 +558,29 @@ class BuildVerificationController:
         await self._emit_report(channel, report)
         return report
 
+    async def _stop_no_feature_code(
+        self, channel: str, findings: list[str], phases_wrote_nothing: int
+    ) -> BuildVerifyReport:
+        """The app is still the template (phase-64): stop here, forward nothing to repair."""
+        resume = (
+            f"{phases_wrote_nothing} phase(s) wrote nothing; run Build again to resume them."
+            if phases_wrote_nothing
+            else "Run Build again — it resumes at the first phase that did not finish."
+        )
+        report = BuildVerifyReport(
+            ok=False,
+            stop_reason=STOP_NO_FEATURE_CODE,
+            message=(
+                "The build wrote no feature code — the app is still the template: "
+                + "; ".join(findings)
+                + "."
+            ),
+            hint=resume,
+            feature_code_ok=False,
+        )
+        await self._emit_report(channel, report)
+        return report
+
     async def _step(self, channel: str, step: str) -> None:
         await emit(
             channel, EventType.build_verify, {"stage": "build", "step": step}, stage=Stage.build
@@ -465,6 +606,7 @@ _GATE_MESSAGE = {
     STOP_TYPECHECK: "The generated code still does not typecheck.",
     STOP_PLACEHOLDER: "The skeleton demo placeholder still appears in the built app.",
     STOP_DEMO_TEST: "A skeleton demo test still asserts the placeholder page.",
+    STOP_NO_FEATURE_CODE: "The build wrote no feature code — the app is still the template.",
     STOP_BOOT: "The app did not boot cleanly — a dev server is not running.",
 }
 
@@ -602,6 +744,38 @@ async def _default_demo_test(project: Project, ctx: ToolContext) -> list[str]:
     return findings
 
 
+async def _default_feature_code(
+    project: Project, ctx: ToolContext, expect: FeatureCodeExpectation
+) -> list[str]:
+    """The structural check against the real workspace: a file listing and three source reads."""
+    from app.core.errors import NotFoundError, UserError
+
+    async def read(path: str) -> str | None:
+        try:
+            return (await ctx.workspace.read(project, path)).content
+        except (NotFoundError, UserError):
+            return None
+
+    paths: list[str] = []
+    for root in (_FEATURE_ROOT_BE, _FEATURE_ROOT_FE):
+        try:
+            nodes = await ctx.workspace.tree(project, root, depth=None)
+        except (NotFoundError, UserError):
+            continue  # that half was never created — the same as "no feature code" there
+        paths += [
+            str(getattr(n, "path", "") or "")
+            for n in nodes
+            if getattr(n, "type", "") != "dir" and getattr(n, "path", "")
+        ]
+    return feature_code_findings(
+        paths=paths,
+        app_src=await read(_APP_FILE) if expect.backend else None,
+        routes_src=await read(_ROUTES_FILE) if expect.frontend else None,
+        index_page_src=await read(_INDEX_PAGE) if expect.frontend else None,
+        expect=expect,
+    )
+
+
 async def _default_container_state(project_id: str) -> str:
     from app.sandbox.manager import get_manager
 
@@ -620,11 +794,13 @@ __all__ = [
     "BootProbe",
     "BuildVerificationController",
     "BuildVerifyReport",
+    "FeatureCodeExpectation",
     "STOP_BOOT",
     "STOP_BUDGET",
     "STOP_CANCELLED",
     "STOP_DEMO_TEST",
     "STOP_ENV",
+    "STOP_NO_FEATURE_CODE",
     "STOP_NO_TARGET",
     "STOP_PLACEHOLDER",
     "STOP_PROVIDER",

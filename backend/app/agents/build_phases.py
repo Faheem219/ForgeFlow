@@ -27,7 +27,7 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
-from app.agents.anthropic_client import STOP_MAX_TURNS
+from app.agents.anthropic_client import STOP_MAX_TOKENS, STOP_MAX_TURNS
 from app.agents.build_errors import BuildFailureKind, classify_output
 from app.agents.build_plan import (
     PHASE_DONE,
@@ -67,7 +67,21 @@ PLAN_README = "README.md"
 #: booting and testing belong to verification (phase-55); offering them here only burns turns.
 _PHASE_EXCLUDED_TOOLS = frozenset({"install_deps", "start_preview", "restart_preview", "run_tests"})
 
-_STORY_MAX_CHARS = 400  # the "small message to give context" — a summary, never a transcript
+_STORY_MAX_CHARS = 800  # the "small message to give context" — a summary, never a transcript
+
+#: Phase-64 — evidence, not silence. A phase whose loop finished without a single `write_file`
+#: used to typecheck trivially (the workspace was unchanged) and be recorded `done`; complex apps
+#: then shipped as the untouched template with a report claiming every phase complete. This
+#: corrective turn carries the one thing the failed attempt lacked: an explicit statement that the
+#: output must be files. Prompt surface: bump ``PROMPT_VERSION`` when it changes.
+NOOP_FEEDBACK = (
+    "This phase produced NO files — nothing was written to the workspace. It is not done. "
+    "It owns:\n{files}\nGoal: {goal}\n"
+    "Write them now with `write_file`, one file per call, the smallest complete version first. "
+    "Do not summarise, plan or re-read what you have already read: write."
+)
+NOTE_WROTE_NOTHING = "wrote nothing"
+NOTE_NO_SUMMARY = "no closing summary"
 
 
 @dataclass
@@ -311,10 +325,42 @@ class PhaseRunner:
         outcome.attempts = 1
         conversation = list(result.messages)
 
+        # Evidence gate (phase-64): a loop that FINISHED without writing anything is not a phase
+        # that is done — it is the exact shape of a model that ran out of output budget while
+        # thinking, or answered in prose instead of tool calls. Feed that back, bounded, and only
+        # then judge. The typecheck below is skipped for a no-op phase: there is nothing to check,
+        # and running it would only manufacture a green signal from an unchanged workspace.
+        noop_retries = int(config.get("build_phase_noop_retries"))
+        while result.finished and not self._wrote(run, seen_before) and noop_retries > 0:
+            noop_retries -= 1
+            conversation.append(
+                {
+                    "role": "user",
+                    "content": NOOP_FEEDBACK.format(
+                        files="\n".join(f"- {f}" for f in phase.files) or "- (see goal)",
+                        goal=phase.goal,
+                    ),
+                }
+            )
+            result = await self._client.run_tool_loop(
+                task_kind=TaskKind.codegen,
+                project_id=project_id,
+                run=run,
+                system=system_prompt(PHASE_IMPLEMENT_SYSTEM_EXTRA),
+                messages=conversation,
+                tools=self._tools_for(phase, tools),
+                tool_dispatch=dispatch,
+                channel=channel,
+                max_turns=int(config.get("build_phase_max_tool_turns")),
+            )
+            conversation = list(result.messages)
+            outcome.attempts += 1
+        wrote = self._wrote(run, seen_before)
+
         # Gate: typecheck scoped to this phase's package, so a red frontend cannot fail a backend
         # phase (and the errors handed back are only ever about the code just written).
         max_fixes = int(config.get("build_phase_max_fix_attempts"))
-        probe = await self._typecheck(project, ctx, phase, typecheck)
+        probe = await self._typecheck(project, ctx, phase, typecheck) if wrote else None
         while probe is not None and probe.exit_code != 0 and outcome.attempts <= max_fixes:
             # Classify BEFORE feeding anything back (phase-55's discipline): a broken sandbox is not
             # something more model turns can fix, and every further phase would be wasted spend.
@@ -348,20 +394,41 @@ class PhaseRunner:
             probe = await self._typecheck(project, ctx, phase, typecheck)
 
         green = probe is None or probe.exit_code == 0
-        # A phase that ran out of turns (or began repeating itself) has NOT finished, even if what
-        # it did write happens to typecheck — half a feature compiles perfectly well.
-        outcome.summary = result.text.strip()
-        outcome.status = PHASE_DONE if (green and result.finished) else PHASE_FAILED
-        if not green:
+        # The closing line is evidence too (phase-64). A loop that *finished* always carries the
+        # model's last words (the client nudges an empty or cut-off turn and continues, so it
+        # cannot end on silence). The remaining case is a model that wrote its files and then
+        # produced nothing usable through every nudge: the loop stops with `max_tokens`. With a
+        # summary required (the default) that phase is failed — the silence is exactly the signal
+        # that would have exposed the original bug; with it optional, the closing line is
+        # synthesised from the files and the phase can be done.
+        summary = result.text.strip()
+        finished = result.finished
+        silent = wrote and result.stopped == STOP_MAX_TOKENS
+        if silent and not bool(config.get("build_phase_require_summary")):
+            files_now = sorted(set(run.progress.files) - seen_before)
+            summary = summary or f"wrote {len(files_now)} file(s): " + ", ".join(files_now)
+            finished = True
+
+        # `done` ⟺ green ∧ finished ∧ wrote ∧ summary. A phase that ran out of turns (or began
+        # repeating itself, or kept hitting the output cap) has NOT finished, even if what it did
+        # write happens to typecheck — half a feature compiles perfectly well. And a phase that
+        # wrote nothing has nothing to typecheck: an unchanged workspace is not evidence.
+        outcome.summary = summary
+        outcome.status = (
+            PHASE_DONE if (green and finished and wrote and bool(summary)) else PHASE_FAILED
+        )
+        if not wrote:
+            outcome.note = f"{NOTE_WROTE_NOTHING} after {outcome.attempts} attempt(s)"
+            if not result.finished:
+                outcome.note += f" ({self._stop_note(result)})"
+        elif not green:
             # Carried, not fatal: phase-55's integration repair sees the whole app and may well fix
             # what one phase's narrow view could not.
             outcome.note = f"typecheck still failing after {outcome.attempts} attempt(s)"
-        elif not result.finished:
-            outcome.note = (
-                f"stopped after {result.turns} tool turns (its safety bound)"
-                if result.stopped == STOP_MAX_TURNS
-                else "stopped because it began repeating the same action"
-            )
+        elif silent and not finished:
+            outcome.note = f"{NOTE_NO_SUMMARY} — the model produced nothing after its last write"
+        elif not finished:
+            outcome.note = self._stop_note(result)
 
         # One commit per phase, so `changed_paths` and every diff are phase-attributable.
         try:
@@ -375,6 +442,19 @@ class PhaseRunner:
         return outcome
 
     # -- helpers ------------------------------------------------------------------------
+
+    @staticmethod
+    def _wrote(run: Run, seen_before: set[str]) -> bool:
+        """Whether this phase has written at least one file the run had not seen before it."""
+        return bool(set(run.progress.files) - seen_before)
+
+    @staticmethod
+    def _stop_note(result: Any) -> str:
+        if result.stopped == STOP_MAX_TURNS:
+            return f"stopped after {result.turns} tool turns (its safety bound)"
+        if result.stopped == STOP_MAX_TOKENS:
+            return "stopped after repeatedly running out of output budget (max_tokens)"
+        return "stopped because it began repeating the same action"
 
     def _tools_for(self, phase: BuildPhase, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Narrow the surface for non-`wiring` phases (task 4.2)."""
@@ -434,7 +514,7 @@ def story_so_far(outcomes: list[PhaseOutcome]) -> str:
     return text[: _STORY_MAX_CHARS - 1].rsplit(";", 1)[0] + "; …"
 
 
-def _trim(output: str, limit: int = 4000) -> str:
+def _trim(output: str, limit: int = 8000) -> str:
     """The tail of a command's output — the errors are at the end, and the head is noise."""
     return output if len(output) <= limit else "…\n" + output[-limit:]
 
@@ -459,6 +539,9 @@ async def _default_phase_typecheck(project: Project, ctx: ToolContext, phase: Bu
 
 __all__ = [
     "BUILD_PLAN_KIND",
+    "NOOP_FEEDBACK",
+    "NOTE_NO_SUMMARY",
+    "NOTE_WROTE_NOTHING",
     "BuildPlanAborted",
     "BuildPlanner",
     "PhaseOutcome",

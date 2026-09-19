@@ -22,6 +22,7 @@ from tests.agents.codegen_fakes import (
     configure_env,
     make_project_run,
     make_skeleton,
+    phase_write,
     phased_transport,
     tool_use,
 )
@@ -123,7 +124,7 @@ async def test_a_crash_mid_build_still_records_the_phases_that_finished(
         project, run, workspace=ws, exec_service=FakeExec(), preview=FakePreview()
     )
     # Turns for the plan and phase 1 only — phase 2 exhausts the transport and raises.
-    transport = phased_transport(_PHASES, [[]])
+    transport = phased_transport(_PHASES, [phase_write("backend/src/features/a/a.ts")])
 
     with pytest.raises(IndexError):
         await CodegenAgent(AnthropicClient(transport), default_registry()).run(
@@ -154,7 +155,14 @@ async def test_a_fresh_rebuild_ignores_the_previous_phase_statuses(
     ctx = ToolContext.build(
         project, run, workspace=ws, exec_service=FakeExec(), preview=FakePreview()
     )
-    transport = phased_transport(_PHASES, [[], [], []])  # all three loops must be consumed
+    transport = phased_transport(  # all three loops must be consumed
+        _PHASES,
+        [
+            phase_write("backend/src/features/a/a.ts"),
+            phase_write("frontend/src/features/b/B.tsx"),
+            phase_write("frontend/src/routes.tsx"),
+        ],
+    )
 
     report = await CodegenAgent(AnthropicClient(transport), default_registry()).run(
         project, run, ctx=ctx, fresh=True

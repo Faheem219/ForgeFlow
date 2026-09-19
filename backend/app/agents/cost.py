@@ -17,6 +17,11 @@ from app.db.models import Run
 class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
+    # phase-64: the share of ``output_tokens`` a reasoning model spent thinking (OpenRouter's
+    # ``completion_tokens_details.reasoning_tokens``; 0 where the provider does not report it).
+    # Informational — it is already inside ``output_tokens`` and therefore already priced — but it
+    # is the number that explains a turn that produced no visible output.
+    reasoning_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -26,6 +31,7 @@ class Usage:
         return Usage(
             self.input_tokens + other.input_tokens,
             self.output_tokens + other.output_tokens,
+            self.reasoning_tokens + other.reasoning_tokens,
         )
 
 
@@ -33,6 +39,7 @@ async def record_cost(run: Run, model: str, usage: Usage) -> float:
     """Add one call's tokens + ₹ to ``run`` (persisted). Returns the ₹ charged."""
     inr = price_inr(model, usage.input_tokens, usage.output_tokens)
     run.cost.tokens += usage.total_tokens
+    run.cost.reasoning_tokens += usage.reasoning_tokens
     run.cost.inr += inr
     await run.save()
     return inr

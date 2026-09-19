@@ -76,6 +76,18 @@ class TextDelta:
 
 
 @dataclass
+class ReasoningDelta:
+    """A streamed chunk of the model's *reasoning* (phase-64).
+
+    Reasoning models think before they answer, and OpenAI-compatible endpoints stream that thinking
+    as its own delta. It is not assistant text — it must never be fed back as such or shown as the
+    answer — but a two-minute burst of it looks exactly like a hang unless something is emitted.
+    """
+
+    text: str
+
+
+@dataclass
 class ToolUse:
     id: str
     name: str
@@ -90,9 +102,18 @@ class TurnComplete:
     tool_uses: list[ToolUse] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     stop_reason: str = "end_turn"
+    #: phase-64: the provider's reasoning payload **as received** (``{"reasoning_details": [...]}``
+    #: from OpenRouter, ``{"reasoning_content": "…"}`` from Z.ai/DeepSeek-style endpoints, …).
+    #: Opaque to the loop; echoed back on the next turn so the model need not re-think from scratch.
+    reasoning: dict[str, Any] | None = None
+
+    @property
+    def truncated(self) -> bool:
+        """The provider cut this turn off at the output cap (``max_tokens`` / ``length``)."""
+        return self.stop_reason == "max_tokens"
 
 
-StreamEvent = TextDelta | TurnComplete
+StreamEvent = TextDelta | ReasoningDelta | TurnComplete
 
 
 class Transport(Protocol):
@@ -107,10 +128,28 @@ class Transport(Protocol):
 #: Why a tool loop ended before the model said it was done.
 STOP_MAX_TURNS = "max_turns"  # the turn bound was reached
 STOP_NO_PROGRESS = "no_progress"  # the same tool call, repeated, going nowhere
+STOP_MAX_TOKENS = "max_tokens"  # the model kept running out of output budget (phase-64)
+
+#: Reasoning deltas are batched into `agent.reasoning` events of about this many characters.
+_REASONING_EMIT_CHARS = 400
 
 #: How many *identical* consecutive tool calls count as "stuck". Small on purpose: a model that
 #: re-reads one file three times in a row is not making progress, and each turn costs tokens.
 REPEAT_LIMIT = 3
+
+#: The corrective turn appended after a model turn that produced nothing usable (phase-64): cut
+#: off at the output cap — typically a reasoning model that thought past ``max_tokens`` — or an
+#: empty response. Prompt surface: bump ``PROMPT_VERSION`` when it changes.
+NUDGE_TRUNCATED = (
+    "Your previous turn ran out of output budget before producing a tool call (or produced "
+    "nothing). Do not re-derive the plan — reason briefly, then act: call the tool now. Write "
+    "large files in parts across several `write_file` calls."
+)
+
+#: The private key under which an assistant message carries the provider's reasoning payload
+#: (phase-64). It sits BESIDE ``content`` (which stays Anthropic-shaped), is consumed only by the
+#: OpenAI-compatible transport, and is stripped by :func:`anthropic_messages` for the SDK transport.
+PROVIDER_REASONING_KEY = "provider_reasoning"
 
 
 @dataclass
@@ -120,8 +159,8 @@ class LoopResult:
     usage: Usage
     turns: int
     #: ``None`` when the model finished on its own, else :data:`STOP_MAX_TURNS` /
-    #: :data:`STOP_NO_PROGRESS`. Callers that report to the user must say so — the work done up to
-    #: that point is real and already persisted, it is just not complete.
+    #: :data:`STOP_NO_PROGRESS` / :data:`STOP_MAX_TOKENS`. Callers that report to the user must say
+    #: so — the work done up to that point is real and already persisted, it is just not complete.
     stopped: str | None = None
 
     @property
@@ -172,6 +211,7 @@ class AnthropicClient:
         """
         model = route(task_kind)
         max_tokens = self._config_int("anthropic_max_output_tokens")
+        max_truncated = self._config_int("llm_max_truncated_turns")
         if max_turns is None:
             max_turns = self._config_int("anthropic_max_tool_turns")
         channel = channel or str(project_id)
@@ -181,6 +221,7 @@ class AnthropicClient:
         last_text = ""
         repeated: tuple[str, str] | None = None
         repeats = 0
+        truncations = 0
 
         for turn_index in range(max_turns):
             await enforce_budget(project_id, emitter=self._emit)  # never spend past the cap
@@ -199,6 +240,34 @@ class AnthropicClient:
             await enforce_budget(
                 project_id, emitter=self._emit
             )  # halt if this call crossed the cap
+
+            # A turn with no tool call is the model FINISHING only if the model chose to stop
+            # (phase-64). Two things look identical to the old check and are not: a turn the
+            # provider cut off at the output cap — a reasoning model that thought past
+            # ``max_tokens`` produces exactly "no text, no tool call, finish_reason=length" — and an
+            # empty response. Reading either as "done" is how a build phase that wrote nothing
+            # came to be recorded complete. Nudge and continue, bounded; then stop honestly.
+            if not turn.tool_uses and (turn.truncated or not turn.text.strip()):
+                truncations += 1
+                if truncations > max_truncated:
+                    logger.warning(
+                        "tool loop stopped: %d turn(s) produced nothing usable (%s)",
+                        truncations,
+                        turn.stop_reason,
+                    )
+                    return LoopResult(
+                        text=last_text,
+                        messages=convo,
+                        usage=total,
+                        turns=turn_index + 1,
+                        stopped=STOP_MAX_TOKENS,
+                    )
+                if turn.text.strip():
+                    # Partial prose is real model output; keep it so the model can continue it.
+                    convo.append(_assistant_message(turn))
+                    last_text = turn.text
+                _append_user_text(convo, NUDGE_TRUNCATED)
+                continue
 
             convo.append(_assistant_message(turn))
             last_text = turn.text or last_text
@@ -258,19 +327,45 @@ class AnthropicClient:
         # builds its SDK client inside .stream()), so per-turn resolution costs nothing.
         transport = self._transport if self._transport is not None else default_transport()
         turn: TurnComplete | None = None
+        thinking: list[str] = []  # coalesced: a think arrives as thousands of tiny deltas
+        thinking_len = 0
+
+        async def flush_thinking() -> None:
+            nonlocal thinking, thinking_len
+            if thinking:
+                await self._emit(channel, EventType.agent_reasoning, {"text": "".join(thinking)})
+                thinking, thinking_len = [], 0
+
         await self._emit(channel, EventType.agent_stream_start, {"model": request.model})
         try:
             async for event in transport.stream(request):
                 if isinstance(event, TextDelta):
                     if event.text:
+                        await flush_thinking()
                         await self._emit(channel, EventType.agent_token, {"text": event.text})
+                elif isinstance(event, ReasoningDelta):
+                    # Its own event, never `agent.token`: reasoning is not the answer and must
+                    # not be rendered as one — but it must be *visible*, or a long think reads as
+                    # a hang (phase-64). Batched, so an 8k-token think does not evict the whole
+                    # realtime ring one character at a time.
+                    if event.text:
+                        thinking.append(event.text)
+                        thinking_len += len(event.text)
+                        if thinking_len >= _REASONING_EMIT_CHARS:
+                            await flush_thinking()
                 else:
                     turn = event
+            await flush_thinking()
         finally:
             await self._emit(
                 channel,
                 EventType.agent_stream_end,
-                {"model": request.model, "completed": turn is not None},
+                {
+                    "model": request.model,
+                    "completed": turn is not None,
+                    "stop_reason": turn.stop_reason if turn is not None else None,
+                    "reasoning_tokens": turn.usage.reasoning_tokens if turn is not None else 0,
+                },
             )
         if turn is None:
             raise ProviderError("The model stream ended without a completion")
@@ -292,13 +387,47 @@ def _call_signature(turn: TurnComplete) -> tuple[str, str]:
 
 
 def _assistant_message(turn: TurnComplete) -> dict[str, Any]:
-    """Rebuild the assistant turn as Anthropic content blocks for the next request."""
+    """Rebuild the assistant turn as Anthropic content blocks for the next request.
+
+    The provider's reasoning payload (phase-64) rides along under :data:`PROVIDER_REASONING_KEY`,
+    beside ``content`` — never inside it, so the block vocabulary stays Anthropic-native.
+    """
     content: list[dict[str, Any]] = []
     if turn.text:
         content.append({"type": "text", "text": turn.text})
     for call in turn.tool_uses:
         content.append({"type": "tool_use", "id": call.id, "name": call.name, "input": call.input})
-    return {"role": "assistant", "content": content}
+    message: dict[str, Any] = {"role": "assistant", "content": content}
+    if turn.reasoning:
+        message[PROVIDER_REASONING_KEY] = turn.reasoning
+    return message
+
+
+def _append_user_text(convo: list[dict[str, Any]], text: str) -> None:
+    """Append ``text`` as a user turn, merging into a trailing user turn if there is one.
+
+    Both APIs tolerate consecutive same-role turns, but a transcript that alternates cleanly is
+    what every provider documents, so the merge keeps the corrective turn (phase-64) unremarkable.
+    """
+    block = {"type": "text", "text": text}
+    if convo and convo[-1].get("role") == "user":
+        last = convo[-1]
+        content = last.get("content")
+        if isinstance(content, list):
+            last["content"] = [*content, block]
+        else:
+            last["content"] = [{"type": "text", "text": str(content or "")}, block]
+        return
+    convo.append({"role": "user", "content": [block]})
+
+
+def anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The transcript as the Anthropic API accepts it: private loop-side keys stripped.
+
+    Pure, so the SDK transport (which is never exercised in tests) delegates the one thing that
+    could break its request shape to a function that is.
+    """
+    return [{k: v for k, v in m.items() if k != PROVIDER_REASONING_KEY} for m in messages]
 
 
 # --------------------------------------------------------------------- real SDK transport
@@ -341,7 +470,7 @@ class SdkTransport:
         kwargs: dict[str, Any] = {
             "model": request.model,
             "max_tokens": request.max_tokens,
-            "messages": request.messages,
+            "messages": anthropic_messages(request.messages),
         }
         if request.system:
             kwargs["system"] = request.system
@@ -413,6 +542,13 @@ _STOP_REASONS = {
 }
 
 
+#: The reasoning fields an OpenAI-compatible endpoint may stream, and which are echoed back
+#: verbatim on the next turn (phase-64). ``reasoning_details`` is OpenRouter's structured form;
+#: ``reasoning_content`` is Z.ai / DeepSeek / vLLM's; ``reasoning`` is OpenRouter's plain text.
+_REASONING_ECHO_KEYS: tuple[str, ...] = ("reasoning_details", "reasoning_content")
+_REASONING_TEXT_KEYS: tuple[str, ...] = ("reasoning", "reasoning_content")
+
+
 def _to_openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Anthropic tool schema (``name``/``description``/``input_schema``) → OpenAI function tools."""
     return [
@@ -473,6 +609,15 @@ def _to_openai_messages(system: str | None, messages: list[dict[str, Any]]) -> l
             assistant: dict[str, Any] = {"role": "assistant", "content": text or None}
             if tool_calls:
                 assistant["tool_calls"] = tool_calls
+            # Echo the provider's reasoning back — and ONLY what this endpoint itself sent
+            # (phase-64). OpenRouter / Z.ai / DeepSeek preserve chain-of-thought across tool calls
+            # this way; an endpoint that never produced the field never receives it, so every
+            # other provider's request stays byte-identical.
+            reasoning = message.get(PROVIDER_REASONING_KEY)
+            if isinstance(reasoning, dict):
+                for key in _REASONING_ECHO_KEYS:
+                    if reasoning.get(key):
+                        assistant[key] = reasoning[key]
             out.append(assistant)
         else:  # user turn: tool results (each its own message) and/or plain text
             text_parts: list[str] = []
@@ -506,6 +651,91 @@ def _parse_tool_args(raw: str) -> dict[str, Any]:
     return parsed
 
 
+def _tool_uses_from_frags(frags: list[tuple[str, str, str]], *, truncated: bool) -> list[ToolUse]:
+    """Tool calls from ``(id, name, raw_args)`` fragments.
+
+    On a turn the provider cut off at the output cap (phase-64) a half-built argument JSON is the
+    *expected* shape, not a provider fault: the call is dropped (logged) and the loop's
+    truncation handling takes over. On any other stop reason malformed arguments still raise.
+    """
+    out: list[ToolUse] = []
+    for index, (call_id, name, raw) in enumerate(frags):
+        try:
+            args = _parse_tool_args(raw)
+        except ProviderError:
+            if not truncated:
+                raise
+            logger.warning("dropping tool call %r cut off at the output cap", name)
+            continue
+        out.append(ToolUse(id=call_id or f"call_{index}", name=name, input=args))
+    return out
+
+
+class _ReasoningCollector:
+    """Reassemble a turn's streamed reasoning into the payload the provider expects back."""
+
+    def __init__(self) -> None:
+        self._text: dict[str, list[str]] = {}
+        self._details: dict[int, dict[str, Any]] = {}
+
+    def take(self, delta: Any) -> str:
+        """Fold one delta in; return the text chunk (if any) to stream to the client."""
+        chunk = ""
+        for key in _REASONING_TEXT_KEYS:
+            piece = getattr(delta, key, None)
+            if isinstance(piece, str) and piece:
+                self._text.setdefault(key, []).append(piece)
+                chunk += piece
+        details = getattr(delta, "reasoning_details", None)
+        for position, item in enumerate(details or []):
+            data = _as_dict(item)
+            if data is None:
+                continue
+            index = int(data.get("index", position) or 0)
+            slot = self._details.get(index)
+            if slot is None:
+                self._details[index] = dict(data)
+                continue
+            # Fragments of one detail: string fields concatenate, everything else is from the first.
+            for k, v in data.items():
+                if isinstance(v, str) and isinstance(slot.get(k), str) and k not in ("type", "id"):
+                    slot[k] += v
+                elif k not in slot:
+                    slot[k] = v
+        return chunk
+
+    def payload(self) -> dict[str, Any] | None:
+        out: dict[str, Any] = {}
+        for key, parts in self._text.items():
+            out[key] = "".join(parts)
+        if self._details:
+            out["reasoning_details"] = [self._details[i] for i in sorted(self._details)]
+        return out or None
+
+
+def _as_dict(item: Any) -> dict[str, Any] | None:
+    if isinstance(item, dict):
+        return item
+    dump = getattr(item, "model_dump", None)
+    if callable(dump):
+        try:
+            data = dump()
+        except Exception:  # pragma: no cover - defensive against exotic SDK objects
+            return None
+        return data if isinstance(data, dict) else None
+    return None
+
+
+def _usage_from(reported: Any) -> Usage:
+    details = getattr(reported, "completion_tokens_details", None)
+    reasoning = int(getattr(details, "reasoning_tokens", 0) or 0) if details is not None else 0
+    return Usage(
+        int(getattr(reported, "prompt_tokens", 0) or 0),
+        int(getattr(reported, "completion_tokens", 0) or 0),
+        reasoning,
+    )
+
+
 async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
     """Fold an OpenAI streaming response into text deltas + one :class:`TurnComplete`.
 
@@ -518,14 +748,12 @@ async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
     frags: dict[int, dict[str, str]] = {}
     usage = Usage()
     stop_reason = "end_turn"
+    reasoning = _ReasoningCollector()
 
     async for chunk in chunks:
         reported = getattr(chunk, "usage", None)
         if reported is not None:
-            usage = Usage(
-                int(getattr(reported, "prompt_tokens", 0) or 0),
-                int(getattr(reported, "completion_tokens", 0) or 0),
-            )
+            usage = _usage_from(reported)
         choices = getattr(chunk, "choices", None) or []
         if not choices:
             continue
@@ -533,6 +761,9 @@ async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
 
         delta = getattr(choice, "delta", None)
         if delta is not None:
+            thought = reasoning.take(delta)
+            if thought:
+                yield ReasoningDelta(thought)
             piece = getattr(delta, "content", None)
             if piece:
                 text_parts.append(piece)
@@ -553,16 +784,16 @@ async def _accumulate(chunks: AsyncIterator[Any]) -> AsyncIterator[StreamEvent]:
         if finish:
             stop_reason = _STOP_REASONS.get(finish, finish)
 
-    tool_uses = [
-        ToolUse(
-            id=frags[i]["id"] or f"call_{i}",
-            name=frags[i]["name"],
-            input=_parse_tool_args(frags[i]["args"]),
-        )
-        for i in sorted(frags)
-    ]
+    tool_uses = _tool_uses_from_frags(
+        [(frags[i]["id"], frags[i]["name"], frags[i]["args"]) for i in sorted(frags)],
+        truncated=stop_reason == "max_tokens",
+    )
     yield TurnComplete(
-        text="".join(text_parts), tool_uses=tool_uses, usage=usage, stop_reason=stop_reason
+        text="".join(text_parts),
+        tool_uses=tool_uses,
+        usage=usage,
+        stop_reason=stop_reason,
+        reasoning=reasoning.payload(),
     )
 
 
@@ -576,14 +807,7 @@ def _from_completion(response: Any) -> Iterator[StreamEvent]:
     :func:`_accumulate` so the two cannot drift. Only *live* token streaming is lost.
     """
     reported = getattr(response, "usage", None)
-    usage = (
-        Usage(
-            int(getattr(reported, "prompt_tokens", 0) or 0),
-            int(getattr(reported, "completion_tokens", 0) or 0),
-        )
-        if reported is not None
-        else Usage()
-    )
+    usage = _usage_from(reported) if reported is not None else Usage()
     choices = getattr(response, "choices", None) or []
     if not choices:
         yield TurnComplete(usage=usage)
@@ -591,24 +815,33 @@ def _from_completion(response: Any) -> Iterator[StreamEvent]:
 
     choice = choices[0]
     message = getattr(choice, "message", None)
+    reasoning = _ReasoningCollector()
+    thought = reasoning.take(message) if message is not None else ""
+    if thought:
+        yield ReasoningDelta(thought)
     text = str(getattr(message, "content", None) or "")
     if text:
         yield TextDelta(text)
 
-    tool_uses = [
-        ToolUse(
-            id=getattr(call, "id", None) or f"call_{index}",
-            name=getattr(getattr(call, "function", None), "name", "") or "",
-            input=_parse_tool_args(getattr(getattr(call, "function", None), "arguments", "") or ""),
-        )
-        for index, call in enumerate(getattr(message, "tool_calls", None) or [])
-    ]
     finish = getattr(choice, "finish_reason", None)
+    stop_reason = _STOP_REASONS.get(finish, finish) if finish else "end_turn"
+    tool_uses = _tool_uses_from_frags(
+        [
+            (
+                getattr(call, "id", None) or "",
+                getattr(getattr(call, "function", None), "name", "") or "",
+                getattr(getattr(call, "function", None), "arguments", "") or "",
+            )
+            for call in getattr(message, "tool_calls", None) or []
+        ],
+        truncated=stop_reason == "max_tokens",
+    )
     yield TurnComplete(
         text=text,
         tool_uses=tool_uses,
         usage=usage,
-        stop_reason=_STOP_REASONS.get(finish, finish) if finish else "end_turn",
+        stop_reason=stop_reason,
+        reasoning=reasoning.payload(),
     )
 
 
@@ -736,6 +969,19 @@ def build_openai_params(
     }
     if request.tools:
         params["tools"] = _to_openai_tools(request.tools)
+    reasoning = reasoning_params(
+        str(get_config().get("llm_reasoning_effort")),
+        int(get_config().get("llm_reasoning_max_tokens") or 0),
+    )
+    if reasoning:
+        # A hint to the provider about how much to think (phase-64) — OpenRouter's unified
+        # `reasoning` object, which it translates for each upstream (GLM's `thinking`, Anthropic's
+        # budget, OpenAI's `reasoning_effort`). Only ever sent when an operator configured it, so
+        # the default body is byte-identical to before; an endpoint that rejects it answers 400
+        # naming `reasoning`, and the phase-57 ladder drops it and retries.
+        extra_body = dict(params.get("extra_body") or {})
+        extra_body["reasoning"] = reasoning
+        params["extra_body"] = extra_body
     if is_openrouter(endpoint):
         # OpenRouter fronts several upstreams per model id and takes a routing preference in a
         # top-level `provider` object; `sort: "price"` means "prioritise lowest price" — cheapest
@@ -752,6 +998,27 @@ def build_openai_params(
         extra_body["provider"] = {"sort": "price"}
         params["extra_body"] = extra_body
     return apply_repairs(params, repairs)
+
+
+#: Accepted values of ``LLM_REASONING_EFFORT`` (blank = provider default).
+REASONING_EFFORTS: tuple[str, ...] = ("", "none", "low", "medium", "high")
+
+
+def reasoning_params(effort: str, max_tokens: int) -> dict[str, Any]:
+    """The ``reasoning`` object for the configured effort/budget, or ``{}`` when unset.
+
+    Pure. ``none`` disables thinking on models that allow it; an effort level and a token budget
+    may be combined; anything unrecognised is ignored (a typo must cost the hint, never the call).
+    """
+    out: dict[str, Any] = {}
+    level = (effort or "").strip().lower()
+    if level == "none":
+        out["enabled"] = False
+    elif level in ("low", "medium", "high"):
+        out["effort"] = level
+    if max_tokens > 0:
+        out["max_tokens"] = max_tokens
+    return out
 
 
 class OpenAITransport:

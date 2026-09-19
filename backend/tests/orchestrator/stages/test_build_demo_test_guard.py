@@ -41,6 +41,10 @@ APP_TEST = "frontend/src/App.test.tsx"
 HOME_SPEC = "frontend/e2e/home.spec.ts"
 
 
+async def _no_feature_findings(project: object, ctx: object, expect: object) -> list[str]:
+    return []
+
+
 class _StubProject:
     def __init__(self) -> None:
         self.id = PydanticObjectId()
@@ -99,6 +103,7 @@ def _controller(*, stale: list[str], scripted: ScriptedAgent) -> BuildVerificati
         typecheck=typecheck,
         boot=boot,
         placeholder=placeholder,
+        feature_code=_no_feature_findings,  # phase-64's structural check: not this file's subject
         demo_test=demo_test,
         container_state=container_state,
         analyzer_factory=lambda written: StubAnalyzer(),

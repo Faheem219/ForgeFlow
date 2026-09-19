@@ -29,6 +29,10 @@ from app.orchestrator.stages.repair import RepairLoopController
 from tests.orchestrator.stages.repair_loop_fakes import ScriptedAgent, StubAnalyzer
 
 
+async def _no_feature_findings(project: object, ctx: object, expect: object) -> list[str]:
+    return []
+
+
 class _StubProject:
     def __init__(self) -> None:
         self.id = PydanticObjectId()
@@ -62,6 +66,7 @@ def _controller(
         typecheck=typecheck,
         boot=boot,
         placeholder=placeholder,
+        feature_code=_no_feature_findings,  # phase-64's structural check: not this file's subject
         container_state=container_state,
         analyzer_factory=lambda written: StubAnalyzer(),
         repair_factory=repair_factory,

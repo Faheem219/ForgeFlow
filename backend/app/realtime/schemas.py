@@ -19,6 +19,9 @@ class EventType(StrEnum):
     # emitted from a ``finally`` so they still fire when the turn raises.
     agent_stream_start = "agent.stream.start"
     agent_stream_end = "agent.stream.end"
+    # A reasoning model's streamed *thinking* (phase-64). Not assistant text — a client must not
+    # render it as the answer — but a two-minute think with no event at all reads as a hang.
+    agent_reasoning = "agent.reasoning"
     # Terminal signal for a whole costed unit of agent work (see app/db/models/run.py). The
     # frontend clears task-level busy state on this, independently of the HTTP response.
     run_finished = "run.finished"

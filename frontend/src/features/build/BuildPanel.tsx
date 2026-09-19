@@ -73,12 +73,17 @@ interface PhaseRow {
   kind: string;
   status: string;
   index: number;
+  /** phase-64: what the phase actually did — the evidence the report now records. Absent for a
+   *  live row (the event stream carries status only) and for a pre-phase-64 report. */
+  fileCount?: number;
+  note?: string;
 }
 
 /** The backend's fixed stop_reason vocabulary (build_verify.py + build.py), in plain English. */
 const STOP_REASON_LABELS: Record<string, string> = {
   typecheck_failed: 'the generated code does not typecheck',
   placeholder_left: 'a template placeholder is still in the app',
+  no_feature_code: 'the app is still the template — no feature code was written',
   boot_unhealthy: 'a dev server is not running',
   repair_escalated: 'the repair loop could not fix it',
   no_repair_target: 'nothing editable could be identified to repair',
@@ -296,6 +301,8 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
       kind: p.kind,
       status: serverIndex === i + 1 && busy ? 'running' : p.status,
       index: i + 1,
+      fileCount: Array.isArray(p.files) ? p.files.length : undefined,
+      note: p.note || undefined,
     }));
   }, [
     live.phases,
@@ -528,6 +535,20 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                   </span>
                   <span className="truncate text-fg-muted">{phase.title}</span>
                   {phase.kind ? <Badge tone="neutral">{phase.kind}</Badge> : null}
+                  {/* phase-64: a phase's evidence, on screen. "0 files · wrote nothing after 2
+                      attempt(s)" is the line that was invisible when every phase read `done`. */}
+                  {phase.fileCount !== undefined ? (
+                    <span
+                      className={cn(
+                        'ml-auto shrink-0 truncate text-[10px]',
+                        phase.fileCount === 0 ? 'text-danger' : 'text-fg-subtle',
+                      )}
+                      data-testid="build-phase-evidence"
+                    >
+                      {phase.fileCount} file{phase.fileCount === 1 ? '' : 's'}
+                      {phase.note ? ` · ${phase.note}` : ''}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -328,3 +328,203 @@ async def test_missing_openai_key_is_a_provider_error_not_a_crash(
     with pytest.raises(ProviderError, match="No OpenAI-compatible API key"):
         async for _ in OpenAITransport().stream(request):
             pass
+
+
+# --------------------------------------------------------------------- reasoning (phase-64)
+
+
+def _reasoning_delta(
+    reasoning: str | None = None, details: list[dict[str, Any]] | None = None
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        content=None, tool_calls=None, reasoning=reasoning, reasoning_details=details
+    )
+
+
+async def test_accumulate_collects_reasoning_and_reasoning_tokens() -> None:
+    """OpenRouter streams a reasoning model's thinking as `delta.reasoning` + `reasoning_details`
+    fragments keyed by index, and reports the share of tokens spent thinking. All three used to be
+    dropped on the floor — which is why an 8190-token think followed by nothing looked like an
+    empty answer."""
+    from app.agents.anthropic_client import ReasoningDelta
+
+    chunks = [
+        SimpleNamespace(
+            choices=[
+                _choice(
+                    _reasoning_delta(
+                        "Let me ", [{"type": "reasoning.text", "index": 0, "text": "Let me "}]
+                    )
+                )
+            ],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[
+                _choice(
+                    _reasoning_delta(
+                        "think.", [{"type": "reasoning.text", "index": 0, "text": "think."}]
+                    )
+                )
+            ],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[
+                _choice(
+                    _delta(
+                        tool_calls=[
+                            _tool_frag(0, call_id="c1", name="list_dir", args='{"path":"."}')
+                        ]
+                    ),
+                    "tool_calls",
+                )
+            ],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=40,
+                completion_tokens_details=SimpleNamespace(reasoning_tokens=12),
+            ),
+        ),
+    ]
+
+    events = [event async for event in _accumulate(_aiter(chunks))]
+
+    assert [e.text for e in events if isinstance(e, ReasoningDelta)] == ["Let me ", "think."]
+    assert not [e for e in events if isinstance(e, TextDelta)]  # reasoning is never answer text
+    final = events[-1]
+    assert isinstance(final, TurnComplete)
+    assert final.text == ""
+    assert final.usage.reasoning_tokens == 12 and final.usage.output_tokens == 40
+    assert final.reasoning == {
+        "reasoning": "Let me think.",
+        # fragments of one detail reassembled by index; string fields concatenated
+        "reasoning_details": [{"type": "reasoning.text", "index": 0, "text": "Let me think."}],
+    }
+    assert [c.name for c in final.tool_uses] == ["list_dir"]
+
+
+async def test_a_turn_cut_off_mid_tool_call_is_reported_as_truncated_not_as_a_fault() -> None:
+    """`finish_reason=length` with a half-built argument JSON is the *expected* shape of a turn the
+    cap interrupted. Dropping the call and letting the loop nudge beats failing the whole build."""
+    chunks = [
+        SimpleNamespace(
+            choices=[
+                _choice(
+                    _delta(
+                        tool_calls=[
+                            _tool_frag(
+                                0, call_id="c1", name="write_file", args='{"path":"a.ts","co'
+                            )
+                        ]
+                    ),
+                    "length",
+                )
+            ],
+            usage=None,
+        ),
+    ]
+    events = [event async for event in _accumulate(_aiter(chunks))]
+    final = events[-1]
+    assert isinstance(final, TurnComplete)
+    assert final.stop_reason == "max_tokens" and final.truncated
+    assert final.tool_uses == []
+
+
+async def test_malformed_tool_args_on_a_finished_turn_are_still_a_fault() -> None:
+    chunks = [
+        SimpleNamespace(
+            choices=[
+                _choice(
+                    _delta(tool_calls=[_tool_frag(0, call_id="c1", name="write_file", args="{no")]),
+                    "tool_calls",
+                )
+            ],
+            usage=None,
+        ),
+    ]
+    with pytest.raises(ProviderError):
+        [event async for event in _accumulate(_aiter(chunks))]
+
+
+def test_assistant_turn_echoes_only_the_reasoning_the_endpoint_sent() -> None:
+    from app.agents.anthropic_client import PROVIDER_REASONING_KEY, _assistant_message
+
+    details = [{"type": "reasoning.text", "text": "…", "signature": "sig"}]
+    turn = TurnComplete(
+        text="ok",
+        reasoning={"reasoning": "…", "reasoning_details": details},
+        stop_reason="end_turn",
+    )
+    message = _assistant_message(turn)
+    assert message[PROVIDER_REASONING_KEY] == {"reasoning": "…", "reasoning_details": details}
+
+    out = _to_openai_messages(None, [message])
+    assert out[0]["reasoning_details"] == details
+    assert "reasoning" not in out[0]  # the plain-text mirror is derived; only details go back
+    assert "reasoning_content" not in out[0]  # never sent → never echoed
+
+    # Z.ai / DeepSeek shape: `reasoning_content` in, `reasoning_content` back.
+    zai = _assistant_message(TurnComplete(text="ok", reasoning={"reasoning_content": "hmm"}))
+    assert _to_openai_messages(None, [zai])[0]["reasoning_content"] == "hmm"
+
+    # No reasoning received → a byte-identical assistant message, as before phase-64.
+    plain = _assistant_message(TurnComplete(text="ok"))
+    assert PROVIDER_REASONING_KEY not in plain
+    assert _to_openai_messages(None, [plain])[0] == {"role": "assistant", "content": "ok"}
+
+
+def test_the_anthropic_transport_strips_the_private_reasoning_key() -> None:
+    from app.agents.anthropic_client import PROVIDER_REASONING_KEY, anthropic_messages
+
+    convo = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "ok"}],
+            PROVIDER_REASONING_KEY: {"reasoning_details": [{"text": "…"}]},
+        },
+    ]
+    stripped = anthropic_messages(convo)
+    assert stripped == [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+    ]
+    assert PROVIDER_REASONING_KEY in convo[1]  # the loop's transcript itself is untouched
+
+
+def test_reasoning_params_shapes() -> None:
+    from app.agents.anthropic_client import reasoning_params
+
+    assert reasoning_params("", 0) == {}
+    assert reasoning_params("low", 0) == {"effort": "low"}
+    assert reasoning_params("HIGH", 0) == {"effort": "high"}
+    assert reasoning_params("none", 0) == {"enabled": False}
+    assert reasoning_params("", 2048) == {"max_tokens": 2048}
+    assert reasoning_params("medium", 2048) == {"effort": "medium", "max_tokens": 2048}
+    assert reasoning_params("extreme", 0) == {}  # a typo costs the hint, never the call
+
+
+def test_build_openai_params_adds_the_reasoning_hint_only_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.agents.anthropic_client import build_openai_params
+
+    request = MessageRequest(model="m", system=None, messages=[], tools=[], max_tokens=10)
+
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("LLM_REASONING_MAX_TOKENS", raising=False)
+    reset_config()
+    unset = build_openai_params(request, endpoint="https://api.example.com/v1")
+    assert "extra_body" not in unset  # byte-identical to before phase-64
+
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    monkeypatch.setenv("LLM_REASONING_MAX_TOKENS", "4096")
+    reset_config()
+    configured = build_openai_params(request, endpoint="https://openrouter.ai/api/v1")
+    assert configured["extra_body"]["reasoning"] == {"effort": "low", "max_tokens": 4096}
+    assert configured["extra_body"]["provider"] == {"sort": "price"}  # OpenRouter routing kept

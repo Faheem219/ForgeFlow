@@ -46,6 +46,11 @@ def tool_use(name: str, args: dict[str, object]) -> ToolUse:
     return ToolUse(id=f"tu_{name}", name=name, input=args)
 
 
+def phase_write(path: str) -> list[ToolUse]:
+    """The minimum a phase must do to be `done` (phase-64): write one file."""
+    return [tool_use("write_file", {"path": path, "content": "export {};"})]
+
+
 def phase_plan_json(*phases: tuple[str, str, str]) -> str:
     """A phase-plan JSON payload (phase-56) from ``(id, title, kind)`` triples."""
     return json.dumps(

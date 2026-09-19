@@ -35,6 +35,10 @@ pytestmark = pytest.mark.usefixtures("mongo_db")
 _RED_TSC = "frontend/src/features/todos/TodoPage.tsx(12,5): error TS2339: Property 'x' ...\n"
 
 
+async def _no_feature_findings(project: object, ctx: object, expect: object) -> list[str]:
+    return []
+
+
 def _controller(
     typecheck_probes: list[StepProbe], *, scripted: ScriptedAgent
 ) -> BuildVerificationController:
@@ -70,6 +74,7 @@ def _controller(
         typecheck=typecheck,
         boot=boot,
         placeholder=placeholder,
+        feature_code=_no_feature_findings,  # phase-64's structural check: not this file's subject
         demo_test=demo_test,
         container_state=container_state,
         analyzer_factory=lambda written: StubAnalyzer(),

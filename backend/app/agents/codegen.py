@@ -553,6 +553,12 @@ class CodegenAgent:
                 note = "it ran past the build's wall-clock budget"
                 break
             files_before = set(run.progress.files)
+            if outcomes:
+                # Phase N must see what phases 1…N-1 wrote (phase-64). The inventory used to be
+                # taken once, before the plan, so every later phase was told "first build on a
+                # bare skeleton" while the models it needed were already on disk. Paths + sizes
+                # only — the cost posture is unchanged.
+                existing, _ = await self._existing_code(ctx)
             try:
                 outcome = await self._phases.run(
                     project,

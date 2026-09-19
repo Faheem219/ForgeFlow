@@ -122,8 +122,17 @@ class FakeVerifier:
         channel: str | None = None,
         written_files: list[str] | None = None,
         cancel: object | None = None,
+        expect: object | None = None,
+        phases_wrote_nothing: int = 0,
     ) -> BuildVerifyReport:
-        self.calls.append({"written_files": written_files, "channel": channel})
+        self.calls.append(
+            {
+                "written_files": written_files,
+                "channel": channel,
+                "expect": expect,
+                "phases_wrote_nothing": phases_wrote_nothing,
+            }
+        )
         return self._report
 
 

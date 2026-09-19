@@ -27,6 +27,7 @@ from tests.agents.codegen_fakes import (
     configure_env,
     make_project_run,
     make_skeleton,
+    phase_write,
     phased_transport,
     tool_use,
 )
@@ -176,7 +177,7 @@ async def test_the_workspace_copy_can_be_turned_off(
     ctx = ToolContext.build(
         project, run, workspace=ws, exec_service=FakeExec(), preview=FakePreview()
     )
-    transport = phased_transport([_PHASES[0]], [[]])
+    transport = phased_transport([_PHASES[0]], [phase_write("backend/src/features/a/a.ts")])
     await CodegenAgent(AnthropicClient(transport), default_registry()).run(project, run, ctx=ctx)
 
     assert not any(path.startswith("phase-plan/") for path in ws.files)
@@ -204,7 +205,10 @@ async def test_the_plan_folder_name_follows_config(
         project, run, workspace=ws, exec_service=FakeExec(), preview=FakePreview()
     )
     await CodegenAgent(
-        AnthropicClient(phased_transport([_PHASES[0]], [[]])), default_registry()
+        AnthropicClient(
+            phased_transport([_PHASES[0]], [phase_write("backend/src/features/a/a.ts")])
+        ),
+        default_registry(),
     ).run(project, run, ctx=ctx)
 
     assert "build-phases/plan.json" in ws.files
@@ -227,7 +231,8 @@ async def test_an_unparseable_plan_falls_back_and_the_build_still_runs(
     ctx = ToolContext.build(
         project, run, workspace=ws, exec_service=FakeExec(), preview=FakePreview()
     )
-    # A prose (non-JSON) plan turn, then one closing turn per fallback phase.
+    # A prose (non-JSON) plan turn, then one write + one closing turn per fallback phase (a phase
+    # that writes nothing is no longer `done`, phase-64 — but that is not what this test is about).
     prose = "Just some prose, no JSON at all."
 
     def _turn(text: str) -> ScriptedTurn:
@@ -235,7 +240,27 @@ async def test_an_unparseable_plan_falls_back_and_the_build_still_runs(
 
         return ScriptedTurn(deltas=[text], turn=TurnComplete(text=text, usage=Usage(10, 5)))
 
-    transport = FakeTransport([_turn(prose), _turn("a"), _turn("b"), _turn("c")])
+    def _write(path: str) -> ScriptedTurn:
+        from app.agents.anthropic_client import TurnComplete
+
+        return ScriptedTurn(
+            deltas=[],
+            turn=TurnComplete(
+                tool_uses=phase_write(path), usage=Usage(10, 5), stop_reason="tool_use"
+            ),
+        )
+
+    transport = FakeTransport(
+        [
+            _turn(prose),
+            _write("backend/src/features/a/a.ts"),
+            _turn("a"),
+            _write("frontend/src/features/b/B.tsx"),
+            _turn("b"),
+            _write("frontend/src/routes.tsx"),
+            _turn("c"),
+        ]
+    )
 
     report = await CodegenAgent(AnthropicClient(transport), default_registry()).run(
         project, run, ctx=ctx

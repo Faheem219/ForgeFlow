@@ -254,9 +254,36 @@ _KEYS: tuple[ConfigKey, ...] = (
         "anthropic_max_output_tokens",
         Cat.models,
         "int",
-        "Max output tokens per model call.",
+        "Max output tokens per model call. A reasoning model's thinking counts against this; "
+        "16384 comfortably holds a thought plus a 300-line file.",
         minimum=1,
         maximum=200_000,
+    ),
+    ConfigKey(
+        "llm_max_truncated_turns",
+        Cat.models,
+        "int",
+        "How many times per tool loop a turn cut off at the output cap (or returned empty) is "
+        "answered with a corrective nudge before the loop stops as unfinished.",
+        minimum=0,
+        maximum=10,
+    ),
+    ConfigKey(
+        "llm_reasoning_effort",
+        Cat.models,
+        "enum",
+        "How much a reasoning model should think, sent as the OpenAI-compatible `reasoning` "
+        "hint (OpenRouter's unified shape; dropped automatically where rejected). Blank = the "
+        "provider's default.",
+        choices=("", "none", "low", "medium", "high"),
+    ),
+    ConfigKey(
+        "llm_reasoning_max_tokens",
+        Cat.models,
+        "int",
+        "Token budget for a reasoning model's thinking (0 = unset). Combines with the effort.",
+        minimum=0,
+        maximum=100_000,
     ),
     ConfigKey(
         "anthropic_max_tool_turns",
@@ -371,6 +398,23 @@ _KEYS: tuple[ConfigKey, ...] = (
         "failed and carried into integration repair.",
         minimum=0,
         maximum=5,
+    ),
+    ConfigKey(
+        "build_phase_noop_retries",
+        Cat.agents,
+        "int",
+        "Extra attempts, with explicit feedback, for a build phase whose loop finished without "
+        "writing a single file. After these it is recorded failed ('wrote nothing'), never done.",
+        minimum=0,
+        maximum=3,
+    ),
+    ConfigKey(
+        "build_phase_require_summary",
+        Cat.agents,
+        "bool",
+        "A phase must end with the model's own closing summary to count as done; a model that "
+        "writes its files and then produces nothing through every nudge fails the phase. Off = "
+        "the missing line is synthesised from the files written and the phase can be done.",
     ),
     ConfigKey(
         "build_plan_dir",

@@ -213,7 +213,7 @@ def diagnose_param_error(exc: BaseException, params: dict[str, Any]) -> Repair |
             return Repair(Adaptation.developer_role, param="messages", reason=message)
         return None
 
-    if named not in params:
+    if named not in _sent_params(params):
         return None  # named something we never sent — not our request to repair
     if not looks_like_param_error:
         return None
@@ -230,12 +230,24 @@ def diagnose_param_error(exc: BaseException, params: dict[str, Any]) -> Repair |
     return Repair(Adaptation.drop, param=named, reason=message)
 
 
+def _sent_params(params: dict[str, Any]) -> set[str]:
+    """Every parameter name on the wire: the top-level keys plus those inside ``extra_body``.
+
+    The OpenAI SDK's ``create()`` has a closed signature, so anything provider-specific
+    (OpenRouter's ``provider`` routing, the phase-64 ``reasoning`` hint) travels in ``extra_body``
+    and is merged into the JSON body — a 400 names it by its merged name, not by ``extra_body``.
+    """
+    extra = params.get("extra_body")
+    nested = set(extra) if isinstance(extra, dict) else set()
+    return (set(params) - {"extra_body"}) | nested
+
+
 def _param_from_text(lowered: str, params: dict[str, Any]) -> str:
     """The offending parameter read out of the message — matched only against keys we sent.
 
     Longest first, so ``max_tokens`` is never mistaken for a substring of another key we sent.
     """
-    for key in sorted(params, key=len, reverse=True):
+    for key in sorted(_sent_params(params), key=len, reverse=True):
         if key.lower() in lowered:
             return key
     return ""
@@ -255,6 +267,13 @@ def apply_repairs(params: dict[str, Any], repairs: Iterable[Repair]) -> dict[str
                 out[repair.replacement] = out.pop(repair.param)
         elif repair.adaptation is Adaptation.drop:
             out.pop(repair.param, None)
+            extra = out.get("extra_body")
+            if isinstance(extra, dict) and repair.param in extra:
+                remaining = {k: v for k, v in extra.items() if k != repair.param}
+                if remaining:
+                    out["extra_body"] = remaining
+                else:
+                    out.pop("extra_body", None)
         elif repair.adaptation is Adaptation.developer_role:
             out["messages"] = _as_developer_role(out.get("messages") or [])
         elif repair.adaptation is Adaptation.no_stream:
