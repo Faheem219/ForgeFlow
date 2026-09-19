@@ -147,10 +147,33 @@ def _spawn_parent_with_child() -> subprocess.Popen[bytes]:
 
 
 def _alive(pid: int) -> bool:
+    """Running — not gone, and not a zombie.
+
+    ``kill -0`` alone says "alive" for a zombie: a process already SIGKILLed but not yet reaped.
+    Once the parent dies its killed child is re-parented to whichever process adopts orphans, and
+    on a CI runner that adopter reaps lazily — so the child lingers as a zombie and a plain
+    ``kill -0`` reported a correctly killed process as a survivor.
+    """
     try:
         os.kill(pid, 0)
     except (ProcessLookupError, PermissionError):
         return False
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as handle:
+            # "pid (comm) state ..." — comm may contain spaces/parens, so split on the last ") ".
+            state = handle.read().rsplit(") ", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return True  # no /proc to consult: trust kill -0
+    return state != "Z"
+
+
+def _gone(pid: int, timeout: float = 5.0) -> bool:
+    """Wait for ``pid`` to stop running: SIGKILL is delivered asynchronously."""
+    deadline = time.monotonic() + timeout
+    while _alive(pid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
     return True
 
 
@@ -181,7 +204,7 @@ def test_the_kill_walk_removes_the_parent_not_only_its_child() -> None:
         parent.wait(timeout=5)
         assert not _alive(parent.pid), "the parent survived — the recursion bug is back"
         for child in children:
-            assert not _alive(child), f"child {child} survived"
+            assert _gone(child), f"child {child} survived"
     finally:
         with contextlib.suppress(Exception):
             parent.kill()

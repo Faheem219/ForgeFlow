@@ -74,13 +74,19 @@ async def test_cancel_frees_the_concurrency_slot(service: ExecService) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
+    """Running — not gone, and not a zombie (killed but not yet reaped by its adoptive parent,
+    which on a CI runner can take a while; ``kill -0`` alone reports a zombie as alive)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
-    return True
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as handle:
+            return handle.read().rsplit(") ", 1)[1].split()[0] != "Z"
+    except (OSError, IndexError):
+        return True  # no /proc to consult: trust kill -0
 
 
 async def _child_pid_from_output(project_id: str) -> int:
