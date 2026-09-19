@@ -9,9 +9,12 @@ explicitly out of scope here.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import shutil
 import socket
 import sys
+from collections.abc import AsyncIterator
 from urllib.error import URLError
 
 import pytest
@@ -26,7 +29,13 @@ from app.sandbox.runtime import LocalRuntime, WorkspaceRuntime
 from app.sandbox.schemas import PreviewStatus
 from tests.sandbox.conftest import requires_posix_runtime
 
-pytestmark = [pytest.mark.usefixtures("mongo_db"), requires_posix_runtime]
+pytestmark = [
+    pytest.mark.usefixtures("mongo_db"),
+    requires_posix_runtime,
+    # The health probe is `curl` run through the runtime — present in the sandbox image and on CI
+    # runners. Without it every server reads "starting" and assertions fail for the wrong reason.
+    pytest.mark.skipif(shutil.which("curl") is None, reason="the preview health probe runs curl"),
+]
 
 
 def _free_port() -> int:
@@ -57,7 +66,9 @@ _SERVER = (
 
 
 @pytest.fixture
-def preview(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> PreviewService:
+async def preview(
+    tmp_path: object, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[PreviewService]:
     root = os.path.join(str(tmp_path), "ws")
     os.makedirs(os.path.join(root, "frontend"), exist_ok=True)
     os.makedirs(os.path.join(root, "backend"), exist_ok=True)
@@ -76,7 +87,21 @@ def preview(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> PreviewService
     async def provider(_project: Project) -> WorkspaceRuntime:
         return LocalRuntime(root)
 
-    return PreviewService(provider=provider)
+    service = PreviewService(provider=provider)
+    yield service
+
+    # A test that fails before its own stop() would otherwise leave both dev servers running, and
+    # their log pumps then block the event loop's teardown forever: the suite HANGS (a CI job sits
+    # until its timeout) instead of reporting the failure. Stop whatever is still tracked.
+    for state in list(service._state.values()):
+        for proc in state.procs.values():
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(proc.handle.kill)
+            if proc.task is not None:
+                proc.task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await proc.task
+    service._state.clear()
 
 
 async def test_start_brings_both_servers_up_healthy(preview: PreviewService) -> None:
