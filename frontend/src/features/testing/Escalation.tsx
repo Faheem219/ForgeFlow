@@ -16,6 +16,7 @@ const REASON_LABELS: Record<string, string> = {
   blocked: 'Nothing safe to patch',
   no_patch: "Couldn't fix it from the files it was given",
   cancelled: 'Cancelled',
+  environment: 'Sandbox environment problem, not a code bug',
 };
 
 /**

@@ -172,6 +172,7 @@ Routes: `/` dashboard · `/projects/:id` workspace · `/eval` benchmarks · `/ad
 | `sandbox reconcile skipped — Docker unavailable` | daemon not reachable — start Colima/Docker Desktop; in compose mode check the socket mount ([§2](#2-section-b--everything-in-docker-compose)) |
 | Generated app: `buffering timed out after 10000ms` | `APP_DB_SANDBOX_URI` unset or `appdb` not running — `make host-deps` |
 | Generated app: `getaddrinfo EAI_AGAIN forgeflow-appdb` | the `appdb` container is gone, so the name has no DNS record. Preview start restarts it if it merely stopped; if it was removed, `make host-deps` |
+| Repair stops at 0 attempts: *"sandbox environment problem"*, tests show `[forgeflow:test-db-unavailable]` or `could not find an valid binary path` | the sandbox image predates the baked test `mongod` (phase-65) — `make sandbox-build`; sandboxes are recreated from the new image on next use, code intact |
 | Deploy refuses: *"not reachable from the internet"* | `APP_DB_CLUSTER_URI` is a localhost/docker address; set it to your Atlas URI (`APP_DB_SANDBOX_URI` stays local) |
 | Vercel dashboard shows no environment variables | pre-phase-62 deployment — redeploy; env is now mirrored to the Vercel *project*, not just the deployment |
 | Preview URL refuses to connect | proxy not running — preview start restarts a *stopped* one; if it was removed, `make proxy` |

@@ -30,6 +30,7 @@ from app.core.errors import NotFoundError
 from app.db.blobs import BlobStore, get_blob_store
 from app.db.models import Project, TestRun
 from app.db.repos import RequirementSpecRepo
+from app.sandbox.offline import OfflineDiagnosis, diagnose_offline
 from app.sandbox.schemas import FileContent, GitInfo
 from app.testing.models import TestResult, TestStatus
 
@@ -92,6 +93,11 @@ class RepairContext:
     trimmed: list[str] = field(default_factory=list)
     # Diagnostics that are not budget-related (no last-passing ref, unreadable file, …).
     notes: list[str] = field(default_factory=list)
+    # phase-65: failures explained by the sandbox having no network. Repairable ones become hints in
+    # the prompt; an unrepairable one (no mongod for the test database) makes the loop escalate
+    # before any attempt, because no patch can supply what the sandbox lacks.
+    sandbox_hints: list[str] = field(default_factory=list)
+    environment: OfflineDiagnosis | None = None
     ref: str | None = None  # blob ref, set once persisted
 
     def size(self) -> int:
@@ -133,6 +139,8 @@ class RepairContext:
             "head_sha": self.head_sha,
             "trimmed": self.trimmed,
             "notes": self.notes,
+            "sandbox_hints": self.sandbox_hints,
+            "environment": self.environment.to_dict() if self.environment else None,
             "size": self.size(),
         }
 
@@ -193,6 +201,7 @@ class RepairContextAnalyzer:
             return context
 
         context.failing_tests = [_to_failing_test(r) for r in failures]
+        _diagnose_offline_failures(context)
 
         # Rank the files the failures actually implicate: most-referenced first, then first-seen.
         ranked = _rank_paths(context.failing_tests)
@@ -347,6 +356,23 @@ def _to_failing_test(result: TestResult) -> FailingTest:
         stack=failure.stack if failure else None,
         files_referenced=list(failure.files_referenced) if failure else [],
     )
+
+
+def _diagnose_offline_failures(context: RepairContext) -> None:
+    """Record failures the sandbox's missing network explains (phase-65).
+
+    The first unrepairable finding becomes ``environment``; repairable hints are de-duplicated, so
+    ten tests calling the same API produce one sentence, not ten.
+    """
+    for test in context.failing_tests:
+        text = "\n".join(part for part in (test.message, test.assertion, test.stack) if part)
+        diagnosis = diagnose_offline(text)
+        if diagnosis is None:
+            continue
+        if not diagnosis.repairable:
+            context.environment = context.environment or diagnosis
+        elif diagnosis.hint not in context.sandbox_hints:
+            context.sandbox_hints.append(diagnosis.hint)
 
 
 def _rank_paths(failing: list[FailingTest]) -> list[str]:

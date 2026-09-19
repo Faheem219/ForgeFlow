@@ -42,6 +42,7 @@ app-skeleton/
       routes/health.ts   # GET /health (DB-independent liveness for preview/deploy probes)
       middleware/        # errorHandler (+ AppError, notFound), requestLogger
       lib/validate.ts    # Zod body-validation middleware
+      test/              # test database helper (useTestDb) + the Jest global setup/teardown
       features/          # ← feature code goes here (see features/README.md)
 ```
 
@@ -52,8 +53,29 @@ app-skeleton/
 - **Backend routers** — mounted in `backend/src/app.ts` at the `FORGEFLOW:ROUTES` marker.
 - **Backend features** — `backend/src/features/<feature>/` (see `backend/src/features/README.md`).
 
-Everything else (build config, Tailwind, the API client, the app factory, middleware, health) is
-**scaffold** and must not be regenerated.
+Everything else (build config, Tailwind, the API client, the app factory, middleware, health, the
+test database helper) is **scaffold** and must not be regenerated.
+
+## Backend tests that touch data (phase-65)
+
+Data tests run against a **real MongoDB**: one in-memory server per Jest run, started by
+`backend/src/test/globalSetup.ts`. One call at the top of a test file wires it up:
+
+```ts
+import { useTestDb } from '../../test/db'
+
+useTestDb() // own database per file · collections emptied between tests · dropped afterwards
+```
+
+Inside the ForgeFlow sandbox the server is the `mongod` baked into the sandbox image, so this works
+with **no network**, and nothing is downloaded. On a laptop or in CI, `mongodb-memory-server-core`
+downloads a binary on first use, as usual. It is the `-core` package on purpose: it has no postinstall
+hook, so installing the app, including the deployed backend's build, never fetches ~105 MB.
+
+The setup also points `MONGODB_URI` at the in-memory server for the duration of the run, so no test
+can reach a real database, whoever launched Jest. If the server cannot start, suites that do not use
+the database still run, and `useTestDb()` fails at once with `[forgeflow:test-db-unavailable]` and
+the reason. `jest.config.js` caps `maxWorkers` at 2, because the sandbox has one CPU and 1 GB to share.
 
 ## Env contract (injected — never committed)
 
@@ -73,7 +95,7 @@ Everything else (build config, Tailwind, the API client, the app factory, middle
 | `pnpm install` | install all workspace deps |
 | `pnpm dev` | run FE (Vite) + BE (Express, `tsx watch`) in parallel |
 | `pnpm build` | build both packages (`vite build`, `tsc`) |
-| `pnpm test` / `pnpm test:unit` | unit suites (FE Vitest + BE Jest) — no server needed |
+| `pnpm test` / `pnpm test:unit` | unit suites (FE Vitest + BE Jest) — no server needed (BE starts its own in-memory MongoDB) |
 | `pnpm test:e2e` | Playwright E2E (needs a booted preview / live URL via `PLAYWRIGHT_BASE_URL`) |
 | `pnpm lint` / `pnpm typecheck` | ESLint / `tsc --noEmit` across both packages |
 

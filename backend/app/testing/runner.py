@@ -190,6 +190,13 @@ class TestRunner:
         **Fail soft.** A project whose tests mock Mongoose has always run green with no database
         configured at all, and turning a missing ``APP_DB_*`` setting into a red test stage would
         break those for no gain. A suite that really needs Mongo fails on its own, loudly.
+
+        **Superseded for skeletons from phase-65 on.** Their Jest ``globalSetup`` starts an
+        in-memory MongoDB (the ``mongod`` baked into the sandbox image) and overrides
+        ``MONGODB_URI`` with it, so the Test stage, the agent's ``run_tests`` and a plain
+        ``pnpm test`` all reach the same database without any network. This URI now only serves
+        workspaces instantiated before that — and resolves only while the preview has the sandbox
+        on the ``appdb`` network, which is exactly why tests stopped depending on it.
         """
         # Lazily imported to keep the testing layer decoupled from the deploy layer.
         from app.deploy.db_provision import DbProvisioner

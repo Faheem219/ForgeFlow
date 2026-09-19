@@ -135,6 +135,23 @@ describe('Escalation', () => {
     );
   });
 
+  it('names an environment stop as not a code bug, with the fix it needs', () => {
+    // phase-65: the sandbox, not the code, was broken, so the loop stopped before any attempt.
+    installFetch(state);
+    renderEscalation(vi.fn(), {
+      ...ESCALATION,
+      reason: 'environment',
+      summary:
+        'I stopped after 0 attempt(s) because the sandbox environment is broken, not the code. ' +
+        'Rebuild the image with `make sandbox-build`. Fix the environment, then run the tests again.',
+    });
+
+    expect(screen.getByTestId('escalation-reason')).toHaveTextContent(
+      'Sandbox environment problem, not a code bug',
+    );
+    expect(screen.getByTestId('escalation-summary')).toHaveTextContent('make sandbox-build');
+  });
+
   it('submits guidance through the resume contract the controller named', async () => {
     installFetch(state);
     const onResumed = renderEscalation();

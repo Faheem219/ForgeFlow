@@ -8,6 +8,8 @@ never execs generated code directly (§7); it only runs it inside a container bu
 - `node:20-bookworm-slim` base, `git` + `curl` + `tini`, and a **baked** pnpm (see below).
 - Playwright **chromium** (+ OS deps) pre-installed to `/ms-playwright` (shared, world-readable);
   the `playwright` package lives at `/opt/pw` and is importable via `NODE_PATH` (CommonJS).
+- A **`mongod`** (MongoDB 8.0 community, checksum-verified) at `/usr/local/bin/mongod`, for
+  generated-app **tests only** (see below).
 - Non-root user **`app`** (uid 1000); workspace at **`/workspace`**.
 - No secrets are baked in.
 
@@ -36,6 +38,33 @@ Two things fix it, and both are load-bearing:
    `COREPACK_ENABLE_NETWORK=0`.
 2. **In the manager:** a per-project named volume mounted at `/home/app`, because pnpm/npm still
    write caches and the pnpm store under `$HOME` at *install* time.
+
+## A baked `mongod` for tests (phase-65)
+
+Generated backends test their data layer against a real MongoDB. The usual way to get one,
+`mongodb-memory-server`, downloads a ~105 MB `mongod` on **first use**. A test run has no network
+(egress windows are only opened for package installs), so the download failed and a model spent its
+repair iterations concluding it was *"unable to download mongod due to no network access"*.
+
+So the binary is baked at build time, the only time there is a network, and the library is pointed
+at it through its own environment variables:
+
+| Variable | Value | Why |
+|---|---|---|
+| `MONGOMS_SYSTEM_BINARY` | `/usr/local/bin/mongod` | use the baked binary |
+| `MONGOMS_VERSION` | `MONGO_VERSION` (8.0.32) | matches the binary: no conflict warning, wiredTiger engine |
+| `MONGOMS_RUNTIME_DOWNLOAD` | `false` | never dial out; a missing binary fails fast and clearly |
+| `MONGOMS_DISABLE_POSTINSTALL` | `1` | the non-core package never fetches 105 MB inside an install window |
+
+`mongod` binds `127.0.0.1` inside the container. **This adds a binary, not a route**: no network
+policy changes. The generated app's skeleton starts one server per Jest run and gives each test file
+its own database (`backend/src/test/`, see the skeleton README).
+
+The tarball is chosen by `TARGETARCH`: the Debian 12 build on amd64, and the Ubuntu 22.04 build on
+arm64, because MongoDB publishes no arm64 Debian build and bookworm's glibc 2.36 satisfies jammy's 2.35.
+It is not copied from the `mongo:8.0` image, which is built on Ubuntu noble (glibc 2.39). To bump,
+change `MONGO_VERSION` and both `MONGO_SHA256_*` args together (MongoDB publishes the checksums at
+`https://downloads.mongodb.org/current.json`).
 
 ## Runtime isolation is the manager's job (phase-11)
 
@@ -67,6 +96,9 @@ the image, asserts it runs as `app`, runs **pnpm under the real runtime posture*
 network, `$HOME` on a volume — the regression check for the corepack `ENOENT` above), asserts the
 unwritable-`$HOME` warning is emitted, then starts the sample Node server (`smoke/server.cjs`) and
 drives it with a Playwright chromium test (`smoke/browser-check.cjs`), all inside the container.
+Two phase-65 steps cover the baked `mongod`: it must start under the same posture (with pids and
+memory caps), and `mongodb-memory-server-core`, installed with network and then run **without**,
+must start it and round-trip a document (`smoke/mongo-check.cjs`).
 
 ## Rollback
 

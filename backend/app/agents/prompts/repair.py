@@ -91,9 +91,17 @@ def repair_user_prompt(
         if context.trimmed
         else ""
     )
+    # phase-65: failures the sandbox's missing network explains, named up front so the agent fixes
+    # the code rather than rediscovering the network rules one attempt at a time.
+    sandbox = (
+        "## Sandbox environment\n" + "\n".join(f"- {h}" for h in context.sandbox_hints) + "\n\n"
+        if context.sandbox_hints
+        else ""
+    )
     return (
         f"Repair attempt #{iteration}.\n\n"
         f"## Failing tests\n{_format_failing_tests(context)}\n\n"
+        f"{sandbox}"
         f"## Acceptance criteria at stake\n{_format_criteria(context)}\n\n"
         f"## Diff since the last passing commit\n{diff}\n\n"
         f"## Files\n{_format_files(context, editable)}\n\n"

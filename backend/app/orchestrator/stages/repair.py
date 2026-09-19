@@ -63,6 +63,10 @@ REASON_CANCELLED = "cancelled"
 # The agent had files it could patch and wrote nothing — it could not fix the failure from the
 # context it was given (phase-63). Distinct from `blocked`, where there was nothing editable at all.
 REASON_NO_PATCH = "no_patch"
+# The failures come from the sandbox, not the code — e.g. the test database has no mongod to run
+# (phase-65). Escalated before any attempt: no patch can supply what the sandbox lacks, and asking
+# is exactly how a model ends up re-deriving "no network" iteration after iteration.
+REASON_ENVIRONMENT = "environment"
 
 REPAIR_REPORT_KIND = "repair_report"
 
@@ -85,7 +89,12 @@ _REASON_TEXT = {
     REASON_BLOCKED: "there was nothing safe for me to patch",
     REASON_NO_PATCH: "I could not fix it from the files I was given",
     REASON_CANCELLED: "the run was cancelled",
+    REASON_ENVIRONMENT: "the sandbox environment is broken, not the code",
 }
+
+#: Guidance cannot fix an environment, so its escalation ends by saying what can.
+_CLOSING = "Tell me what to change and I'll rebuild from your guidance."
+_ENVIRONMENT_CLOSING = "Fix the environment, then run the tests again."
 
 
 # --------------------------------------------------------------------- shapes
@@ -277,6 +286,17 @@ class RepairLoopController:
 
             try:
                 context = await self._analyzer.analyze(project, current)
+                if context.environment is not None:
+                    # Before the agent, so it costs no attempt and no MODEL_CODEGEN tokens.
+                    finding = context.environment
+                    escalation = self._escalate(
+                        REASON_ENVIRONMENT,
+                        f"{finding.reason[:1].upper()}{finding.reason[1:]}. {finding.hint}",
+                        current,
+                        attempts,
+                        metrics,
+                    )
+                    break
                 result = await self._agent.run(
                     project,
                     run,
@@ -581,7 +601,7 @@ def _stuck_summary(
         parts.append(f"{metrics.regressions_introduced} attempt(s) broke previously-passing tests.")
     if detail:
         parts.append(_clip(detail, _MAX_DETAIL_CHARS))
-    parts.append("Tell me what to change and I'll rebuild from your guidance.")
+    parts.append(_ENVIRONMENT_CLOSING if reason == REASON_ENVIRONMENT else _CLOSING)
     return " ".join(parts)
 
 
@@ -594,6 +614,7 @@ __all__ = [
     "REASON_BUDGET",
     "REASON_CANCELLED",
     "REASON_CAP",
+    "REASON_ENVIRONMENT",
     "REASON_NO_PATCH",
     "REASON_REGRESSED",
     "REASON_STALLED",

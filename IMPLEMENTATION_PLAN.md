@@ -93,7 +93,7 @@ Three planes plus external providers. (See `forgeflow_user_flow.drawio` for the 
 
 **Generated-app stack (fixed):** React 18 + Vite + TS (FE); Node + Express + TS (BE); MongoDB + Mongoose; Zod (validation); Vitest + Testing Library (FE unit); Jest + supertest (BE unit); **Playwright** (E2E). Shipped as an opinionated `templates/app-skeleton/`.
 
-**Sandbox image:** Node 20 + pnpm + Playwright browsers + git + curl, non-root user, no host network, CPU/memory/pids caps.
+**Sandbox image:** Node 20 + pnpm + Playwright browsers + git + curl + a test-only `mongod` (loopback, used by `mongodb-memory-server` so generated tests get a real database offline — phase-65), non-root user, no host network, CPU/memory/pids caps.
 
 **Deploy:** Vercel (SPA FE), Render (Node web service BE); reverse proxy (Caddy or Traefik) for preview subdomains in prod.
 

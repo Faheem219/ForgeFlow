@@ -87,10 +87,10 @@ demo-status: ## Show what hero-demo state is currently seeded
 demo-rehearse: ## Run the headless hero-path rehearsal smoke test (no live infra)
 	cd backend && uv run pytest tests/demo -q
 
-sandbox-build: ## Build the sandbox image (Node 20 + pnpm + Playwright chromium, non-root)
+sandbox-build: ## Build the sandbox image (Node 20 + pnpm + Playwright chromium + test mongod, non-root)
 	docker build -t $(SANDBOX_IMAGE) sandbox/
 
-sandbox-smoke: ## Build + smoke-test the sandbox image (Node app + Playwright chromium)
+sandbox-smoke: ## Build + smoke-test the sandbox image (Node app + Playwright chromium + offline MongoDB)
 	SANDBOX_IMAGE=$(SANDBOX_IMAGE) bash sandbox/smoke/run_smoke.sh
 
 sandbox-reap-all: ## DANGER: remove ALL forgeflow sandbox containers + volumes (deletes workspace code)
