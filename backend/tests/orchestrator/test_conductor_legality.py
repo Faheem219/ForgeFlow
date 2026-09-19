@@ -8,6 +8,7 @@ from beanie import PydanticObjectId
 from app.core.errors import UserError
 from app.db.models.enums import Stage, StageStatus
 from app.db.repos import RunRepo
+from app.orchestrator import stages
 from app.orchestrator.conductor import Conductor
 from app.orchestrator.messages import MessageService
 from app.orchestrator.schemas import Intent, IntentAction
@@ -63,7 +64,13 @@ async def test_rejection_leaves_no_message_or_run_side_effects() -> None:
     assert await RunRepo().list_for_project(pid) == []
 
 
-async def test_deploy_proceed_allowed_after_build_complete() -> None:
+async def test_deploy_proceed_allowed_after_build_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Legality only: the real deploy handler (phase-37/58) reads the workspace out of a sandbox
+    # container, which made this test depend on a live Docker daemon and a built sandbox image.
+    # What deploying does is covered by tests/orchestrator/stages/test_deploy_handler.py.
+    monkeypatch.setitem(stages._HANDLERS, Stage.deploy, stages.StubStageHandler(Stage.deploy))
     user = PydanticObjectId()
     pid = await _project(user)
 

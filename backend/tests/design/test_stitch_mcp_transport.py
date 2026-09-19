@@ -677,6 +677,7 @@ async def test_confirming_is_bounded_and_configurable(
     with pytest.raises(ProviderError) as exc:
         await HttpStitchClient(sleeper=_no_sleep).text_to_ui("x", headers=await _headers())
 
+    assert exc.value.detail is not None
     assert exc.value.detail["kind"] == "clarification"  # → the user is asked, not another provider
     assert server.tool_calls().count("generate_screen_from_text") == 2  # ask + one confirmation
 
@@ -717,6 +718,7 @@ async def test_a_question_that_survives_confirmation_is_raised_for_the_user(
     with pytest.raises(ProviderError) as exc:
         await HttpStitchClient(sleeper=_no_sleep).text_to_ui("todo app", headers=await _headers())
 
+    assert exc.value.detail is not None
     assert exc.value.detail["kind"] == "clarification"
     assert "asked for more detail" in exc.value.message
     assert "Who is it for?" in exc.value.message  # Stitch's own question survives, not just a dump

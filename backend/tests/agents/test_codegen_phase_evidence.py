@@ -26,11 +26,12 @@ from app.agents.anthropic_client import (
 )
 from app.agents.build_phases import NOOP_FEEDBACK, NOTE_NO_SUMMARY, NOTE_WROTE_NOTHING
 from app.agents.build_plan import PHASE_DONE, PHASE_FAILED
-from app.agents.codegen import CodegenAgent
+from app.agents.codegen import BuildReport, CodegenAgent
 from app.agents.cost import Usage
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
 from app.core.config import reset_config
+from app.db.models import Project
 from tests.agents.codegen_fakes import (
     configure_env,
     make_project_run,
@@ -91,7 +92,9 @@ def _last_user_text(request: MessageRequest) -> str:
     return "".join(b.get("text", "") for b in content if isinstance(b, dict))
 
 
-async def _build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, transport: RecordingTransport):
+async def _build(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, transport: RecordingTransport
+) -> tuple[BuildReport, Project, FakeWorkspace]:
     skeleton = tmp_path / "skeleton"
     if not skeleton.exists():
         make_skeleton(skeleton)

@@ -481,7 +481,7 @@ def test_assistant_turn_echoes_only_the_reasoning_the_endpoint_sent() -> None:
 def test_the_anthropic_transport_strips_the_private_reasoning_key() -> None:
     from app.agents.anthropic_client import PROVIDER_REASONING_KEY, anthropic_messages
 
-    convo = [
+    convo: list[dict[str, Any]] = [
         {"role": "user", "content": "hi"},
         {
             "role": "assistant",

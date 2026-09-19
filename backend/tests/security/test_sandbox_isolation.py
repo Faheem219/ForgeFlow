@@ -11,6 +11,7 @@ Untrusted generated code runs in these containers, so the properties below are t
 from __future__ import annotations
 
 import contextlib
+import os
 import pathlib
 import re
 
@@ -194,11 +195,16 @@ def test_no_source_file_requests_a_dangerous_docker_option(forbidden: str) -> No
 
 
 @pytest.mark.docker
+@pytest.mark.skipif(
+    os.getenv("FORGEFLOW_DOCKER_TESTS") != "1",
+    reason="set FORGEFLOW_DOCKER_TESTS=1 (a Docker daemon + the SANDBOX_IMAGE built) to run",
+)
 @pytest.mark.usefixtures("mongo_db")
 async def test_docker_inspect_confirms_the_flags_on_a_real_container() -> None:
     """The manual verification step, automated: `docker inspect` a real sandbox.
 
-    Opt-in (``-m docker``) because it needs a daemon and the sandbox image.
+    Opt-in because it needs a daemon *and* the sandbox image. The `docker` marker alone never
+    skipped it, so it ran by default and failed wherever the image was not built — CI included.
     """
     import docker  # imported here so the module stays importable without the SDK
 

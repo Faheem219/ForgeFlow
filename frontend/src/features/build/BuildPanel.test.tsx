@@ -318,7 +318,7 @@ describe('BuildPanel', () => {
     expect(rail).toHaveTextContent('Routing');
   });
 
-  it('shows each phase\'s evidence — file count and note (phase-64)', async () => {
+  it("shows each phase's evidence — file count and note (phase-64)", async () => {
     const phased = {
       ...REPORT,
       phases: [

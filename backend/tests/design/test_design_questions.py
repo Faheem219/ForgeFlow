@@ -159,6 +159,7 @@ async def test_a_clarification_does_not_fall_back_to_another_provider() -> None:
             project, DesignCapability.from_text, lambda p: p.generate_from_text("a blog")
         )
 
+    assert exc.value.detail is not None
     assert exc.value.detail["kind"] == "clarification"
     assert asking.prompts == ["a blog"]  # and nothing downstream was asked to design instead
 
