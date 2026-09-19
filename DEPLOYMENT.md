@@ -109,10 +109,23 @@ ssh -L 3000:127.0.0.1:3000 <vm>               # Grafana → http://localhost:300
 
 ---
 
-## 5. Blocker
+## 5. What you still have to do
 
-CI is currently **red on `main`** — 4 pre-existing `mypy` errors in `tests/design/` and 2 failing
-tests, unrelated to the DevOps work. **CD gates on CI, so nothing deploys until these are fixed.**
+CI on `main` is fixed (was red: `mypy` errors, 2 failing tests, Prettier, sandbox smoke).
+Remaining steps, in order:
+
+1. **Check CI is green** — GitHub → Actions → latest **CI** run on `main`. Red? Open the failing
+   job; nothing deploys until it passes.
+2. **Fill in the values** in §1 (inventory, `group_vars/all.yml`, GitHub secrets + variables).
+3. **One-time setup** in §2 (a → f): OCI ports, DNS + certbot, Ansible, GHCR public, Vercel link.
+4. **Build the sandbox image on the VM** — CD does not do this, and without it no project can
+   build or test. Rebuild whenever `sandbox/` changes:
+   ```bash
+   scp -r sandbox <vm>:/opt/forgeflow/
+   ssh <vm> 'cd /opt/forgeflow && docker build -t forgeflow-sandbox:latest sandbox/'
+   ```
+5. **Deploy** — push to `main` (§3). Watch **Actions → CD** go green.
+6. **Verify** — §4, then log in → `/admin` → set your LLM provider key.
 
 ---
 

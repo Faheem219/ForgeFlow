@@ -330,7 +330,7 @@ Stated plainly rather than discovered later.
   email/Slack is a further step.
 - **Preview subdomains need wildcard DNS + a wildcard certificate** (DNS-01). Left off by default;
   everything else works without it.
-- **CI is currently red on `main`** for reasons unrelated to this work — 4 pre-existing `mypy`
-  errors in `tests/design/` and 2 pre-existing test failures. Since CD gates on CI, these must be
-  fixed before the pipeline can deploy. Confirmed pre-existing by stashing all DevOps changes and
-  re-running.
+- **The sandbox image is not built by CD.** Build `forgeflow-sandbox:latest` on the VM once, and
+  again whenever `sandbox/` changes (see `DEPLOYMENT.md` §5). Without it the API runs but no
+  project can build, preview or test. (The earlier red-CI blocker — `mypy` errors and two failing
+  tests — was fixed on 2026-09-19.)
