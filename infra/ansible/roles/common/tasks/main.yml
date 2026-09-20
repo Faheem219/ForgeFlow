@@ -58,6 +58,9 @@
   when:
     - common_swap_size_mb | int > 0
     - not common_swapfile_stat.stat.exists
+    # In --check the fallocate below never runs, so the chmod/mkswap that follow would fail on
+    # a file that does not exist yet. Skip the whole block rather than abort the dry run.
+    - not ansible_check_mode
   block:
     # fallocate, not `dd`: instant, and it does not read 2 GB of zeroes through the page cache.
     - name: Allocate /swapfile

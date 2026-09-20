@@ -24,7 +24,7 @@ forgeflow_repo_url: "https://github.com/Faheem219/ForgeFlow.git"
 # YOUR subdomain — the one nginx already terminates TLS for. Used by the nginx site template and
 # written into CORS_ORIGINS. Override this; the placeholder is deliberately invalid so a forgotten
 # value fails loudly instead of silently serving on the wrong name.
-forgeflow_domain: "CHANGE_ME.example.com"
+forgeflow_domain: "forgeflow-backend.ddnsfree.com"
 
 # Where the API listens on the VM's loopback. Your existing nginx already forwards the subdomain to
 # 8000, so that is the default. If your other FastAPI project already holds 8000, change this to
@@ -34,7 +34,7 @@ forgeflow_api_port: 8000
 # Origin(s) the browser will call the API from — your Vercel deployment. Wildcards are not usable:
 # the app enables credentialed CORS whenever origins != ["*"], and browsers reject a wildcard with
 # credentials.
-forgeflow_cors_origins: "https://forgeflow.vercel.app"
+forgeflow_cors_origins: "https://forgeflow-ecru.vercel.app"
 
 # Wildcard domain for per-project sandbox previews. Leave blank to skip preview exposure entirely
 # (everything else still works) — it needs a wildcard DNS record and a wildcard TLS cert, which is
@@ -92,5 +92,5 @@ monitoring_grafana_port: 3000
 monitoring_grafana_admin_user: admin
 # Change this. It is the Grafana admin login; left as a well-known default it is a real hole the
 # moment anyone exposes port 3000.
-monitoring_grafana_admin_password: "changeme-before-you-expose-grafana"
+monitoring_grafana_admin_password: "thisisaverystrongpassword"
 monitoring_prometheus_retention: "15d"

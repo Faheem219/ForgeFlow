@@ -8,18 +8,33 @@
 # and the packet is still rejected by the earlier rule. People then spend hours on the OCI Security
 # List — which is a real second firewall, but not the one blocking them.
 #
-# This role handles it explicitly: detect the REJECT rules, remove them, persist the result, then
-# let ufw be the single source of truth.
+# This role handles it explicitly: detect the REJECT rules, remove them, purge the package that
+# would reload them at boot, then let ufw be the single source of truth.
+#
+# NOT iptables-persistent: ufw declares `Breaks: iptables-persistent, netfilter-persistent`, so
+# apt cannot hold both — asking for both flip-flops between them on alternate runs, and the run
+# that reinstalls iptables-persistent takes ufw (and the firewall) with it. ufw persists its own
+# rules under /etc/ufw and reapplies them from ufw.service, and once netfilter-persistent is gone
+# nothing reads /etc/iptables/rules.v4 any more, so the Oracle rules stay dead across reboots.
 #
 # The OTHER firewall (the OCI Security List / NSG in the console) is outside Ansible's reach. Open
 # 80 and 443 there as well — see README.md §Oracle networking.
 
-- name: Install ufw and iptables-persistent
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+  when: firewall_enabled | bool
+
+- name: Purge iptables-persistent so Oracle's ruleset is never reloaded at boot
+  # Purge, not remove: `remove` leaves the /etc/init.d script behind as a conffile, and
+  # systemd's sysv generator would keep trying to start a service whose binary is gone.
   ansible.builtin.apt:
     name:
-      - ufw
       - iptables-persistent
-    state: present
+      - netfilter-persistent
+    state: absent
+    purge: true
   when: firewall_enabled | bool
 
 # ------------------------------------------------------------------ defuse the Oracle REJECT rules
@@ -103,21 +118,7 @@
     state: enabled
   when: firewall_enabled | bool
 
-# ------------------------------------------------------------------ persistence
-- name: Persist the iptables rules across reboots
-  # Without this the REJECT rules come straight back from /etc/iptables/rules.v4 on reboot, and the
-  # VM becomes unreachable again — the classic "it worked until I restarted it".
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      netfilter-persistent save
-    executable: /bin/bash
-  when:
-    - firewall_enabled | bool
-    - firewall_oracle_reject_rules.stdout | length > 0
-  register: firewall_persist_rules
-  changed_when: firewall_persist_rules.rc == 0
-
+# ------------------------------------------------------------------ report
 - name: Show the resulting firewall state
   ansible.builtin.command:
     cmd: ufw status verbose

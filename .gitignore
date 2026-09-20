@@ -133,3 +133,5 @@ infra/ansible/collections/
 # A kubeconfig embeds a cluster-admin client certificate.
 infra/k8s/kubeconfig*
 *.kubeconfig
+.vercel
+.env*

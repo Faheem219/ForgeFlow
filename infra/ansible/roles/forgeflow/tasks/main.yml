@@ -6,13 +6,41 @@
 # job (.github/workflows/cd.yml). Ansible's job is to make the machine *ready* for it — that split
 # is what keeps "provision the host" and "ship a release" independently repeatable.
 
+# ------------------------------------------------------------------ docker gid
+# Normally set by the docker role. Discovered here too so a tag-limited run (`--tags forgeflow`)
+# can still render .env, which needs DOCKER_GID for the api container's socket access.
+- name: Discover the docker group id
+  ansible.builtin.getent:
+    database: group
+    key: docker
+  when: docker_gid is not defined
+
+- name: Record the docker gid as a fact
+  ansible.builtin.set_fact:
+    docker_gid: "{{ ansible_facts.getent_group['docker'][1] }}"
+  when: docker_gid is not defined
+
+# ------------------------------------------------------------------ who may write here
+# The CD workflow (.github/workflows/cd.yml) logs in as the plain SSH user — not root, not the
+# service account — and from there scp's the compose file and proxy config into this tree, rewrites
+# FORGEFLOW_IMAGE in .env, and runs `docker compose`. A 0750 tree owned by the service user shuts
+# that user out at the first scp. Group membership plus a group-writable tree is the smallest fix:
+# the login user already has sudo (and docker-group root-equivalence), so this widens nothing.
+- name: Add the login user to the forgeflow group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: "{{ forgeflow_group }}"
+    append: true  # never replace the user's other groups (sudo, docker)
+
 - name: Create the ForgeFlow directory tree
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: "{{ forgeflow_user }}"
     group: "{{ forgeflow_group }}"
-    mode: "0750"
+    # setgid (the leading 2) so anything the CD user creates here lands in the forgeflow group
+    # rather than their primary group, and stays reachable by the next deploy.
+    mode: "2770"
   loop:
     - "{{ forgeflow_root }}"
     - "{{ forgeflow_root }}/caddy"
@@ -77,8 +105,9 @@
     dest: "{{ forgeflow_root }}/.env"
     owner: "{{ forgeflow_user }}"
     group: "{{ forgeflow_group }}"
-    # 0640: it holds SECRET_KEY, FERNET_KEY and any provider tokens. Not world-readable, ever.
-    mode: "0640"
+    # Group-writable for the CD user, never world-readable: it holds SECRET_KEY, FERNET_KEY and
+    # any provider tokens.
+    mode: "0660"
     # Never clobber a file whose secrets we could not read back.
     backup: true
   no_log: true  # the whole file is secret material
@@ -90,7 +119,7 @@
     dest: "{{ forgeflow_root }}/docker-compose.prod.yml"
     owner: "{{ forgeflow_user }}"
     group: "{{ forgeflow_group }}"
-    mode: "0640"
+    mode: "0660"
   notify: Restart forgeflow
 
 - name: Install the preview proxy config
@@ -99,7 +128,7 @@
     dest: "{{ forgeflow_root }}/caddy/Caddyfile.prod"
     owner: "{{ forgeflow_user }}"
     group: "{{ forgeflow_group }}"
-    mode: "0640"
+    mode: "0660"
   notify: Restart forgeflow
 
 # ------------------------------------------------------------------ lifecycle

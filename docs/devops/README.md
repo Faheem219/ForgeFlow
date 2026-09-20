@@ -190,8 +190,8 @@ Oracle's Ubuntu images ship an iptables ruleset whose `INPUT` chain ends in a bl
 ufw writes to a *different* chain — so `ufw allow 443` succeeds, `ufw status` shows the port open,
 and packets are still dropped. The `firewall` role detects those rules, removes them by
 **specification** rather than by index (deleting by index while the chain shifts removes the wrong
-rule — and the wrong rule is the one keeping SSH open), then persists with `netfilter-persistent
-save`, without which they return on reboot. The OCI Security List is a genuinely separate
+rule — and the wrong rule is the one keeping SSH open), then purges `iptables-persistent` —
+which ufw `Breaks` anyway — so nothing reloads them on reboot; ufw persists its own rules. The OCI Security List is a genuinely separate
 firewall that no playbook can reach.
 
 **3. arm64.** GitHub's runners are amd64; the VM is aarch64. An amd64-only image pulls fine and

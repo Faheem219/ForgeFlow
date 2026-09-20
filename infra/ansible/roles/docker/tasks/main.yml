@@ -25,12 +25,16 @@
     mode: "0644"
 
 - name: Add the Docker apt repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch={{ docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
-      https://download.docker.com/linux/ubuntu
-      {{ ansible_facts['distribution_release'] }} stable
-    filename: docker
+  # deb822 (sources.list.d/docker.sources) rather than the one-line format: apt_repository is
+  # deprecated and goes away in ansible-core 2.25.
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: stable
+    architectures: "{{ docker_apt_arch }}"
+    signed_by: /etc/apt/keyrings/docker.asc
     state: present
   # A changed repo definition must be visible to the install task in the SAME run.
   register: docker_repo

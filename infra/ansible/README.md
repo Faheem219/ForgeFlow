@@ -133,8 +133,9 @@ Oracle Cloud has **two independent firewalls**, and this trips up nearly everyon
 1. **On the VM.** Oracle's Ubuntu images ship an iptables ruleset whose `INPUT` chain ends in a
    blanket `REJECT`, persisted in `/etc/iptables/rules.v4`. ufw writes to a *different* chain, so
    `ufw allow 443` reports success, `ufw status` shows the port open, and packets are still
-   rejected by the earlier rule. **The `firewall` role detects and removes these**, then persists
-   the result with `netfilter-persistent save` — without that last step they come back on reboot.
+   rejected by the earlier rule. **The `firewall` role detects and removes these**, then purges
+   `iptables-persistent` (which ufw `Breaks` anyway) so nothing reloads them on reboot; ufw
+   persists its own rules under `/etc/ufw`.
 
 2. **In the OCI console.** The instance's **Security List / NSG**. Ansible cannot touch this. Open
    ingress for TCP **80** and **443** there, or the host firewall is irrelevant because packets
