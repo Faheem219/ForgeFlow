@@ -38,7 +38,7 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies (Python 3.11)
-        run: uv sync --python 3.11
+        run: uv sync --python 3.11 --extra openai
 
       - name: Ruff
         run: uv run ruff check .
@@ -93,7 +93,7 @@ jobs:
       - name: Python dependency audit
         working-directory: backend
         run: |
-          uv sync --python 3.11
+          uv sync --python 3.11 --extra openai
           uv run --with pip-audit pip-audit --progress-spinner off || \
             echo "::warning title=pip-audit::Advisories found — triage before release (see docs/hardening-checklist.md §7)"
 

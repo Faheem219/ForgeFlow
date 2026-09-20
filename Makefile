@@ -40,7 +40,7 @@ logs: ## Tail stack logs
 install: backend-install frontend-install ## Install all deps
 
 backend-install: ## Sync backend deps (uv)
-	cd backend && uv sync
+	cd backend && uv sync --extra openai
 
 frontend-install: ## Install frontend deps (pnpm 9 via corepack)
 	cd frontend && corepack enable && $(PNPM) install

@@ -13,10 +13,10 @@ WORKDIR /app
 
 # Install dependencies first for better layer caching (lockfile optional on first run).
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --no-install-project
+RUN uv sync --no-install-project --extra openai
 
 COPY . .
-RUN uv sync
+RUN uv sync --extra openai
 
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "app.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -23,8 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only needed when LLM_PROVIDER=openai (phase-53). Kept optional so the default (Anthropic) install
-# is unchanged. Install with `uv sync --extra openai` (or `pip install openai`).
+# Needed when LLM_PROVIDER=openai (phase-53). Kept as an extra so a bare Anthropic-only install
+# stays possible, but every shipped install (Dockerfiles, Makefile, CI) passes `--extra openai`
+# because the OpenAI-compatible transport is the primary interface (phase-60).
 openai = ["openai>=1.40"]
 
 [dependency-groups]
