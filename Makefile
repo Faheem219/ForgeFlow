@@ -170,4 +170,4 @@ monitoring-down: ## Stop the monitoring stack
 	docker compose -f $(MONITORING_DIR)/docker-compose.monitoring.yml down
 
 prod-build: ## Build the production backend image locally (native arch)
-	docker build -f backend/Dockerfile.prod -t forgeflow-api:local backend/
+	docker build -f backend/Dockerfile.prod -t forgeflow-api:local .

@@ -11,7 +11,11 @@
 #   - runs as a non-root user
 #   - a real HEALTHCHECK, so `docker compose`/k8s can tell "process up" from "actually serving"
 #
-# Build:  docker buildx build --platform linux/arm64 -f backend/Dockerfile.prod backend/
+# Build:  docker buildx build --platform linux/arm64 -f backend/Dockerfile.prod .
+# The build context is the REPO ROOT, not backend/: the image must also carry
+# templates/app-skeleton, which the Build stage copies into every new workspace. Without it
+# `instantiate_skeleton` has nothing to copy and the model plans an app from a blank tree. The root
+# .dockerignore allowlists just those two trees, so the context stays small.
 # The Oracle Ampere A1 VM is aarch64, so arm64 is the platform that matters here; amd64 is kept so
 # the same tag runs on a developer laptop and on GitHub's runners.
 
@@ -32,10 +36,10 @@ WORKDIR /build
 # on a stale lockfile rather than silently resolving something different from what CI tested.
 # `--extra openai`: the OpenAI-compatible transport is the primary LLM interface (phase-60), and
 # the extra is what provides it — without it LLM_PROVIDER=openai fails at first use.
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev --extra openai
 
-COPY . .
+COPY backend/ .
 RUN uv sync --frozen --no-dev --extra openai
 
 # ---------------------------------------------------------------------------- runtime
@@ -49,7 +53,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     VIRTUAL_ENV=/opt/venv \
-    FORGEFLOW_ENV=prod
+    FORGEFLOW_ENV=prod \
+    APP_SKELETON_DIR=/app/templates/app-skeleton
 
 # curl is for the HEALTHCHECK below; tini gives a real PID 1 so SIGTERM reaches uvicorn and the
 # rolling update drains cleanly instead of being killed at the grace-period deadline.
@@ -62,6 +67,9 @@ WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder --chown=forgeflow:forgeflow /build /app
+# The generated-app scaffold (phase-22). Absolute APP_SKELETON_DIR above points here, because the
+# source tree's relative default resolves against the repo root, which does not exist in the image.
+COPY --chown=forgeflow:forgeflow templates/app-skeleton /app/templates/app-skeleton
 
 USER forgeflow
 

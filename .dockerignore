@@ -1,0 +1,21 @@
+# Context for backend/Dockerfile.prod is the repo root (it needs backend/ AND templates/app-skeleton).
+# Allowlist: everything is excluded, then the two trees are let back in, then junk inside them is
+# excluded again. Keeps the context to source only — no node_modules, venvs or build output.
+*
+!backend
+!templates/app-skeleton
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+# Real secrets only — the skeleton ships .env.example files the generated app needs.
+**/.env
+**/.env.local
+**/.env.*.local
+backend/tests
