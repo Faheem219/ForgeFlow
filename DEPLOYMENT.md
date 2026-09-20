@@ -28,6 +28,17 @@ Full detail: [`docs/devops/README.md`](docs/devops/README.md).
 Generated automatically on the VM, do not set: `SECRET_KEY`, `FERNET_KEY`, `DOCKER_GID`.
 Provider keys (`ANTHROPIC_API_KEY`) are left blank on purpose — set them in `/admin` after first boot.
 
+### `infra/ansible/group_vars/vault.yml` (create it, gitignored) — admin login
+
+```yaml
+vault_seed_admin_email: you@example.com
+vault_seed_admin_password: <strong password>
+```
+
+Ansible writes these into `/opt/forgeflow/.env` as `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`;
+the seed step in §5 creates the admin user from them. Optional: encrypt with
+`ansible-vault encrypt group_vars/vault.yml`, then add `--ask-vault-pass` to every playbook run.
+
 ### GitHub → Settings → Secrets and variables → Actions
 
 **Secrets**
@@ -146,7 +157,14 @@ Remaining steps, in order:
    ```
    The first build takes a while (Playwright + browsers); rebuilds hit the layer cache.
 5. **Deploy** — push to `main` (§3). Watch **Actions → CD** go green.
-6. **Verify** — §4, then log in → `/admin` → set your LLM provider key.
+6. **Seed the admin user** — CD does not do this either. Reads the creds from `.env` (§1):
+   ```bash
+   ssh forgeflow-vm 'cd /opt/forgeflow && docker compose --env-file .env -f docker-compose.prod.yml exec -T api python -m scripts.seed'
+   ```
+   Prints `created admin (<email>)`; `already exists` on re-runs; `skipped` means the two
+   `SEED_ADMIN_*` lines in `/opt/forgeflow/.env` are blank — add `vault.yml` and re-run
+   `ansible-playbook site.yml --tags forgeflow`.
+7. **Verify** — §4, then log in with those creds → `/admin` → set your LLM provider key.
 
 ---
 

@@ -46,7 +46,14 @@ tar czC sandbox . | ssh forgeflow-vm 'docker build -t forgeflow-sandbox:latest -
 ```
 
 Then push to `main` (or Actions → CD → Run workflow) and check `https://<subdomain>/health`.
-Log in → `/admin` → re-enter the LLM provider key (it lives in the VM's DB, which is new).
+
+The DB is new, so seed the admin user again (creds come from `group_vars/vault.yml` via `.env`):
+
+```bash
+ssh forgeflow-vm 'cd /opt/forgeflow && docker compose --env-file .env -f docker-compose.prod.yml exec -T api python -m scripts.seed'
+```
+
+Log in → `/admin` → re-enter the LLM provider key (it lived in the old VM's DB).
 
 ---
 
