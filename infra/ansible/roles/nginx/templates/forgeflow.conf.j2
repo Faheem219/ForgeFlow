@@ -35,7 +35,6 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    http2 on;
     server_name {{ forgeflow_domain }};
 
     ssl_certificate     /etc/letsencrypt/live/{{ forgeflow_domain }}/fullchain.pem;
@@ -111,7 +110,6 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    http2 on;
     server_name *.{{ forgeflow_preview_domain }};
 
     ssl_certificate     /etc/letsencrypt/live/{{ forgeflow_preview_domain }}/fullchain.pem;

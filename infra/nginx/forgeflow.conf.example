@@ -105,7 +105,6 @@ map $http_upgrade $connection_upgrade {
 #
 # server {
 #     listen 443 ssl;
-#     http2 on;
 #     server_name *.preview.YOUR.SUBDOMAIN.HERE;
 #
 #     ssl_certificate     /etc/ssl/forgeflow-preview/fullchain.pem;
