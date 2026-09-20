@@ -95,3 +95,32 @@ map $http_upgrade $connection_upgrade {
 #    A 400 or 426 means the Upgrade headers are not reaching uvicorn. A 403/401 is FINE — it means
 #    the handshake got through and the app rejected an unauthenticated socket, which is correct.
 # ---------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------------
+# 4. PREVIEWS (optional — DEPLOYMENT.md §2 g). One server block for the whole wildcard: nginx
+#    only terminates TLS; Caddy (127.0.0.1:8080) picks the sandbox container from the Host
+#    header, so the Host must be passed through untouched. `*.preview.X` in nginx also matches
+#    `<id>.api.preview.X`, but the CERTIFICATE must list both wildcards explicitly.
+# ---------------------------------------------------------------------------------------------
+#
+# server {
+#     listen 443 ssl;
+#     http2 on;
+#     server_name *.preview.YOUR.SUBDOMAIN.HERE;
+#
+#     ssl_certificate     /etc/ssl/forgeflow-preview/fullchain.pem;
+#     ssl_certificate_key /etc/ssl/forgeflow-preview/privkey.pem;
+#     include /etc/letsencrypt/options-ssl-nginx.conf;
+#
+#     location / {
+#         proxy_pass http://127.0.0.1:8080;
+#         proxy_http_version 1.1;
+#         proxy_set_header Upgrade           $http_upgrade;
+#         proxy_set_header Connection        $connection_upgrade;
+#         proxy_set_header Host              $host;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#         # Vite HMR in the previewed app is a WebSocket; same long timeout as the API.
+#         proxy_read_timeout 3600s;
+#         proxy_buffering off;
+#     }
+# }

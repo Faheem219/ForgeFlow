@@ -31,6 +31,10 @@ Assumes the new VM already has nginx installed and a certbot certificate for the
 
 `forgeflow_cors_origins` does **not** change (that is the frontend URL).
 
+If previews are set up (DEPLOYMENT.md §2 g), they move with the subdomain too: Dynu wildcard on
+the new hostname, a new wildcard cert for `*.preview.<new>` + `*.api.preview.<new>`, the preview
+nginx block with the new `server_name`, and `forgeflow_preview_domain` in `group_vars/all.yml`.
+
 ## 3. Then, in order
 
 ```bash

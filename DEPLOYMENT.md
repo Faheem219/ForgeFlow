@@ -104,6 +104,36 @@ nginx role (`--skip-tags nginx`) and copy the three upgrade headers from
 [`infra/nginx/forgeflow.conf.example`](infra/nginx/forgeflow.conf.example) into it.
 Without them REST works and live build streaming silently never connects.
 
+**g. Live previews** — without this the **Preview** button hands out `*.preview.localhost` URLs
+that only resolve on a dev machine. Previews are served on a wildcard domain, one hostname per
+project, so they need a wildcard DNS record and a wildcard certificate (Let's Encrypt issues those
+over DNS-01 only). Pick `preview.<your-api-subdomain>` as the base; then:
+
+1. **Dynu** → your hostname → enable **Wildcard** (so `*.preview.<subdomain>` resolves to the VM).
+   Check from your Mac: `dig +short anything.preview.<subdomain>` prints the VM IP.
+2. **Wildcard cert on the VM** — `acme.sh` talks to Dynu's API, so renewals are automatic
+   (certbot's manual DNS-01 is not renewable). Dynu → **API Credentials** gives the ID + secret.
+   ```bash
+   sudo -i
+   curl https://get.acme.sh | sh -s email=you@example.com
+   export Dynu_ClientId='<client id>' Dynu_Secret='<secret>'
+   ~/.acme.sh/acme.sh --issue --server letsencrypt --dns dns_dynu \
+       -d '*.preview.<subdomain>' -d '*.api.preview.<subdomain>'
+   mkdir -p /etc/ssl/forgeflow-preview
+   ~/.acme.sh/acme.sh --install-cert -d '*.preview.<subdomain>' \
+       --fullchain-file /etc/ssl/forgeflow-preview/fullchain.pem \
+       --key-file       /etc/ssl/forgeflow-preview/privkey.pem \
+       --reloadcmd      'systemctl reload nginx'
+   ```
+   Both wildcards are required: the frontend preview is `<id>.preview.…`, its API is
+   `<id>.api.preview.…`, and a single-level wildcard does not cover the second.
+3. **nginx** — add the preview server block from
+   [`infra/nginx/forgeflow.conf.example`](infra/nginx/forgeflow.conf.example) (§ "Previews"),
+   then `sudo nginx -t && sudo systemctl reload nginx`.
+4. **Ansible** — set `forgeflow_preview_domain: "preview.<subdomain>"` in `group_vars/all.yml`
+   and re-run `ansible-playbook site.yml --tags forgeflow` (renders `PREVIEW_BASE_DOMAIN` into
+   `.env` and restarts the stack). Previews then open at `https://<project-id>.preview.<subdomain>`.
+
 ---
 
 ## 3. Deploy
@@ -178,5 +208,5 @@ Remaining steps, in order:
 | --------------------- | --------------------------------------------------------------------- |
 | Kubernetes demo       | `make k8s-apply`, then `make k8s-demo V1=<img> V2=<img>`          |
 | Skip k3s / monitoring | `ansible-playbook site.yml --skip-tags k3s,monitoring`              |
-| Preview subdomains    | set`forgeflow_preview_domain` + wildcard DNS + DNS-01 wildcard cert |
+| Preview subdomains    | §2 g                                                                |
 | Lint everything       | `make devops-lint`                                                  |

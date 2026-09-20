@@ -102,10 +102,10 @@ server {
 # Per-project sandbox previews: *.{{ forgeflow_preview_domain }} -> the Caddy preview proxy.
 #
 # Requires a WILDCARD DNS record (*.{{ forgeflow_preview_domain }} -> this VM) and a WILDCARD
-# certificate, which Let's Encrypt only issues over the DNS-01 challenge:
-#
-#     sudo certbot certonly --manual --preferred-challenges dns \
-#          -d '*.{{ forgeflow_preview_domain }}' -d '{{ forgeflow_preview_domain }}'
+# certificate, which Let's Encrypt only issues over the DNS-01 challenge. It must cover BOTH
+# `*.{{ forgeflow_preview_domain }}` (frontend previews) and `*.api.{{ forgeflow_preview_domain }}`
+# (their backends): a wildcard matches one label, and the api hostnames are one label deeper.
+# See DEPLOYMENT.md §2 g for an acme.sh recipe that renews on its own.
 #
 # Caddy does the per-project routing by container name; nginx just terminates TLS and forwards.
 server {
