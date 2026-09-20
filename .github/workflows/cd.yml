@@ -266,9 +266,8 @@ jobs:
     # `inputs` is null on a workflow_run event, so compare explicitly rather than negating null.
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_frontend != true }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    # No working-directory: the Vercel project's Root Directory is `frontend`, so the CLI
+    # must run from the repo root and let Vercel descend into it.
     steps:
       - uses: actions/checkout@v4
         with:
