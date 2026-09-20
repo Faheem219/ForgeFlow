@@ -39,7 +39,7 @@ forgeflow_cors_origins: "https://forgeflow-ecru.vercel.app"
 # Wildcard domain for per-project sandbox previews. Leave blank to skip preview exposure entirely
 # (everything else still works) — it needs a wildcard DNS record and a wildcard TLS cert, which is
 # a bigger commitment than the rest of this playbook.
-forgeflow_preview_domain: ""
+forgeflow_preview_domain: "preview.forgeflow-backend.ddnsfree.com"
 
 # ----------------------------------------------------------------------------- container image
 # Overridden per-deploy by the CD pipeline, which writes an immutable SHA tag into .env.
