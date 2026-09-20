@@ -22,7 +22,7 @@ import logging
 import time
 from typing import Any
 
-from docker.errors import APIError, DockerException, NotFound
+from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 
 # SystemError shadows the builtin (taxonomy name fixed by the plan); A004 suppressed on-line.
 from app.core.config import get_config
@@ -99,6 +99,26 @@ def _is_pool_exhausted(exc: Exception) -> bool:
 def _is_missing_network(exc: Exception) -> bool:
     text = str(exc).lower()
     return "network" in text and "not found" in text
+
+
+#: Docker's wording when the image is neither on this machine nor pullable. `containers.run`
+#: falls back to a registry pull, so a *locally built* image that was never built (or was built
+#: under a different tag) surfaces as a pull failure rather than a plain 404.
+_MISSING_IMAGE_MARKERS = (
+    "no such image",
+    "pull access denied",
+    "manifest unknown",
+    "manifest for",
+    "not found: manifest",
+    "repository does not exist",
+)
+
+
+def _is_missing_image(exc: Exception) -> bool:
+    if isinstance(exc, ImageNotFound):
+        return True
+    text = str(exc).lower()
+    return any(marker in text for marker in _MISSING_IMAGE_MARKERS)
 
 
 def _map_status(docker_status: str) -> SandboxState:
@@ -361,9 +381,19 @@ class SandboxManager:
             pids_limit=int(config.get("sandbox_pids_limit")),
             read_only=bool(config.get("sandbox_read_only_root")),
         )
+        image = str(kwargs["image"])
         try:
             return await asyncio.to_thread(client.containers.run, **kwargs)
         except APIError as exc:
+            # The daemon's own reason never reaches the user (SystemError must not leak
+            # internals), so log it — it is the only place the real cause is recorded.
+            logger.warning("sandbox create failed for %s: %s", project_id, exc)
+            if _is_missing_image(exc):
+                raise SystemError(
+                    f"The sandbox image '{image}' is not on this machine. It is built "
+                    "locally, not pulled: run `make sandbox-build` (or set SANDBOX_IMAGE to "
+                    "a tag you already have), then try again."
+                ) from exc
             raise SystemError("Failed to create sandbox container") from exc
 
     async def _stop_container(self, project_id: str) -> bool:

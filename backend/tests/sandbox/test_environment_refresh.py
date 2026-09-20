@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 from beanie import PydanticObjectId
+from docker.errors import APIError, ImageNotFound
 
 from app.core.config import get_config
 from app.db.models import Project
@@ -307,3 +308,59 @@ async def test_destroy_with_volumes_removes_the_home_cache_too() -> None:
 
     assert volume_name(pid) not in client.volumes._store
     assert home_volume_name(pid) not in client.volumes._store
+
+
+async def test_a_sandbox_image_that_was_never_built_says_so() -> None:
+    """The image is built locally, never pulled — so its absence is a setup step, not a mystery.
+
+    `containers.run` falls back to a registry pull, so the daemon reports "pull access denied"
+    rather than a plain 404. Reported as "Failed to create sandbox container", that cost a debug
+    session: the message has to name the image and the command that makes one.
+    """
+    from app.core.errors import SystemError
+
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    image = str(get_config().get("sandbox_image"))
+    client.containers.fail_run_with = APIError(
+        f"pull access denied for {image}, repository does not exist "
+        "or may require 'docker login'"
+    )
+
+    with pytest.raises(SystemError) as excinfo:
+        await manager.ensure(project)
+
+    assert image in str(excinfo.value)
+    assert "make sandbox-build" in str(excinfo.value)
+
+
+async def test_a_plain_image_not_found_is_diagnosed_the_same_way() -> None:
+    """The other shape of the same failure — the daemon's own 404 — reads identically."""
+    from app.core.errors import SystemError
+
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    image = str(get_config().get("sandbox_image"))
+    client.containers.fail_run_with = ImageNotFound(f"no such image: {image}")
+
+    with pytest.raises(SystemError) as excinfo:
+        await manager.ensure(project)
+
+    assert "make sandbox-build" in str(excinfo.value)
+
+
+async def test_an_unrelated_create_failure_is_not_blamed_on_the_image() -> None:
+    """A wrong diagnosis is worse than a vague one: only image failures get the build advice."""
+    from app.core.errors import SystemError
+
+    client = FakeDockerClient()
+    manager = SandboxManager(client=client)
+    project = await _project()
+    client.containers.fail_run_with = APIError("invalid memory limit")
+
+    with pytest.raises(SystemError) as excinfo:
+        await manager.ensure(project)
+
+    assert "make sandbox-build" not in str(excinfo.value)

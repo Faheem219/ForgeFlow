@@ -94,6 +94,9 @@ class FakeContainers:
     def __init__(self, client: FakeDockerClient) -> None:
         self._client = client
         self._store: dict[str, FakeContainer] = {}
+        #: Set to a docker error to make `run()` fail the way the daemon would — notably the
+        #: locally built sandbox image being absent, which `run()` reports as a *pull* failure.
+        self.fail_run_with: BaseException | None = None
 
     def get(self, name: str) -> FakeContainer:
         container = self._store.get(name)
@@ -102,6 +105,8 @@ class FakeContainers:
         return container
 
     def run(self, **kwargs: Any) -> FakeContainer:
+        if self.fail_run_with is not None:
+            raise self.fail_run_with
         container = FakeContainer(
             self._client,
             name=kwargs["name"],
