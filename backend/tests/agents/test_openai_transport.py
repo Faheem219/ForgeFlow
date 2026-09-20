@@ -244,6 +244,49 @@ def test_other_capacity_phrasings_are_transient(message: str) -> None:
     assert _is_transient_openai_error(_mid_stream_error(message)) is True
 
 
+#: What OpenRouter actually sent when its cheapest upstream stalled mid-generation. Verbatim,
+#: because this classification rests entirely on the wording.
+_UPSTREAM_TIMEOUT = (
+    "Upstream error from InferenceNet: Inference request timed out "
+    "(generation ID = gv2_j7l6KkISdzGaLPunQ3AVO)"
+)
+
+
+def test_a_brokered_upstream_timeout_is_transient() -> None:
+    """A broker cannot fail over once the stream is open, so the retry has to be ours.
+
+    Unmatched, this read as a rejection and burned none of the four retries — the one case where
+    retrying is most likely to work, because it re-enters OpenRouter's routing and may well land
+    on a different upstream.
+    """
+    exc = _mid_stream_error(_UPSTREAM_TIMEOUT)
+    assert not hasattr(exc, "status_code")  # HTTP was 200; only the text can classify it
+    assert _is_transient_openai_error(exc) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Inference request timed out",
+        "Request timeout",
+        "context deadline exceeded",
+        "Gateway Timeout",
+    ],
+)
+def test_other_timeout_phrasings_are_transient(message: str) -> None:
+    assert _is_transient_openai_error(_mid_stream_error(message)) is True
+
+
+def test_an_upstream_timeout_keeps_the_provider_wording() -> None:
+    """The upstream's name and generation id are how a report is traced back to the broker's own
+    logs — never swallow them."""
+    message = _provider_message(_mid_stream_error(_UPSTREAM_TIMEOUT), produced=False)
+
+    assert "rejected the request" not in message  # it was accepted, then it stalled
+    assert "InferenceNet" in message
+    assert "gv2_j7l6KkISdzGaLPunQ3AVO" in message
+
+
 def test_mid_stream_business_error_is_not_retried() -> None:
     # A genuine rejection must fail fast rather than burn retries on a guaranteed failure.
     exc = _mid_stream_error("This model does not support tool use")

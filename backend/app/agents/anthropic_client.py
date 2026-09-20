@@ -850,6 +850,13 @@ def _from_completion(response: Any) -> Iterator[StreamEvent]:
 #: then report that it is out of capacity — e.g. "ResourceExhausted: Worker local total request
 #: limit reached (16/16)". The SDK surfaces that as a bare ``APIError`` carrying **no status code**
 #: (the response really was a 200), so its text is the only signal available to classify it.
+#:
+#: Timeouts belong here for the same reason, and are their own failure mode: a *broker* endpoint
+#: (OpenRouter) fronts several upstreams per model id, and once it has opened the stream it can no
+#: longer fail over to another one — ``allow_fallbacks`` only covers a failure at dispatch. So an
+#: upstream that stalls arrives as "Upstream error from <provider>: Inference request timed out",
+#: inside a 200. Unmatched, that read as a *rejection* and was raised on the first try; matched, it
+#: costs a retry, and the retry re-enters the broker's routing — very often a different upstream.
 _TRANSIENT_STREAM_MARKERS: tuple[str, ...] = (
     "resourceexhausted",
     "resource_exhausted",
@@ -861,6 +868,9 @@ _TRANSIENT_STREAM_MARKERS: tuple[str, ...] = (
     "temporarily unavailable",
     "service unavailable",
     "try again",
+    "timed out",
+    "timeout",
+    "deadline exceeded",
 )
 
 

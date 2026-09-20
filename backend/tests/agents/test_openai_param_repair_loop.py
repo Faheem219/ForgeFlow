@@ -130,6 +130,18 @@ async def _drain(
     return events
 
 
+#: A broker (OpenRouter) whose upstream stalled *after* the stream was open: HTTP 200, then an
+#: error frame in the SSE body, which the SDK raises as a bare `APIError` with no status code.
+UPSTREAM_TIMEOUT = openai_sdk.APIError(
+    message=(
+        "Upstream error from InferenceNet: Inference request timed out "
+        "(generation ID = gv2_j7l6KkISdzGaLPunQ3AVO)"
+    ),
+    request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    body=None,
+)
+
+
 # ---------------------------------------------------------------- the reported bug, fixed
 
 
@@ -262,3 +274,46 @@ async def test_a_seeded_model_sends_the_right_body_on_the_very_first_call() -> N
     assert "max_tokens" not in endpoint.bodies[0]
     assert endpoint.bodies[0]["max_completion_tokens"] == 4096
     assert "temperature" not in endpoint.bodies[0]
+
+
+async def test_a_brokered_upstream_timeout_is_retried_rather_than_surfaced() -> None:
+    """The stall costs a retry, not the stage.
+
+    `allow_fallbacks` cannot save a request whose stream is already open, so the second chance has
+    to be ours — and because it re-enters the broker's routing, it may land on a different upstream
+    entirely. The point of the assertion on the bodies: this is a *retry* (same request, sent
+    again), not a param repair — nothing about the request was wrong.
+    """
+    endpoint = FakeEndpoint(UPSTREAM_TIMEOUT)
+
+    events: list[StreamEvent] = []
+    async for event in OpenAITransport(ParamMemo()).run(
+        _request("z-ai/glm-5.3-flash"),
+        endpoint.create,
+        endpoint="https://openrouter.ai/api/v1",
+        error_type=openai_sdk.OpenAIError,
+    ):
+        events.append(event)
+
+    assert isinstance(events[-1], TurnComplete)  # the stage completed
+    assert len(endpoint.bodies) == 2
+    assert endpoint.bodies[0] == endpoint.bodies[1]  # resent unchanged, not repaired
+    # The cheapest-upstream preference survives the retry — a retry must not silently cost more.
+    assert endpoint.bodies[1]["extra_body"]["provider"] == {"sort": "price"}
+
+
+async def test_an_upstream_timeout_that_keeps_timing_out_still_gives_up() -> None:
+    """Bounded, like every other ladder here: three attempts at OPENAI_MAX_RETRIES=2, then stop."""
+    endpoint = FakeEndpoint(UPSTREAM_TIMEOUT, UPSTREAM_TIMEOUT, UPSTREAM_TIMEOUT)
+
+    with pytest.raises(ProviderError) as excinfo:
+        async for _ in OpenAITransport(ParamMemo()).run(
+            _request("z-ai/glm-5.3-flash"),
+            endpoint.create,
+            endpoint="https://openrouter.ai/api/v1",
+            error_type=openai_sdk.OpenAIError,
+        ):
+            pass
+
+    assert len(endpoint.bodies) == 3
+    assert "InferenceNet" in str(excinfo.value)  # the upstream that failed is still named
