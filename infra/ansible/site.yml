@@ -20,6 +20,16 @@
   become: true
 
   pre_tasks:
+    # group_vars/<name>.yml is only auto-loaded for a group called <name>, and there is no group
+    # "vault" — so the optional secrets file has to be pulled in by hand. `tags: always` so a
+    # tag-limited run (--tags forgeflow) still sees it; include_vars handles ansible-vault files.
+    - name: Load the optional secrets file
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/vault.yml"
+      when: (playbook_dir ~ '/group_vars/vault.yml') is file
+      no_log: true
+      tags: always
+
     - name: Gather facts
       ansible.builtin.setup:
 
