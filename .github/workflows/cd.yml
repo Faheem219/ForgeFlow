@@ -278,34 +278,21 @@ jobs:
         with:
           node-version: 20
 
-      - run: corepack enable
-
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
-      # `vercel build` does not reliably run the install step outside Vercel's own builders
-      # ("sh: vite: not found"), so install explicitly, the same way CI does.
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      # Build on Vercel, not on the runner. A runner-side `vercel build` ran the framework's
+      # default `vite build` against a node_modules its own install step had pruned
+      # ("sh: vite: not found"); the cloud build uses exactly the project settings and
+      # vercel.json the project was created with — the same path a manual `vercel --prod` takes.
+      #
       # Deliberately ordered AFTER deploy-backend: the frontend is compiled against
       # VITE_API_BASE_URL, so shipping it first would point a new UI at an old API.
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Build
-        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VITE_API_BASE_URL: https://${{ vars.FORGEFLOW_DOMAIN }}
-
       - name: Deploy
         run: |
-          URL="$(vercel deploy --prebuilt --prod --token='${{ secrets.VERCEL_TOKEN }}')"
+          URL="$(vercel deploy --prod --yes \
+                  --token='${{ secrets.VERCEL_TOKEN }}' \
+                  --build-env VITE_API_BASE_URL='https://${{ vars.FORGEFLOW_DOMAIN }}')"
           echo "Deployed: $URL"
           echo "### Frontend deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "$URL" >> "$GITHUB_STEP_SUMMARY"
