@@ -137,6 +137,6 @@ Check WebSockets reach the app (`101`, `401` or `403` = good; `400`/`426` = head
 ```bash
 curl -i -N -o /dev/null -w '%{http_code}\n' \
   -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
-  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+  -H 'Sec-WebSocket-Version: 13' -H "Sec-WebSocket-Key: $(head -c16 /dev/urandom | base64)" \
   https://forgeflow-backend.ddnsfree.com/ws/projects/test
 ```
