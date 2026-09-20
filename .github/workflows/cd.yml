@@ -283,6 +283,11 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
+      # `vercel build` does not reliably run the install step outside Vercel's own builders
+      # ("sh: vite: not found"), so install explicitly, the same way CI does.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       # Deliberately ordered AFTER deploy-backend: the frontend is compiled against
       # VITE_API_BASE_URL, so shipping it first would point a new UI at an old API.
       - name: Pull Vercel environment
