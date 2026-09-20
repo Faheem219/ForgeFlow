@@ -33,10 +33,14 @@ Provider keys (`ANTHROPIC_API_KEY`) are left blank on purpose — set them in `/
 ```yaml
 vault_seed_admin_email: you@example.com
 vault_seed_admin_password: <strong password>
+vault_app_db_cluster_uri: mongodb+srv://<user>:<pass>@<cluster>.mongodb.net   # Atlas; optional
 ```
 
-Ansible writes these into `/opt/forgeflow/.env` as `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`;
-the seed step in §5 creates the admin user from them. Optional: encrypt with
+Ansible writes these into `/opt/forgeflow/.env`. The first two become `SEED_ADMIN_EMAIL` /
+`SEED_ADMIN_PASSWORD` (the seed step in §5 creates the admin user from them). The third is the
+DB that *deployed* generated apps use — it must be Atlas, not a docker name; leave it out and set
+it in `/admin` instead if you prefer. Sandboxes (preview/tests) use the VM's own `appdb`
+container automatically. Optional: encrypt with
 `ansible-vault encrypt group_vars/vault.yml`, then add `--ask-vault-pass` to every playbook run.
 
 ### GitHub → Settings → Secrets and variables → Actions

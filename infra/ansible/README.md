@@ -118,6 +118,7 @@ ansible-vault create group_vars/vault.yml
 # vault_anthropic_api_key: sk-ant-...
 # vault_seed_admin_email: you@example.com
 # vault_seed_admin_password: ...
+# vault_app_db_cluster_uri: mongodb+srv://...   # Atlas, for DEPLOYED generated apps
 
 ansible-playbook site.yml --ask-vault-pass
 ```
