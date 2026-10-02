@@ -8,6 +8,7 @@ import {
   envKeysFor,
   initialLiveState,
   logLinesFor,
+  nodeViews,
   snapshotOf,
 } from './topologyModel';
 
@@ -52,6 +53,30 @@ describe('hydration', () => {
     expect(state.statuses).toEqual({ fe: 'failed', be: 'healthy', db: 'healthy' });
     expect(state.urls.be).toBe('https://api.onrender.com');
     expect(state.overall).toBe('degraded');
+  });
+
+  it('shows why a target failed after a reload, from the record itself', () => {
+    // The live deploy.status events are gone after a reload; the reason the record kept is not.
+    const failed: DeploymentDto = {
+      ...DEGRADED,
+      status: 'failed',
+      topology_snapshot: {
+        ...DEGRADED.topology_snapshot,
+        nodes: [
+          {
+            id: 'be',
+            kind: 'backend',
+            provider: 'vercel',
+            status: 'failed',
+            error: 'vercel rejected the credentials (403, forbidden)',
+            hint: 'Replace VERCEL_TOKEN in Admin → Settings.',
+          },
+        ],
+      },
+    };
+    const [be] = nodeViews(failed.topology_snapshot, initialLiveState(failed));
+    expect(be.error).toBe('vercel rejected the credentials (403, forbidden)');
+    expect(be.hint).toBe('Replace VERCEL_TOKEN in Admin → Settings.');
   });
 
   it('falls back to the fixed-stack shape before the first deploy', () => {

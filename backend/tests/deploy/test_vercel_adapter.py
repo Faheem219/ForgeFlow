@@ -202,10 +202,52 @@ async def test_logs_are_returned_as_lines(platform_token: str) -> None:
 
 
 async def test_destroy_deletes_the_deployment(platform_token: str) -> None:
+    """A ref with no ForgeFlow project name can only take its own deployment down."""
     api = FakeDeployApi({("DELETE", "/v13/deployments"): (200, {"state": "DELETED"})})
 
     assert await provider(api).destroy(DeployRef(id="dpl_abc123"), mode=DeployMode.seamless)
     assert api.paths == ["/v13/deployments/dpl_abc123"]
+
+
+async def test_destroy_deletes_the_project_forgeflow_created(platform_token: str) -> None:
+    """Vercel refuses to delete a project's current production deployment (403) — the one
+    ForgeFlow deploys — and deleting it alone would leave the project in the dashboard anyway.
+    Deleting the project takes every deployment, alias and env var with it."""
+    api = FakeDeployApi({("DELETE", "/v9/projects"): (200, {})})
+
+    ref = DeployRef(id="dpl_abc123", project="forgeflow-web-23917be5")
+    assert await provider(api).destroy(ref, mode=DeployMode.seamless)
+
+    assert api.paths == ["/v9/projects/forgeflow-web-23917be5"]
+    assert api.calls("DELETE", "/v13/deployments") == []
+    assert api.requests[0].headers["Authorization"] == f"Bearer {platform_token}"
+
+
+async def test_a_project_that_is_already_gone_counts_as_destroyed(platform_token: str) -> None:
+    """Every redeploy's record names the same project: the second teardown finds it gone."""
+    api = FakeDeployApi({("DELETE", "/v9/projects"): (404, {"error": {"code": "not_found"}})})
+
+    ref = DeployRef(id="dpl_abc123", project="forgeflow-api-23917be5")
+    assert await provider(api).destroy(ref, mode=DeployMode.seamless)
+
+
+async def test_a_project_forgeflow_did_not_name_is_never_deleted(platform_token: str) -> None:
+    api = FakeDeployApi({("DELETE", "/v13/deployments"): (200, {"state": "DELETED"})})
+
+    ref = DeployRef(id="dpl_abc123", project="my-own-site")
+    assert await provider(api).destroy(ref, mode=DeployMode.seamless)
+
+    assert api.paths == ["/v13/deployments/dpl_abc123"]
+
+
+async def test_a_refused_project_delete_is_still_reported(platform_token: str) -> None:
+    """Only "already gone" is success — a real refusal must reach the teardown's warnings."""
+    api = FakeDeployApi({("DELETE", "/v9/projects"): (403, {"error": {"code": "forbidden"}})})
+
+    with pytest.raises(ProviderError, match="403"):
+        await provider(api).destroy(
+            DeployRef(id="dpl_abc123", project="forgeflow-web-1"), mode=DeployMode.seamless
+        )
 
 
 # ---------------------------------------------------------------- errors + resilience
@@ -277,3 +319,37 @@ async def test_a_missing_deployment_id_is_fatal(platform_token: str) -> None:
         await provider(api).deploy(spec(), mode=DeployMode.seamless)
 
     assert kind_of(exc.value) is DeployErrorKind.fatal
+
+
+async def test_a_refused_token_names_the_providers_reason_and_the_fix(platform_token: str) -> None:
+    """A revoked token, an expired one and a wrong team scope are all 403s; Vercel's error code is
+    what tells them apart, so it is kept. Its free-text message is not — a body can quote the
+    request."""
+    api = FakeDeployApi(
+        {
+            ("POST", "/v13/deployments"): (
+                403,
+                {"error": {"code": "forbidden", "message": "MONGODB_URI=mongodb+srv://secret"}},
+            )
+        }
+    )
+    spec = DeploySpec(name="forgeflow-api-1", target=DeployTarget.be, files={"a.ts": "x"})
+
+    with pytest.raises(ProviderError) as caught:
+        await provider(api).deploy(spec, mode=DeployMode.seamless)
+
+    assert str(caught.value) == "vercel rejected the credentials (403, forbidden)"
+    assert "secret" not in str(caught.value)
+    assert "VERCEL_TOKEN" in (caught.value.fallback_hint or "")
+
+
+async def test_an_error_code_that_is_not_an_identifier_is_dropped(platform_token: str) -> None:
+    api = FakeDeployApi(
+        {("POST", "/v13/deployments"): (400, {"error": {"code": "has spaces: and=stuff"}})}
+    )
+    spec = DeploySpec(name="forgeflow-api-1", target=DeployTarget.be, files={"a.ts": "x"})
+
+    with pytest.raises(ProviderError) as caught:
+        await provider(api).deploy(spec, mode=DeployMode.seamless)
+
+    assert str(caught.value) == "vercel rejected POST /v13/deployments (400)"

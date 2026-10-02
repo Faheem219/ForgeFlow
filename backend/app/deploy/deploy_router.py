@@ -122,6 +122,14 @@ async def _latest(project_id: str, user_id: PydanticObjectId) -> Deployment | No
     return await Deployment.find(query).sort("-created_at", "-_id").first_or_none()
 
 
+def _node(deployment: Deployment, node_id: str) -> dict[str, Any] | None:
+    nodes = deployment.topology_snapshot.get("nodes")
+    for node in nodes if isinstance(nodes, list) else []:
+        if isinstance(node, dict) and node.get("id") == node_id:
+            return node
+    return None
+
+
 def _to_public(deployment: Deployment) -> DeploymentPublic:
     return DeploymentPublic(
         id=str(deployment.id),
@@ -196,11 +204,21 @@ async def latest_deployment_provider_logs(
 
     ref = deployment.refs.get(str(resolved))
     if ref is None:
-        base.error = (
-            "This deployment predates provider log support, so its deployment id was never "
-            "recorded. Redeploy to get provider logs; the pipeline log still shows what ForgeFlow "
-            "did."
-        )
+        node = _node(deployment, str(resolved))
+        if node is not None and node.get("error"):
+            # The target failed before the provider created anything (a refused token, an
+            # unreadable source): there is no provider deployment, so no provider log either.
+            base.error = (
+                f"This {'backend' if resolved is DeployTarget.be else 'frontend'} never reached "
+                f"the provider — {node['error']}. There is no provider log for it; the Pipeline "
+                "tab shows every step ForgeFlow took."
+            )
+        else:
+            base.error = (
+                "This deployment predates provider log support, so its deployment id was never "
+                "recorded. Redeploy to get provider logs; the pipeline log still shows what "
+                "ForgeFlow did."
+            )
         return base
 
     base.provider = ref.provider

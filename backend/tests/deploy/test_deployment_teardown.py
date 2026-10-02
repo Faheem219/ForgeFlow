@@ -112,6 +112,22 @@ async def test_a_refusing_provider_is_reported_but_still_retires_the_record() ->
     assert stored is not None and stored.status == STATUS_DELETED
 
 
+async def test_a_refused_target_stays_on_the_record_to_be_retried() -> None:
+    """Dropping the handle left a still-live site nothing pointed at; kept, a later teardown can
+    reach it. Only what the provider refused stays — the destroyed target is gone."""
+    pid = PydanticObjectId()
+    deployment = await _deployed(pid)
+    fe = FakeDeployProvider("vercel", DeployTarget.fe, "https://web.vercel.app")
+    be = FakeDeployProvider("vercel", DeployTarget.be, "https://api.vercel.app", destroy_fails=True)
+
+    await DeploymentTeardown(factory_of(fe, be)).destroy(deployment)
+
+    stored = await Deployment.get(deployment.id)
+    assert stored is not None and stored.status == STATUS_DELETED
+    assert sorted(stored.refs) == ["be"]
+    assert stored.urls == {}
+
+
 async def test_one_failing_target_does_not_stop_the_other() -> None:
     pid = PydanticObjectId()
     deployment = await _deployed(pid)

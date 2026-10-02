@@ -362,6 +362,10 @@ export interface TopologyNodeDto {
   provider: string;
   url?: string | null;
   status: string;
+  /** Why this target failed, as recorded on the deployment — survives a reload, unlike events. */
+  error?: string | null;
+  /** What to do about it (e.g. which token to replace), when the failure has a known fix. */
+  hint?: string | null;
 }
 
 /** A wiring edge; `label` is the env **key** that carries the target's URL/URI (never its value). */
