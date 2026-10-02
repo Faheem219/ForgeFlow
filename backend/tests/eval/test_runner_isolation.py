@@ -18,6 +18,7 @@ from app.orchestrator.requirements import RequirementsService
 from tests.eval.eval_fakes import (
     FakeConductor,
     FakeRepair,
+    FakeTestGen,
     FakeTests,
     RecordingCleanup,
     StepClock,
@@ -32,6 +33,7 @@ def _runner(cleanup: RecordingCleanup, **overrides: object) -> EvalRunner:
         "conductor": FakeConductor(),
         "tests": FakeTests(),
         "repair": FakeRepair(),
+        "testgen": FakeTestGen(),
         "cleanup": cleanup,
         "clock": StepClock(),
     }
@@ -94,6 +96,7 @@ async def test_a_spec_that_fails_does_not_derail_the_ones_after_it() -> None:
         conductor=FakeConductor(),
         tests=FakeTests(),
         repair=FakeRepair(),
+        testgen=FakeTestGen(),
         cleanup=RecordingCleanup(),
         clock=StepClock(),
     )
@@ -101,6 +104,7 @@ async def test_a_spec_that_fails_does_not_derail_the_ones_after_it() -> None:
         conductor=conductor,
         tests=FakeTests(),
         repair=FakeRepair(),
+        testgen=FakeTestGen(),
         cleanup=RecordingCleanup(),
         clock=StepClock(),
     )
@@ -157,4 +161,4 @@ async def test_cleanup_happens_for_the_deploy_legs_too() -> None:
 def test_the_costly_legs_are_opt_in_by_default() -> None:
     assert Legs().deploy is False and Legs().validate is False
     assert Legs.with_deploy().deploy and Legs.with_deploy().validate
-    assert Legs().names() == ["build", "test", "repair"]
+    assert Legs().names() == ["build", "testgen", "test", "repair"]

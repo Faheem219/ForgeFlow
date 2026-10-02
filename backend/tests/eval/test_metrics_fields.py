@@ -11,6 +11,7 @@ import pytest
 
 from app.eval.metrics import (
     OUTCOME_DELIVERED,
+    OUTCOME_ESCALATED,
     EvalReport,
     PassRate,
     SpecMetrics,
@@ -19,6 +20,7 @@ from app.eval.runner import EvalRunner
 from tests.eval.eval_fakes import (
     FakeConductor,
     FakeRepair,
+    FakeTestGen,
     FakeTests,
     RecordingCleanup,
     StepClock,
@@ -33,6 +35,7 @@ def _runner(*, tests: FakeTests, repair: FakeRepair) -> EvalRunner:
         conductor=FakeConductor(),
         tests=tests,
         repair=repair,
+        testgen=FakeTestGen(),
         cleanup=RecordingCleanup(),
         clock=StepClock(),
     )
@@ -178,3 +181,61 @@ def test_an_empty_report_reports_nothing_rather_than_zero() -> None:
     assert agg["specs"] == 0
     assert agg["mean_first_pass_rate"] is None
     assert agg["mean_post_repair_rate"] is None
+
+
+# --------------------------------------------------------------------- criterion-level grading
+
+
+async def test_criteria_are_graded_from_tagged_tests_before_and_after_repair() -> None:
+    """Sample spec: 2 criteria. First pass tags one passing + one failing row → 1 of 2 met."""
+    m = await _runner(tests=FakeTests(passed=1, failed=1), repair=FakeRepair()).run_spec(
+        make_spec()
+    )
+
+    assert m.criteria_total == 2
+    assert m.criteria_covered == 2
+    assert (m.first_pass_criteria.passed, m.first_pass_criteria.total) == (1, 2)
+    assert m.post_repair_criteria.green is True
+    assert m.criteria_repair_delta == 0.5
+    assert m.outcome == OUTCOME_DELIVERED
+
+
+async def test_a_criterion_without_a_test_stays_in_the_denominator() -> None:
+    """Untested criteria are unmet, not dropped — and they block 'delivered' even when green."""
+    runner = EvalRunner(
+        conductor=FakeConductor(),
+        tests=FakeTests(passed=1, failed=0),
+        repair=FakeRepair(),
+        testgen=FakeTestGen(cover=1),
+        cleanup=RecordingCleanup(),
+        clock=StepClock(),
+    )
+
+    m = await runner.run_spec(make_spec())
+
+    # FakeTests tags its single row with the first id only, so the second criterion is untested.
+    assert m.criteria_covered == 1
+    assert (m.first_pass_criteria.passed, m.first_pass_criteria.total) == (1, 2)
+    assert m.first_pass.green is True
+    assert m.outcome == OUTCOME_ESCALATED
+
+
+async def test_untagged_tests_never_count_toward_a_criterion() -> None:
+    from beanie import PydanticObjectId
+
+    from app.db.models import TestRun
+    from app.eval.runner import _criteria_rate
+
+    run = TestRun(
+        project_id=PydanticObjectId(),
+        results=[
+            {"name": "skeleton", "status": "passed", "framework": "jest"},
+            {"name": "a", "status": "passed", "framework": "jest", "criterion_id": "ac-1"},
+            {"name": "b", "status": "failed", "framework": "jest", "criterion_id": "ac-2"},
+            {"name": "c", "status": "passed", "framework": "jest", "criterion_id": "ac-2"},
+        ],
+    )
+
+    rate = _criteria_rate(run, ["ac-1", "ac-2", "ac-3"])
+
+    assert (rate.passed, rate.failed, rate.total) == (1, 2, 3)

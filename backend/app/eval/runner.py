@@ -2,7 +2,7 @@
 
 Runs a benchmark spec through the **real** pipeline with no UI attached:
 
-    project → requirements (from the spec) → build → test → repair → [deploy] → [validate]
+    project → requirements (from the spec) → build → testgen → test → repair → [deploy] → [validate]
 
 It drives the same conductor and the same handlers the UI drives, rather than reimplementing them.
 That is the whole design: a harness that reimplements the pipeline measures the harness, not the
@@ -12,6 +12,12 @@ product, and drifts the moment a handler changes.
 repair loop (`first_pass`) and the loop's own final run supplies `post_repair`, so the contribution
 — what the bounded repair loop actually adds — is a difference this runner observes rather than a
 claim it repeats.
+
+**The oracle is the spec.** After the build, the product's own test-generation agent (phase-27)
+writes tests tagged with each acceptance criterion's id, *before* anything is scored. Without it
+the only tests in the workspace are the skeleton's placeholders, which pass whatever was built —
+a pass rate measured against them says nothing about the spec. Each criterion is then graded from
+the tagged results, so both rates exist per test and per criterion.
 
 **Costly legs are opt-in.** Deploy and validate create billable provider resources, so they are off
 unless asked for; CI runs the free legs. Each spec gets its own project, sandbox and database, and
@@ -31,6 +37,7 @@ from typing import Any, Protocol
 from beanie import PydanticObjectId
 
 from app.db.models import Project, Run, TestRun
+from app.db.models.common import utcnow
 from app.db.models.enums import Stage, StageStatus
 from app.db.repos import StageStateRepo
 from app.eval.metrics import (
@@ -58,6 +65,7 @@ class Legs:
     """Which legs of the pipeline to run. Costly ones are off by default (§7 cost discipline)."""
 
     build: bool = True
+    testgen: bool = True
     test: bool = True
     repair: bool = True
     deploy: bool = False
@@ -68,7 +76,8 @@ class Legs:
         return cls(deploy=True, validate=True)
 
     def names(self) -> list[str]:
-        return [n for n in ("build", "test", "repair", "deploy", "validate") if getattr(self, n)]
+        names = ("build", "testgen", "test", "repair", "deploy", "validate")
+        return [n for n in names if getattr(self, n)]
 
 
 class _Conductor(Protocol):
@@ -85,6 +94,12 @@ class _RepairLoop(Protocol):
     async def run(self, project: Project, test_run: TestRun) -> Any: ...
 
 
+class _TestGen(Protocol):
+    """The phase-27 agent's entry point: write criterion-tagged tests into the workspace."""
+
+    async def run(self, project: Project, run: Run) -> Any: ...
+
+
 #: Tears down one spec's sandbox + app database. Injected so tests never touch Docker.
 Cleanup = Callable[[Project], Awaitable[None]]
 
@@ -96,6 +111,27 @@ def _pass_rate(run: TestRun | None) -> PassRate:
     passed = sum(1 for r in results if r.get("status") == TestStatus.passed)
     failed = sum(1 for r in results if r.get("status") == TestStatus.failed)
     return PassRate(total=len(results), passed=passed, failed=failed)
+
+
+def _criteria_rate(run: TestRun | None, criterion_ids: list[str]) -> PassRate:
+    """Grade each spec criterion from the tests tagged with its id.
+
+    Met = at least one tagged test passed and none failed. Every criterion stays in the
+    denominator: one with no test, or whose tests never ran, is unmet rather than excluded.
+    """
+    if run is None or not criterion_ids:
+        return PassRate()
+    statuses: dict[str, list[str]] = {cid: [] for cid in criterion_ids}
+    for result in run.results or []:
+        cid = result.get("criterion_id")
+        if cid in statuses:
+            statuses[cid].append(str(result.get("status")))
+    met = sum(
+        1
+        for found in statuses.values()
+        if TestStatus.passed in found and TestStatus.failed not in found
+    )
+    return PassRate(total=len(criterion_ids), passed=met, failed=len(criterion_ids) - met)
 
 
 async def _default_cleanup(project: Project) -> None:  # pragma: no cover - needs Docker/a cluster
@@ -120,6 +156,7 @@ class EvalRunner:
         conductor: _Conductor | None = None,
         tests: _TestRunner | None = None,
         repair: _RepairLoop | None = None,
+        testgen: _TestGen | None = None,
         requirements: RequirementsService | None = None,
         projects: ProjectService | None = None,
         cleanup: Cleanup | None = None,
@@ -128,6 +165,7 @@ class EvalRunner:
         self._conductor = conductor
         self._tests = tests
         self._repair = repair
+        self._testgen = testgen
         self._requirements = requirements or RequirementsService()
         self._projects = projects or ProjectService()
         self._cleanup = cleanup or _default_cleanup
@@ -157,6 +195,13 @@ class EvalRunner:
             self._repair = RepairLoopController()
         return self._repair
 
+    def _testgen_impl(self) -> _TestGen:
+        if self._testgen is None:
+            from app.agents.testgen import TestGenAgent
+
+            self._testgen = TestGenAgent()
+        return self._testgen
+
     # -- one spec ----------------------------------------------------------------------
 
     async def run_spec(
@@ -175,9 +220,15 @@ class EvalRunner:
             await self._requirements_leg(project, spec, metrics, started)
             if legs.build:
                 await self._build_leg(project, spec, user_id, metrics, started)
+            criterion_ids = await self._criterion_ids(project)
+            metrics.criteria_total = len(criterion_ids)
+            if legs.testgen:
+                await self._testgen_leg(project, criterion_ids, metrics, started)
             first_run = await self._test_leg(project, metrics, started) if legs.test else None
+            metrics.first_pass_criteria = _criteria_rate(first_run, criterion_ids)
             if legs.repair:
-                await self._repair_leg(project, first_run, metrics, started)
+                final_run = await self._repair_leg(project, first_run, metrics, started)
+                metrics.post_repair_criteria = _criteria_rate(final_run, criterion_ids)
             if legs.deploy:
                 await self._deploy_leg(project, user_id, metrics, started)
             if legs.validate:
@@ -225,7 +276,39 @@ class EvalRunner:
                 message=spec.inputs.prompt or None,
             ),
         )
+        # The build stage is detached (it outlives a request by design), so `handle_intent` returns
+        # once the build is *accepted*. Measuring before it finishes would grade a half-written
+        # workspace and race the build for the sandbox — join it first.
+        from app.orchestrator.conductor import drain_detached
+
+        await drain_detached()
+        state = await self._stages.get_or_create(project.id, Stage.build)
+        metrics.build_status = str(state.status)
         self._mark(metrics, "build", started)
+
+    async def _criterion_ids(self, project: Project) -> list[str]:
+        assert project.id is not None
+        spec = await self._requirements.latest(project.id)
+        if spec is None:
+            return []
+        return [c.id for f in spec.features for c in f.acceptance_criteria]
+
+    async def _testgen_leg(
+        self, project: Project, criterion_ids: list[str], metrics: SpecMetrics, started: float
+    ) -> None:
+        """The product's own test-gen agent writes the oracle from the spec, not the code."""
+        assert project.id is not None
+        run = await Run(project_id=project.id, kind="testgen").insert()
+        try:
+            report = await self._testgen_impl().run(project, run)
+        finally:
+            # The agent accrues cost onto the Run but leaves closing it to the caller; an open Run
+            # reads as work still in flight on the cost panel.
+            run.finished_at = utcnow()
+            await run.save()
+        covered = set(getattr(report, "criteria_covered", None) or [])
+        metrics.criteria_covered = len(covered & set(criterion_ids))
+        self._mark(metrics, "testgen", started)
 
     async def _test_leg(
         self, project: Project, metrics: SpecMetrics, started: float
@@ -238,22 +321,25 @@ class EvalRunner:
 
     async def _repair_leg(
         self, project: Project, first_run: TestRun | None, metrics: SpecMetrics, started: float
-    ) -> None:
+    ) -> TestRun | None:
+        """Run the bounded loop; returns the run post-repair numbers are graded from."""
         if first_run is None:
-            return
+            return None
         if metrics.first_pass.green:
             # Nothing to repair — post-repair equals first-pass rather than a missing number.
             metrics.post_repair = metrics.first_pass
             metrics.repair_outcome = "not_needed"
-            return
+            return first_run
 
         result = await self._repair_impl().run(project, first_run)
         metrics.repair_outcome = getattr(result, "outcome", None)
         loop_metrics = getattr(result, "metrics", None)
         metrics.repair_iterations = int(getattr(loop_metrics, "iterations", 0) or 0)
         metrics.regressions = int(getattr(loop_metrics, "regressions_introduced", 0) or 0)
-        metrics.post_repair = _pass_rate(getattr(result, "final_run", None) or first_run)
+        final_run: TestRun = getattr(result, "final_run", None) or first_run
+        metrics.post_repair = _pass_rate(final_run)
         self._mark(metrics, "repair", started)
+        return final_run
 
     async def _deploy_leg(
         self, project: Project, user_id: PydanticObjectId, metrics: SpecMetrics, started: float
@@ -311,18 +397,21 @@ class EvalRunner:
         report = EvalReport(legs=legs.names())
         for spec in specs if specs is not None else load_all():
             report.records.append(await self.run_spec(spec, legs=legs))
-        from app.db.models.common import utcnow
-
         report.finished_at = utcnow()
         return report
 
 
 def _outcome(metrics: SpecMetrics, legs: Legs) -> str:
-    """Delivered means the thing actually works — green tests, and a live URL if deploy ran."""
+    """Delivered means the thing actually works — green tests, every spec criterion verified by a
+    passing test when tests were generated, and a live URL if deploy ran."""
     if legs.deploy and not metrics.live_url:
         return OUTCOME_ESCALATED
     if legs.test and not metrics.post_repair.green:
         return OUTCOME_ESCALATED
+    if legs.testgen and legs.test and metrics.criteria_total:
+        grade = metrics.post_repair_criteria if legs.repair else metrics.first_pass_criteria
+        if not grade.green:
+            return OUTCOME_ESCALATED
     return OUTCOME_DELIVERED
 
 
@@ -337,41 +426,60 @@ async def _cost_of(project_id: PydanticObjectId | None) -> tuple[int, float]:
 # --------------------------------------------------------------------- CLI
 
 
+def select_specs(selector: str) -> list[EvalSpec]:
+    """``all``, or comma-separated spec ids (a unique prefix is enough). Unknown ids are an error —
+    a typo must not quietly shrink the benchmark."""
+    if selector == "all":
+        return list(load_all())
+    index = spec_index()
+    chosen: list[EvalSpec] = []
+    for wanted in (part.strip() for part in selector.split(",") if part.strip()):
+        matched = [s for sid, s in index.items() if sid == wanted or sid.startswith(wanted)]
+        if not matched:
+            raise ValueError(f"No spec matches {wanted!r}. Known: {', '.join(sorted(index))}")
+        chosen += [s for s in matched if s not in chosen]
+    return chosen
+
+
+def write_report(report: EvalReport, out: Path | None = None) -> Path:
+    out = out or (RESULTS_DIR / f"eval-{int(time.time())}.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.to_json(), encoding="utf-8")
+    return out
+
+
 async def _run_cli(args: Any) -> int:
     from app.db.mongo import init_db
 
     await init_db()
 
-    index = spec_index()
-    if args.spec == "all":
-        specs = list(load_all())
-    else:
-        matched = [s for sid, s in index.items() if sid == args.spec or sid.startswith(args.spec)]
-        if not matched:
-            print(f"No spec matches {args.spec!r}. Known: {', '.join(sorted(index))}")
-            return 1
-        specs = matched
+    try:
+        specs = select_specs(args.spec)
+    except ValueError as exc:
+        print(exc)
+        return 1
 
     legs = Legs.with_deploy() if args.with_deploy else Legs()
     print(f"Running {len(specs)} spec(s) · legs: {', '.join(legs.names())}\n")
 
     report = await EvalRunner().run_all(specs, legs=legs)
-    print(_format(report))
-
-    out = args.out or (RESULTS_DIR / f"eval-{int(time.time())}.json")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(report.to_json(), encoding="utf-8")
-    print(f"\nWrote {out}")
+    print(format_report(report))
+    print(f"\nWrote {write_report(report, args.out)}")
     return 0
 
 
-def _format(report: EvalReport) -> str:
-    rows = [("SPEC", "OUTCOME", "FIRST", "POST", "ITER", "TOKENS", "SECONDS")]
+def format_report(report: EvalReport) -> str:
+    rows: list[tuple[str, ...]] = [
+        ("SPEC", "OUTCOME", "CRIT-FIRST", "CRIT-POST", "TEST-FIRST", "TEST-POST", "ITER")
+        + ("TOKENS", "SECONDS")
+    ]
     for r in report.records:
         rows.append(
             (
                 r.spec_id,
                 r.outcome,
+                _pct(r.first_pass_criteria.rate),
+                _pct(r.post_repair_criteria.rate),
                 _pct(r.first_pass.rate),
                 _pct(r.post_repair.rate),
                 str(r.repair_iterations),
@@ -388,7 +496,10 @@ def _format(report: EvalReport) -> str:
     summary = (
         f"\n{agg['specs']} specs · {agg['delivered']} delivered · {agg['escalated']} escalated · "
         f"{agg['failed']} failed\n"
-        f"first-pass {_pct(agg['mean_first_pass_rate'])} → post-repair "
+        f"criteria met: first-pass {_pct(agg['mean_first_pass_criteria_rate'])} → post-repair "
+        f"{_pct(agg['mean_post_repair_criteria_rate'])} "
+        f"(coverage {_pct(agg['criteria_coverage'])} of {agg['criteria_total']})\n"
+        f"tests passing: first-pass {_pct(agg['mean_first_pass_rate'])} → post-repair "
         f"{_pct(agg['mean_post_repair_rate'])} "
         f"(delta {_pct(agg['mean_repair_delta'])}, {agg['specs_improved_by_repair']} improved)\n"
         f"{agg['total_repair_iterations']} repair iterations · {agg['total_tokens']} tokens · "
@@ -423,4 +534,4 @@ if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
 
 
-__all__ = ["EvalRunner", "Legs", "RESULTS_DIR"]
+__all__ = ["EvalRunner", "Legs", "RESULTS_DIR", "format_report", "select_specs", "write_report"]

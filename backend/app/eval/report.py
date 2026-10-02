@@ -50,6 +50,12 @@ CSV_COLUMNS: tuple[str, ...] = (
     "wall_clock_seconds",
     "live_url",
     "error",
+    # Appended with criterion-level grading (testgen leg) — never move the columns above.
+    "criteria_total",
+    "criteria_covered",
+    "first_pass_criteria_rate",
+    "post_repair_criteria_rate",
+    "criteria_repair_delta",
 )
 
 
@@ -137,6 +143,8 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     flatter it, and both would be false.
     """
     scored = [r for r in records if _rate(r, "first_pass") is not None]
+    graded = [r for r in records if _rate(r, "first_pass_criteria") is not None]
+    criteria_total = sum(int(r.get("criteria_total") or 0) for r in graded)
 
     first = [_rate(r, "first_pass") for r in scored]
     post = [_rate(r, "post_repair") for r in scored]
@@ -160,6 +168,20 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         "first_pass": Distribution.of([f for f in first if f is not None]).to_dict(),
         "post_repair": Distribution.of([p for p in post if p is not None]).to_dict(),
         "repair_delta": Distribution.of(deltas).to_dict(),
+        "first_pass_criteria": Distribution.of(
+            [v for r in graded if (v := _rate(r, "first_pass_criteria")) is not None]
+        ).to_dict(),
+        "post_repair_criteria": Distribution.of(
+            [v for r in graded if (v := _rate(r, "post_repair_criteria")) is not None]
+        ).to_dict(),
+        "criteria_total": criteria_total,
+        "criteria_coverage": (
+            round(sum(int(r.get("criteria_covered") or 0) for r in graded) / criteria_total, 4)
+            if criteria_total
+            else None
+        ),
+        "all_criteria_met_first_pass": sum(1 for r in graded if _green(r, "first_pass_criteria")),
+        "all_criteria_met_post_repair": sum(1 for r in graded if _green(r, "post_repair_criteria")),
         "repair_iterations": Distribution.of(
             [float(r.get("repair_iterations") or 0) for r in records]
         ).to_dict(),
@@ -228,6 +250,11 @@ def _row(record: dict[str, Any]) -> dict[str, Any]:
         "wall_clock_seconds": record.get("wall_clock_seconds"),
         "live_url": record.get("live_url"),
         "error": record.get("error"),
+        "criteria_total": record.get("criteria_total"),
+        "criteria_covered": record.get("criteria_covered"),
+        "first_pass_criteria_rate": (record.get("first_pass_criteria") or {}).get("rate"),
+        "post_repair_criteria_rate": (record.get("post_repair_criteria") or {}).get("rate"),
+        "criteria_repair_delta": record.get("criteria_repair_delta"),
     }
 
 
@@ -241,22 +268,38 @@ def to_csv(records: list[dict[str, Any]]) -> str:
     return buffer.getvalue()
 
 
-def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any] | None = None) -> str:
-    """A report suited to a paper appendix or a pitch deck: headline, then the per-spec table."""
+def to_markdown(
+    records: list[dict[str, Any]],
+    summary: dict[str, Any] | None = None,
+    *,
+    level: int = 1,
+    title: str = "ForgeFlow evaluation",
+) -> str:
+    """A report suited to a paper appendix or a pitch deck: headline, then the per-spec table.
+
+    ``level`` sets the top heading depth, so the same report can be nested in a larger document.
+    """
     summary = summary if summary is not None else summarize(records)
+    h = "#" * level
     first, post = summary["first_pass"], summary["repair_delta"]
     post_rate = summary["post_repair"]
+    crit_first = summary.get("first_pass_criteria") or {}
+    crit_post = summary.get("post_repair_criteria") or {}
 
     lines = [
-        "# ForgeFlow evaluation",
+        f"{h} {title}",
         "",
         f"**{summary['specs']} specs** · {summary['outcomes']['delivered']} delivered · "
         f"{summary['outcomes']['escalated']} escalated · {summary['outcomes']['failed']} failed",
         "",
-        "## Headline",
+        f"{h}# Headline",
         "",
         "| Metric | Mean | Median |",
         "|---|---|---|",
+        f"| Acceptance criteria met, first pass | {_pct(crit_first.get('mean'))} | "
+        f"{_pct(crit_first.get('median'))} |",
+        f"| Acceptance criteria met, post repair | {_pct(crit_post.get('mean'))} | "
+        f"{_pct(crit_post.get('median'))} |",
         f"| First-pass pass rate | {_pct(first['mean'])} | {_pct(first['median'])} |",
         f"| Post-repair pass rate | {_pct(post_rate['mean'])} | {_pct(post_rate['median'])} |",
         f"| Repair delta | {_pct(post['mean'], signed=True)} | "
@@ -272,13 +315,16 @@ def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any] | None = 
         "",
         f"Repair improved **{summary['specs_improved_by_repair']} of {summary['scored']}** scored "
         f"specs; {summary['green_first_pass']} were already green first-pass and "
-        f"{summary['green_post_repair']} were green after repair.",
+        f"{summary['green_post_repair']} were green after repair. Generated tests cover "
+        f"{_pct(summary.get('criteria_coverage'))} of {summary.get('criteria_total', 0)} "
+        f"acceptance criteria; {summary.get('all_criteria_met_post_repair', 0)} specs meet every "
+        "criterion after repair.",
         "",
     ]
 
     if summary["by_difficulty"]:
         lines += [
-            "## By difficulty",
+            f"{h}# By difficulty",
             "",
             "| Difficulty | Specs | First-pass | Post-repair |",
             "|---|---|---|---|",
@@ -291,18 +337,19 @@ def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any] | None = 
         lines.append("")
 
     lines += [
-        "## Per spec",
+        f"{h}# Per spec",
         "",
-        "| Spec | Difficulty | Outcome | First-pass | Post-repair | Δ | Iterations | Tokens |",
+        "| Spec | Difficulty | Outcome | Criteria first → post | Tests first → post | "
+        "Iterations | Tokens | ₹ |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for record in records:
         row = _row(record)
         lines.append(
             f"| {row['spec_id']} | {row['difficulty']} | {row['outcome']} | "
-            f"{_pct(row['first_pass_rate'])} | {_pct(row['post_repair_rate'])} | "
-            f"{_pct(row['repair_delta'], signed=True)} | {row['repair_iterations']} | "
-            f"{row['tokens']} |"
+            f"{_pct(row['first_pass_criteria_rate'])} → {_pct(row['post_repair_criteria_rate'])} | "
+            f"{_pct(row['first_pass_rate'])} → {_pct(row['post_repair_rate'])} | "
+            f"{row['repair_iterations']} | {row['tokens']} | {_num(row['inr_cost'])} |"
         )
     lines.append("")
     return "\n".join(lines)

@@ -21,6 +21,7 @@ from app.orchestrator.schemas import Intent
 from tests.eval.eval_fakes import (
     FakeConductor,
     FakeRepair,
+    FakeTestGen,
     FakeTests,
     RecordingCleanup,
     StepClock,
@@ -61,6 +62,7 @@ def _runner(conductor: HeroConductor, cleanup: RecordingCleanup) -> EvalRunner:
         # First pass fails the two "Clear completed" criteria (5 of 7 pass); repair fixes all 7.
         tests=FakeTests(passed=5, failed=2),
         repair=FakeRepair(passed=7, failed=0, iterations=2, outcome="fixed"),
+        testgen=FakeTestGen(),
         cleanup=cleanup,
         clock=StepClock(),
     )
@@ -151,6 +153,7 @@ async def test_a_clean_first_pass_needs_no_repair() -> None:
         conductor=conductor,
         tests=FakeTests(passed=7, failed=0),
         repair=FakeRepair(passed=7, failed=0),
+        testgen=FakeTestGen(),
         cleanup=RecordingCleanup(),
         clock=StepClock(),
     )

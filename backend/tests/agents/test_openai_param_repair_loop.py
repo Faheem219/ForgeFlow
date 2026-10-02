@@ -317,3 +317,45 @@ async def test_an_upstream_timeout_that_keeps_timing_out_still_gives_up() -> Non
 
     assert len(endpoint.bodies) == 3
     assert "InferenceNet" in str(excinfo.value)  # the upstream that failed is still named
+
+
+# ---------------------------------------------------------------- network errors inside the stream
+
+
+async def _stalled_stream(*, produced: bool) -> AsyncIterator[Any]:
+    if produced:
+        yield _Chunk("partial")
+    raise httpx.ReadTimeout("stalled upstream")
+
+
+class StallingEndpoint(FakeEndpoint):
+    """Opens a stream that dies on a raw httpx read timeout — the SDK does not wrap these."""
+
+    def __init__(self, stalls: int, *, produced: bool = False) -> None:
+        super().__init__()
+        self._stalls = stalls
+        self._produced = produced
+
+    async def create(self, params: dict[str, Any]) -> Any:
+        self.bodies.append(dict(params))
+        if self._stalls:
+            self._stalls -= 1
+            return _stalled_stream(produced=self._produced)
+        return _ok_stream()
+
+
+async def test_a_read_timeout_inside_the_stream_is_retried() -> None:
+    endpoint = StallingEndpoint(stalls=1)
+
+    events = await _drain(OpenAITransport(ParamMemo()), endpoint)
+
+    assert len(endpoint.bodies) == 2
+    assert any(isinstance(e, TurnComplete) for e in events)
+
+
+async def test_a_read_timeout_after_output_is_a_provider_error_not_a_raw_crash() -> None:
+    endpoint = StallingEndpoint(stalls=1, produced=True)
+
+    with pytest.raises(ProviderError):
+        await _drain(OpenAITransport(ParamMemo()), endpoint)
+    assert len(endpoint.bodies) == 1  # output already streamed — never replayed
