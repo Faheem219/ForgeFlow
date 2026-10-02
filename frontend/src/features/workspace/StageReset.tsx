@@ -28,9 +28,10 @@ export function ResetDeployDialog({
       confirmLabel="Reset and take it down"
       description={
         <>
-          The live deployment is destroyed at the provider and its URLs stop working. Deploy and
-          Validate go back to <strong className="font-medium text-fg">Not started</strong>, as if
-          the app had never been deployed.
+          The app&apos;s hosting is deleted at the provider (on Vercel, its frontend and backend
+          projects) and its URLs stop working. Deploy and Validate go back to{' '}
+          <strong className="font-medium text-fg">Not started</strong>, as if the app had never been
+          deployed.
         </>
       }
     >

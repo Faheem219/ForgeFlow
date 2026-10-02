@@ -62,6 +62,11 @@ class DeploymentTeardown:
     ) -> TeardownReport:
         """Destroy every provider deployment on ``deployment``, then retire the record."""
         report = TeardownReport()
+        # Handles the provider refused to take down. Kept on the retired record rather than
+        # dropped: dropping them left a still-live site that nothing in ForgeFlow pointed at any
+        # more, so no later teardown could reach it. Kept, the next reset (or project delete)
+        # retries them (`ProjectService._destroy_deployments`).
+        leftover: dict[str, DeploymentRef] = {}
 
         for key, ref in sorted(deployment.refs.items()):
             try:
@@ -71,6 +76,7 @@ class DeploymentTeardown:
                 )
                 report.destroyed.append(key)
             except Exception as exc:  # noqa: BLE001 - teardown must never block the delete
+                leftover[key] = ref
                 report.warnings.append(f"{key}: {exc}")
                 logger.warning(
                     "deployment teardown failed for one target",
@@ -80,10 +86,10 @@ class DeploymentTeardown:
 
         # The record is retired whatever the providers said. A deployment ForgeFlow can no longer
         # manage is not one it should keep advertising as live; the warnings say what to clean up
-        # by hand.
+        # by hand, and the refs that failed stay behind for the next teardown to retry.
         deployment.status = STATUS_DELETED
         deployment.urls = {}
-        deployment.refs = {}
+        deployment.refs = leftover
         deployment.topology_snapshot = _cleared(deployment.topology_snapshot)
         await deployment.save()
         report.record_deleted = True

@@ -25,6 +25,7 @@ from beanie import PydanticObjectId
 
 from app.db.models.enums import CredentialKind, DeployMode
 from app.deploy.providers.base import (
+    MANAGED_NAME_PREFIX,
     BaseDeployProvider,
     DeployRef,
     DeployResult,
@@ -171,8 +172,25 @@ class VercelDeployProvider(BaseDeployProvider):
     async def destroy(
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
     ) -> bool:
+        """Take the deployment down by deleting the Vercel **project** ForgeFlow created for it.
+
+        Deleting only the deployment is not enough, and for the one that matters it is refused:
+        Vercel will not delete a project's *current production* deployment (it answers 403), and
+        that is exactly what ForgeFlow deploys (``target: production``). Even an older deployment
+        deleted on its own leaves the project, its production alias and its env vars standing in
+        the dashboard. Deleting the project removes all of it, so the URLs stop resolving and the
+        account is left as if the app had never been deployed; the next deploy recreates the
+        project under the same name.
+
+        Only a project ForgeFlow named (:data:`MANAGED_NAME_PREFIX`) is deleted outright; a ref
+        without one falls back to deleting the single deployment. A 404 means it is already gone,
+        which is success — the records of several redeploys all point at the same project.
+        """
         token = await self._token(mode, user_id)
-        await self._request("DELETE", f"/v13/deployments/{ref.id}", token)
+        if ref.project and ref.project.startswith(MANAGED_NAME_PREFIX):
+            await self._request("DELETE", f"/v9/projects/{ref.project}", token, missing_ok=True)
+        else:
+            await self._request("DELETE", f"/v13/deployments/{ref.id}", token, missing_ok=True)
         return True
 
     # -- internals --------------------------------------------------------------------------
