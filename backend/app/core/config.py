@@ -133,6 +133,10 @@ class Settings(BaseSettings):
     # routing preference to sort upstreams by price — see build_openai_params in
     # app/agents/anthropic_client.py. Every other endpoint gets an unchanged body.
     openai_base_url: str = ""
+    # OpenRouter only: comma-separated upstream slugs (e.g. "z-ai") to pin requests to, in order,
+    # with no fallback — so a benchmark measures one deployment of a model, not whichever host was
+    # cheapest that minute. Blank → the default lowest-price routing, request body unchanged.
+    openrouter_provider_order: str = ""
     openai_max_retries: int = 4  # transient (429/5xx/network) backoff attempts
 
     # --- Provider request compatibility (phase-57) ---

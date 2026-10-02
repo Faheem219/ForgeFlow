@@ -17,6 +17,7 @@ from app.orchestrator.requirements import RequirementsService
 from tests.eval.eval_fakes import (
     FakeConductor,
     FakeRepair,
+    FakeTestGen,
     FakeTests,
     RecordingCleanup,
     StepClock,
@@ -33,6 +34,7 @@ def _runner(**overrides: object) -> EvalRunner:
         "conductor": FakeConductor(),
         "tests": FakeTests(),
         "repair": FakeRepair(),
+        "testgen": FakeTestGen(),
         "cleanup": RecordingCleanup(),
         "clock": StepClock(),
     }
@@ -48,7 +50,7 @@ async def test_a_spec_runs_end_to_end_and_produces_a_complete_record() -> None:
     assert metrics.difficulty == "simple"
     assert metrics.outcome == OUTCOME_DELIVERED
     assert metrics.project_id is not None
-    assert metrics.stages_run == ["requirements", "build", "test", "repair"]
+    assert metrics.stages_run == ["requirements", "build", "testgen", "test", "repair"]
     assert metrics.wall_clock_seconds > 0
 
 
@@ -149,7 +151,7 @@ async def test_the_corpus_run_produces_one_record_per_spec() -> None:
 
     assert [r.spec_id for r in report.records] == ["sample", "second"]
     assert report.finished_at is not None
-    assert report.legs == ["build", "test", "repair"]
+    assert report.legs == ["build", "testgen", "test", "repair"]
     assert report.aggregate()["specs"] == 2
 
 
@@ -173,3 +175,38 @@ async def test_projects_are_created_per_spec() -> None:
         from beanie import PydanticObjectId
 
         assert await Project.get(PydanticObjectId(pid)) is not None
+
+
+async def test_a_detached_build_is_joined_before_anything_is_measured() -> None:
+    """The build stage answers once *accepted*; grading must wait for it to actually finish."""
+    import asyncio
+    from typing import Any
+
+    from app.orchestrator import conductor as conductor_module
+
+    order: list[str] = []
+
+    class DetachedConductor(FakeConductor):
+        async def handle_intent(self, user_id: Any, intent: Any) -> Any:
+            await super().handle_intent(user_id, intent)
+            if intent.stage is Stage.build:
+
+                async def build() -> None:
+                    await asyncio.sleep(0.05)
+                    order.append("build finished")
+
+                task = asyncio.create_task(build())
+                conductor_module._DETACHED.add(task)
+                task.add_done_callback(conductor_module._DETACHED.discard)
+
+    class OrderedTestGen(FakeTestGen):
+        async def run(self, project: Any, run: Any) -> Any:
+            order.append("testgen")
+            return await super().run(project, run)
+
+    metrics = await _runner(conductor=DetachedConductor(), testgen=OrderedTestGen()).run_spec(
+        make_spec()
+    )
+
+    assert order == ["build finished", "testgen"]
+    assert metrics.build_status is not None

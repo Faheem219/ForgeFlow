@@ -117,6 +117,9 @@ infra/caddy/config/
 # --- ForgeFlow: eval run artifacts (phase-44) ---
 # Reports are generated measurement output, not source. Phase-45 reads whatever is here.
 eval/results/*.json
+eval/results/bench/*.json
+# Pinned public benchmark datasets, downloaded + checksum-verified on first `make eval`.
+eval/datasets/
 
 # --- DevOps (infra) -------------------------------------------------------------
 # The real inventory holds the VM's address and SSH key path. An inventory in a public repo is a

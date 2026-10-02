@@ -12,7 +12,7 @@ PREVIEW_NETWORK ?= forgeflow-preview
 DOTENV := $(wildcard $(CURDIR)/.env)
 ENV_FILE_ARG := $(if $(DOTENV),--env-file $(DOTENV),)
 
-.PHONY: help dev preview-net proxy host-deps down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify devops-lint ansible-check ansible-deploy ansible-ping k8s-validate k8s-apply k8s-rollout k8s-rollback k8s-demo monitoring-up monitoring-down prod-build
+.PHONY: help dev preview-net proxy host-deps down logs test test-backend test-frontend lint lint-backend lint-frontend fmt fmt-backend fmt-frontend backend-install frontend-install install check-env seed eval bench-image demo-seed demo-reset demo-status demo-rehearse sandbox-build sandbox-smoke sandbox-reap-all skeleton-install skeleton-build skeleton-test skeleton-verify devops-lint ansible-check ansible-deploy ansible-ping k8s-validate k8s-apply k8s-rollout k8s-rollback k8s-demo monitoring-up monitoring-down prod-build
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -74,6 +74,12 @@ check-env: ## Verify no direct os.environ reads outside the config layer
 
 seed: ## Ensure indexes + seed default platform settings (needs MongoDB)
 	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.seed
+
+eval: host-deps bench-image ## All benchmarks → eval/results/REPORT.md (ARGS="--apps none --limit 5" = smoke)
+	cd backend && uv run $(ENV_FILE_ARG) python -m app.eval $(ARGS)
+
+bench-image: ## Build the no-network image benchmark code is executed in
+	docker build -q -t forgeflow-bench:latest eval/bench
 
 demo-seed: ## Seed the hero-demo account + project (needs MongoDB + DEMO_PASSWORD)
 	cd backend && uv run $(ENV_FILE_ARG) python -m scripts.demo seed

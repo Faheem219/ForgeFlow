@@ -224,6 +224,13 @@ _KEYS: tuple[ConfigKey, ...] = (
         extra=_url_or_blank,
     ),
     ConfigKey(
+        "openrouter_provider_order",
+        Cat.models,
+        "str",
+        "OpenRouter only: comma-separated upstream providers to pin requests to, in order, with "
+        "no fallback (e.g. z-ai). Blank = cheapest available upstream first.",
+    ),
+    ConfigKey(
         "llm_param_quirks",
         Cat.models,
         "json",

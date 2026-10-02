@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
+import httpx
 from beanie import PydanticObjectId
 
 from app.agents.budget import enforce_budget
@@ -66,6 +67,9 @@ class MessageRequest:
     messages: list[dict[str, Any]]
     tools: list[dict[str, Any]]
     max_tokens: int
+    #: Sampling temperature. ``None`` (every product call) sends nothing, so the provider default
+    #: applies and the request body is unchanged; the benchmarks pass ``0`` for greedy pass@1.
+    temperature: float | None = None
 
 
 @dataclass
@@ -476,6 +480,8 @@ class SdkTransport:
             kwargs["system"] = request.system
         if request.tools:
             kwargs["tools"] = request.tools
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
 
         final = None
         async with await self._with_retries(lambda: client.messages.stream(**kwargs)) as stream:
@@ -885,6 +891,10 @@ def _is_transient_openai_error(exc: BaseException) -> bool:
     Errors that carry an HTTP status are classified by that status; a mid-stream ``APIError`` (which
     has none — see :data:`_TRANSIENT_STREAM_MARKERS`) is classified by its message instead.
     """
+    if isinstance(exc, httpx.TransportError):
+        # The SDK maps network errors only while *opening* a request; one inside the SSE body (a
+        # read timeout on a stalled upstream, a dropped connection) surfaces as raw httpx.
+        return True
     openai = _import_openai()
     if isinstance(exc, openai.APIConnectionError):  # network blip / timeout
         return True
@@ -979,6 +989,10 @@ def build_openai_params(
     }
     if request.tools:
         params["tools"] = _to_openai_tools(request.tools)
+    if request.temperature is not None:
+        # Only the benchmarks set it; a model family that rejects it is handled by the existing
+        # `drop temperature` repair, like any other parameter.
+        params["temperature"] = request.temperature
     reasoning = reasoning_params(
         str(get_config().get("llm_reasoning_effort")),
         int(get_config().get("llm_reasoning_max_tokens") or 0),
@@ -1004,10 +1018,25 @@ def build_openai_params(
         # closed signature (no **kwargs), so `provider=...` would raise TypeError before any
         # request; `extra_body` is its documented escape hatch and is merged into the JSON body, so
         # the bytes on the wire are exactly OpenRouter's documented shape.
+        #
+        # OPENROUTER_PROVIDER_ORDER replaces that with a pin: only the named upstreams, in order,
+        # no fallback. Price-sorting lands on whichever host (and quantisation) is cheapest at that
+        # moment, which is fine for a product and wrong for a measurement.
         extra_body = dict(params.get("extra_body") or {})
-        extra_body["provider"] = {"sort": "price"}
+        extra_body["provider"] = openrouter_provider_preference(
+            str(get_config().get("openrouter_provider_order"))
+        )
         params["extra_body"] = extra_body
     return apply_repairs(params, repairs)
+
+
+def openrouter_provider_preference(order: str) -> dict[str, Any]:
+    """OpenRouter's ``provider`` object: a no-fallback pin when ``order`` names upstreams, else
+    lowest price first."""
+    pinned = [slug.strip() for slug in order.split(",") if slug.strip()]
+    if pinned:
+        return {"order": pinned, "allow_fallbacks": False}
+    return {"sort": "price"}
 
 
 #: Accepted values of ``LLM_REASONING_EFFORT`` (blank = provider default).
@@ -1120,7 +1149,7 @@ class OpenAITransport:
                         produced = True
                         yield event
                 return
-            except error_type as exc:
+            except (error_type, httpx.TransportError) as exc:
                 # A request the provider *described* as wrong is one we can repair. Once tokens have
                 # been emitted the turn cannot be restarted — replaying it would duplicate streamed
                 # output in the UI — so only a pre-output failure is ever repaired or retried.

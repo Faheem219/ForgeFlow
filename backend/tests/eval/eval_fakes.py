@@ -14,6 +14,7 @@ from beanie import PydanticObjectId
 from app.db.models import Deployment, Project, Run, TestRun
 from app.db.models.enums import DeployMode, Stage, TestEnv
 from app.eval.specs_loader import EvalSpec
+from app.orchestrator.requirements import RequirementsService
 
 SPEC_YAML: dict[str, Any] = {
     "id": "sample",
@@ -40,10 +41,43 @@ def make_spec(**overrides: Any) -> EvalSpec:
     return EvalSpec.model_validate({**SPEC_YAML, **overrides})
 
 
-def results(passed: int, failed: int) -> list[dict[str, Any]]:
-    return [
+def results(
+    passed: int, failed: int, criterion_ids: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Scripted results. With ``criterion_ids``, row *i* is tagged with ``ids[i % len(ids)]`` —
+    passing rows first — the way testgen's ``[ac-…]`` title tags come back from the runner."""
+    rows = [
         {"name": f"pass {i}", "status": "passed", "framework": "jest"} for i in range(passed)
     ] + [{"name": f"fail {i}", "status": "failed", "framework": "jest"} for i in range(failed)]
+    if criterion_ids:
+        for i, row in enumerate(rows):
+            row["criterion_id"] = criterion_ids[i % len(criterion_ids)]
+    return rows
+
+
+async def criterion_ids(project: Project) -> list[str]:
+    """The ids the product minted for this project's spec (what testgen tags tests with)."""
+    assert project.id is not None
+    spec = await RequirementsService().latest(project.id)
+    return [] if spec is None else [c.id for f in spec.features for c in f.acceptance_criteria]
+
+
+class FakeTestGenReport:
+    def __init__(self, criteria_covered: list[str]) -> None:
+        self.criteria_covered = criteria_covered
+
+
+class FakeTestGen:
+    """Stands in for the phase-27 agent: 'writes' a test per criterion (or the first ``cover``)."""
+
+    def __init__(self, *, cover: int | None = None) -> None:
+        self._cover = cover
+        self.projects: list[str] = []
+
+    async def run(self, project: Project, run: Run) -> FakeTestGenReport:
+        self.projects.append(str(project.id))
+        ids = await criterion_ids(project)
+        return FakeTestGenReport(ids if self._cover is None else ids[: self._cover])
 
 
 class FakeConductor:
@@ -73,7 +107,7 @@ class FakeTests:
 
     async def run(self, project: Project) -> TestRun:
         self.projects.append(str(project.id))
-        rows = results(self._passed, self._failed)
+        rows = results(self._passed, self._failed, await criterion_ids(project))
         return await TestRun(
             project_id=project.id,
             results=rows,
@@ -120,7 +154,7 @@ class FakeRepair:
 
     async def run(self, project: Project, test_run: TestRun) -> FakeRepairResult:
         self.calls.append(str(test_run.id))
-        rows = results(self._passed, self._failed)
+        rows = results(self._passed, self._failed, await criterion_ids(project))
         final = await TestRun(
             project_id=project.id,
             results=rows,

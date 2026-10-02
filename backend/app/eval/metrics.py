@@ -7,6 +7,11 @@ almost work into builds that do. That claim is only meaningful if two things are
 - ``first_pass`` — what the generated code scored **before any repair**, and
 - ``post_repair`` — what it scored after the loop ran.
 
+Each is taken twice. The *test-level* rate counts every test in the workspace, the skeleton's own
+included. The *criterion-level* rate is the one that answers "does the app do what the spec asked":
+a spec acceptance criterion counts as met only when at least one test tagged with its id ran and
+none of them failed. A criterion with no test is unmet — never dropped from the denominator.
+
 Everything else here exists to keep those two honest: iteration and regression counts say how hard
 the loop worked, tokens/₹ say what it cost, and the wall clock says whether the whole thing is fast
 enough to demo. A metric that cannot fail is not evidence, so a spec that never reached the test
@@ -16,7 +21,7 @@ stage records ``None`` pass rates rather than a flattering zero-of-zero.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Any
 
@@ -45,6 +50,15 @@ class PassRate:
     def green(self) -> bool:
         return self.total > 0 and self.failed == 0
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> PassRate:
+        data = data or {}
+        return cls(
+            total=int(data.get("total") or 0),
+            passed=int(data.get("passed") or 0),
+            failed=int(data.get("failed") or 0),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "total": self.total,
@@ -70,6 +84,13 @@ class SpecMetrics:
     repair_outcome: str | None = None
     regressions: int = 0
 
+    # -- the same two measurements against the spec's acceptance criteria -----------
+    criteria_total: int = 0
+    #: Criteria the generated tests reference — what testgen wrote, before anything ran.
+    criteria_covered: int = 0
+    first_pass_criteria: PassRate = field(default_factory=PassRate)
+    post_repair_criteria: PassRate = field(default_factory=PassRate)
+
     # -- cost + time ------------------------------------------------------------------
     tokens: int = 0
     inr_cost: float = 0.0
@@ -83,6 +104,8 @@ class SpecMetrics:
     project_id: str | None = None
     live_url: str | None = None
     stages_run: list[str] = field(default_factory=list)
+    #: The build stage's status once the build finished — `in_progress`/`empty` means it failed.
+    build_status: str | None = None
     error: str | None = None
 
     @property
@@ -93,16 +116,36 @@ class SpecMetrics:
         return round(self.post_repair.rate - self.first_pass.rate, 4)
 
     @property
+    def criteria_repair_delta(self) -> float | None:
+        first, post = self.first_pass_criteria.rate, self.post_repair_criteria.rate
+        if first is None or post is None:
+            return None
+        return round(post - first, 4)
+
+    @property
     def repaired(self) -> bool:
         """True when repair actually improved things (rather than merely running)."""
         delta = self.repair_delta
         return delta is not None and delta > 0
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SpecMetrics:
+        """Rebuild a record from its JSON (derived keys such as ``repair_delta`` are recomputed)."""
+        rates = ("first_pass", "post_repair", "first_pass_criteria", "post_repair_criteria")
+        values: dict[str, Any] = {
+            f.name: data[f.name] for f in fields(cls) if f.name in data and f.name not in rates
+        }
+        values.update({key: PassRate.from_dict(data.get(key)) for key in rates})
+        return cls(**values)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["first_pass"] = self.first_pass.to_dict()
         data["post_repair"] = self.post_repair.to_dict()
+        data["first_pass_criteria"] = self.first_pass_criteria.to_dict()
+        data["post_repair_criteria"] = self.post_repair_criteria.to_dict()
         data["repair_delta"] = self.repair_delta
+        data["criteria_repair_delta"] = self.criteria_repair_delta
         data["repaired"] = self.repaired
         return data
 
@@ -122,6 +165,8 @@ class EvalReport:
         scored = [r for r in self.records if r.first_pass.rate is not None]
         first = [r.first_pass.rate for r in scored if r.first_pass.rate is not None]
         post = [r.post_repair.rate for r in scored if r.post_repair.rate is not None]
+        graded = [r for r in self.records if r.first_pass_criteria.rate is not None]
+        criteria_total = sum(r.criteria_total for r in graded)
 
         return {
             "specs": len(self.records),
@@ -137,6 +182,28 @@ class EvalReport:
             "specs_improved_by_repair": sum(1 for r in scored if r.repaired),
             "green_first_pass": sum(1 for r in scored if r.first_pass.green),
             "green_post_repair": sum(1 for r in scored if r.post_repair.green),
+            "criteria_total": criteria_total,
+            "criteria_coverage": (
+                round(sum(r.criteria_covered for r in graded) / criteria_total, 4)
+                if criteria_total
+                else None
+            ),
+            "mean_first_pass_criteria_rate": _mean(
+                [
+                    r.first_pass_criteria.rate
+                    for r in graded
+                    if r.first_pass_criteria.rate is not None
+                ]
+            ),
+            "mean_post_repair_criteria_rate": _mean(
+                [
+                    r.post_repair_criteria.rate
+                    for r in graded
+                    if r.post_repair_criteria.rate is not None
+                ]
+            ),
+            "all_criteria_met_first_pass": sum(1 for r in graded if r.first_pass_criteria.green),
+            "all_criteria_met_post_repair": sum(1 for r in graded if r.post_repair_criteria.green),
             "total_repair_iterations": sum(r.repair_iterations for r in self.records),
             "total_regressions": sum(r.regressions for r in self.records),
             "total_tokens": sum(r.tokens for r in self.records),
@@ -155,6 +222,19 @@ class EvalReport:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2)
+
+    @classmethod
+    def merge(cls, parts: list[dict[str, Any]]) -> EvalReport:
+        """One report from several partial runs' JSON (a corpus split across processes)."""
+        records = [SpecMetrics.from_dict(r) for part in parts for r in part.get("records", [])]
+        started = [datetime.fromisoformat(p["started_at"]) for p in parts if p.get("started_at")]
+        finished = [datetime.fromisoformat(p["finished_at"]) for p in parts if p.get("finished_at")]
+        return cls(
+            records=records,
+            started_at=min(started) if started else utcnow(),
+            finished_at=max(finished) if finished else None,
+            legs=list(next((p["legs"] for p in parts if p.get("legs")), [])),
+        )
 
 
 def _mean(values: list[float]) -> float | None:

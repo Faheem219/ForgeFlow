@@ -52,6 +52,11 @@ def test_the_csv_schema_is_frozen() -> None:
         "wall_clock_seconds",
         "live_url",
         "error",
+        "criteria_total",
+        "criteria_covered",
+        "first_pass_criteria_rate",
+        "post_repair_criteria_rate",
+        "criteria_repair_delta",
     )
 
 
