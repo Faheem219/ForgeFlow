@@ -17,6 +17,12 @@ cheap ``TaskKind.classify`` call decides (``MODEL_CLASSIFY``, falling back to ``
 and a deterministic fallback covers every way that call can fail, because a build must never be
 blocked on a classifier.
 
+**A change leans small** (phase-67, user-requested 2026-10-02): *"if it is a small change then fix
+directly, else if the fix is big then and only then make a phase plan."* So the classifier's
+tie-break is SMALL, and so is every fallback below — each one is, by construction, a change to an
+app that already exists. A large change no longer re-plans the app either: it appends phases of its
+own (:meth:`~app.agents.build_phases.BuildPlanner.plan_change`).
+
 **Cost discipline is strengthened, not relaxed** (Golden Rule 7): one cheap classification replaces
 a planning call plus N phase loops on the common case. The expensive model still writes every line
 of code, and the small path still runs the *same* phase-55 verification and bounded repair — the
@@ -65,15 +71,17 @@ SYSTEM_EXTRA = """
 You decide how much work a change request to an existing web app needs. Answer with ONE word on the
 first line: SMALL or LARGE. On the second line give a short reason (one sentence).
 
-SMALL — a fix or tweak confined to a few files: a missing button, a wrong label, a broken handler, a
-styling correction, one endpoint's behaviour, a bug in existing logic.
+SMALL — a fix or tweak made directly in the existing code, even if it touches a few files: a missing
+button, a wrong label, a broken handler, a styling correction, one endpoint's behaviour, a bug in
+existing logic, a small addition to an existing page or feature.
 
-LARGE — work that spans the app or introduces a new capability: a new feature or page, a new data
-model or entity, auth or permissions, a cross-cutting change (theming, i18n, routing overhaul), or
-several unrelated changes requested at once.
+LARGE — clearly too big for one pass: a whole new feature built end to end (new data model, API and
+pages), auth or permissions, a cross-cutting change across most of the app (theming, i18n, routing
+overhaul), or several unrelated changes requested at once. A LARGE change gets a few phases of its
+own, added to the existing plan; the existing app is never re-planned.
 
-When genuinely unsure, answer LARGE: an over-planned small change is slow, but an under-planned
-large one produces a half-built app.
+When genuinely unsure, answer SMALL: the app is already built, and a direct change to it keeps
+everything else exactly as it was.
 """.strip()
 
 
@@ -162,14 +170,15 @@ class ScopeClassifier:
             )
         except (UserError, NotFoundError) as exc:
             # Budget exhausted, provider down, project gone — none of which is a reason to block a
-            # build. Fall back to today's behaviour (phase-56's fallback-plan posture).
-            logger.info("build scope classification unavailable (%s); planning phases", exc)
-            return ScopeDecision(BuildScope.large, "the scope classifier was unavailable")
+            # build. Everything reaching this point is a change to a built app, and without a
+            # verdict that it is big, it is made directly (phase-67: plan only when it is big).
+            logger.info("build scope classification unavailable (%s); changing directly", exc)
+            return ScopeDecision(BuildScope.small, "the scope classifier was unavailable")
 
         parsed = parse_scope(result.text)
         if parsed is None:
-            logger.info("build scope reply was unparseable; planning phases")
-            return ScopeDecision(BuildScope.large, "the scope classifier gave no clear answer")
+            logger.info("build scope reply was unparseable; changing directly")
+            return ScopeDecision(BuildScope.small, "the scope classifier gave no clear answer")
         return parsed
 
 

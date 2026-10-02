@@ -572,6 +572,28 @@ describe('build scope', () => {
     );
   });
 
+  it('counts only the phases a planned change added, and keeps the earlier ones as history', async () => {
+    // phase-67: a change request extends the plan. The earlier phases stay on the rail, dimmed,
+    // and the badge says what the change itself did.
+    withReport({
+      scope: 'large',
+      scope_reason: 'a new entity end to end',
+      prior_phases: 2,
+      phases: [
+        { id: 'a', title: 'A', kind: 'backend', status: 'done', note: '', summary: '' },
+        { id: 'b', title: 'B', kind: 'frontend', status: 'done', note: '', summary: '' },
+        { id: 'c', title: 'Tag API', kind: 'backend', status: 'done', note: '', summary: '' },
+      ],
+    });
+    renderPanel();
+
+    expect(await screen.findByTestId('build-scope')).toHaveTextContent(
+      'Planned change \u00b7 1 new phase',
+    );
+    const rows = await screen.findAllByTestId('build-phase-row');
+    expect(rows.map((r) => r.getAttribute('data-earlier'))).toEqual(['true', 'true', null]);
+  });
+
   it('shows no badge for a report written before scope routing', async () => {
     withReport({});
     renderPanel();

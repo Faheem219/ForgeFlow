@@ -7,6 +7,7 @@
 - **Epic:** Epic 13 — Build quality *(amends `phase-56`)*
 - **Milestone:** M5
 - **Status:** ✅ done *(2026-08-23)*
+- **Amended by [`phase-67`](./phase-67-refine-extends-plan.md) (2026-10-02):** on a change request, `large` no longer re-plans the app; it appends the change's own phases to the existing plan. The classifier's tie-break and its failure fallbacks are now `small`.
 
 ## Goal
 
