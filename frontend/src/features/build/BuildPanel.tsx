@@ -16,6 +16,7 @@ import type { IntentRequest } from '../../lib/types';
 import { readFile } from '../ide/api';
 import { useIdeStore } from '../ide/ideStore';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   BUILD_REPORT_KIND,
@@ -367,6 +368,9 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               Approve
             </Button>
           ) : null}
+          {/* The inverse of Approve: take back a "done" without touching the code on disk — what a
+              demo project kept built to this stage needs before each showing. */}
+          <ResetStageButton projectId={projectId} stage="build" status={status} disabled={busy} />
           {status === 'skipped' ? (
             <Button
               size="sm"

@@ -451,6 +451,28 @@ describe('BuildPanel', () => {
     expect(screen.queryByTestId('build-approve')).toBeNull();
   });
 
+  it('resets a complete build to Needs you without a confirmation', async () => {
+    // Status only — nothing is deleted, so there is nothing to confirm.
+    installFetch(state); // beforeEach: buildStatus 'complete'
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-reset'));
+
+    await waitFor(() =>
+      expect(state.intentCalls.at(-1)).toEqual({ stage: 'build', action: 'reset' }),
+    );
+  });
+
+  it('offers no reset until the build is complete', async () => {
+    state.buildStatus = 'awaiting_user';
+    installFetch(state);
+    renderPanel();
+
+    // Approve is the way forward from here; Reset only takes back a "done".
+    await screen.findByTestId('build-approve');
+    expect(screen.queryByTestId('build-reset')).toBeNull();
+  });
+
   it('offers Un-skip in place of Skip once the stage is skipped', async () => {
     state.buildStatus = 'skipped';
     installFetch(state);

@@ -21,6 +21,11 @@ class StageState(Document):
     #: The status this stage held when it was skipped — what `unskip` restores it to. Written only
     #: by a `skip`; every other status write clears it. `None` on rows predating restore points.
     previous_status: StageStatus | None = None
+    #: When a ``reset`` last returned this stage to a blank slate (deploy, validate). Anything the
+    #: stage produced before it — a deployment, a validation report, a live test run — is history:
+    #: kept, but no longer shown as the stage's current result. ``None`` until the first such reset,
+    #: and left alone by every status write, so the cut-off survives the stage running again.
+    cleared_at: datetime | None = None
     artifacts: list[PydanticObjectId] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=utcnow)
 

@@ -94,6 +94,9 @@ class StageTransitionResponse(BaseModel):
     from_status: StageStatus
     to_status: StageStatus
     stale: list[Stage]
+    cleared: list[Stage] = Field(default_factory=list)
+    #: What a deploy reset could not take down at the provider (empty for every other transition).
+    warnings: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_outcome(cls, outcome: TransitionOutcome) -> StageTransitionResponse:
@@ -102,4 +105,6 @@ class StageTransitionResponse(BaseModel):
             from_status=outcome.from_status,
             to_status=outcome.to_status,
             stale=list(outcome.stale),
+            cleared=list(outcome.cleared),
+            warnings=list(outcome.warnings),
         )

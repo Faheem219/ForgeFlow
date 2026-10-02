@@ -36,7 +36,8 @@ from app.auth.deps import get_current_user_id
 from app.core.errors import NotFoundError
 from app.db.blobs import get_blob_store
 from app.db.models import STATUS_DELETED, Deployment
-from app.db.models.enums import CredentialKind, DeployMode
+from app.db.models.enums import CredentialKind, DeployMode, Stage
+from app.db.repos import StageStateRepo
 from app.deploy.providers import DeployTarget, provider_for
 from app.deploy.providers.base import DeployRef
 from app.deploy.teardown import DeploymentTeardown
@@ -110,9 +111,15 @@ class DeployDeleteResponse(BaseModel):
 async def _latest(project_id: str, user_id: PydanticObjectId) -> Deployment | None:
     pid = parse_object_id(project_id)
     await ProjectService().get_owned(pid, user_id)
+    query: dict[str, Any] = {"project_id": pid}
+    # A reset deploy stage shows a blank slate: deployments from before the reset are history (the
+    # record is kept — §7 — but it is no longer the deployment this panel is about).
+    cleared_at = await StageStateRepo().cleared_at(pid, Stage.deploy)
+    if cleared_at is not None:
+        query["created_at"] = {"$gt": cleared_at}
     # Mongo stores datetimes at millisecond precision, so two deploys can tie on ``created_at``;
     # ``_id`` is monotonic and breaks the tie in real insertion order.
-    return await Deployment.find({"project_id": pid}).sort("-created_at", "-_id").first_or_none()
+    return await Deployment.find(query).sort("-created_at", "-_id").first_or_none()
 
 
 def _to_public(deployment: Deployment) -> DeploymentPublic:

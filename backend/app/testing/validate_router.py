@@ -12,6 +12,7 @@ Running validation is *not* here: it goes through the conductor (``POST /project
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -20,13 +21,29 @@ from pydantic import BaseModel, Field
 
 from app.auth.deps import get_current_user_id
 from app.db.models.enums import ArtifactType, Stage, TestEnv
-from app.db.repos import TestRunRepo
+from app.db.repos import StageStateRepo, TestRunRepo
 from app.orchestrator.artifacts import ArtifactService
 from app.orchestrator.stages.validate import VALIDATION_REPORT_KIND
 from app.projects.service import ProjectService, parse_object_id
 from app.testing.models import TestResult
 
 validate_router = APIRouter(prefix="/projects", tags=["validate"])
+
+
+async def _current(project_id: PydanticObjectId, created_at: datetime) -> bool:
+    """Whether a validation result post-dates the last blank-slate reset of the stage.
+
+    A reset validate stage (or a reset deploy, which takes validate with it) must read as never
+    validated: the earlier report described a deployment that may no longer exist. The records are
+    kept; they just stop being the stage's current result.
+    """
+    cleared_at = await StageStateRepo().cleared_at(project_id, Stage.validate)
+    return cleared_at is None or _utc(created_at) > _utc(cleared_at)
+
+
+def _utc(value: datetime) -> datetime:
+    # The meta client is tz-aware (app/db/mongo.py); a naive value can only be UTC from BSON.
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class ValidationReportPublic(BaseModel):
@@ -65,6 +82,8 @@ async def latest_validation(
     latest = await artifacts.get_latest(pid, Stage.validate, ArtifactType.test_result)
     if latest is None or latest.meta.get("kind") != VALIDATION_REPORT_KIND:
         return None
+    if not await _current(pid, latest.created_at):
+        return None
     content = await artifacts.get_content(latest)
     if not content:
         return None
@@ -83,7 +102,7 @@ async def latest_live_run(
     await ProjectService().get_owned(pid, user_id)
 
     run = await TestRunRepo().latest(pid, env=TestEnv.live)
-    if run is None:
+    if run is None or not await _current(pid, run.created_at):
         return None
 
     results = [TestResult.model_validate(r) for r in run.results]

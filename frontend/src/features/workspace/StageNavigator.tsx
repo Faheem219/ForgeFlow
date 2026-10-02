@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, MoreHorizontal, Play, RotateCcw, SkipForward, Wand2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Play, RotateCcw, SkipForward, Undo2, Wand2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -13,7 +13,9 @@ import {
   STAGE_ORDER,
   STATUS_LABELS,
   STATUS_TONES,
+  canReset,
   prereqUnmet,
+  resetHint,
 } from './stageMeta';
 
 interface StageNavigatorProps {
@@ -34,14 +36,17 @@ const REFINE: StageAction = { action: 'refine', label: 'Refine', icon: Wand2 };
 const PROCEED: StageAction = { action: 'proceed', label: 'Proceed', icon: Play };
 const SKIP: StageAction = { action: 'skip', label: 'Skip', icon: SkipForward };
 const UNSKIP: StageAction = { action: 'unskip', label: 'Un-skip', icon: RotateCcw };
+const RESET: StageAction = { action: 'reset', label: 'Reset', icon: Undo2 };
 
 /**
  * The menu for one stage. A skipped stage offers `Un-skip` in place of `Skip`: skipping is
  * reversible, and the server restores the status the stage held (so an accidentally-skipped,
- * already-complete build comes back complete rather than needing a rebuild).
+ * already-complete build comes back complete rather than needing a rebuild). A finished stage also
+ * offers `Reset`, which takes the "done" back without re-running anything.
  */
-function actionsFor(status: StageStatus): StageAction[] {
-  return status === 'skipped' ? [REFINE, PROCEED, UNSKIP] : [REFINE, PROCEED, SKIP];
+function actionsFor(stage: Stage, status: StageStatus): StageAction[] {
+  const actions = status === 'skipped' ? [REFINE, PROCEED, UNSKIP] : [REFINE, PROCEED, SKIP];
+  return canReset(stage, status) ? [...actions, RESET] : actions;
 }
 
 /** Status → tint for the stage's icon well, so progress reads down the rail at a glance. */
@@ -158,12 +163,13 @@ function StageRow({
             transition={{ duration: DURATION.fast, ease: EASE }}
             className="absolute right-0 z-10 mt-1 w-36 origin-top-right rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
           >
-            {actionsFor(status).map(({ action, label, icon: ActionIcon }) => (
+            {actionsFor(stage, status).map(({ action, label, icon: ActionIcon }) => (
               <button
                 key={action}
                 type="button"
                 role="menuitem"
                 disabled={busy}
+                title={action === 'reset' ? resetHint(stage) : undefined}
                 data-testid={`stage-action-${stage}-${action}`}
                 onClick={() => {
                   setMenuOpen(false);
