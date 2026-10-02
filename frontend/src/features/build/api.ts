@@ -36,6 +36,11 @@ export interface BuildReportData {
    */
   scope: string;
   scope_reason: string;
+  /**
+   * phase-67 — how many leading `phases` are earlier builds' phases a change request carried along
+   * as history (shown, never re-run). 0 for a full build and for every report written before it.
+   */
+  prior_phases: number;
 }
 
 export const BUILD_REPORT_KIND = 'build_report';
@@ -144,5 +149,9 @@ export function parseBuildReport(content: string | null | undefined): BuildRepor
     stop_reason: typeof raw.stop_reason === 'string' ? raw.stop_reason : null,
     scope: str(raw.scope),
     scope_reason: str(raw.scope_reason),
+    prior_phases:
+      typeof raw.prior_phases === 'number' && raw.prior_phases > 0
+        ? Math.floor(raw.prior_phases)
+        : 0,
   };
 }

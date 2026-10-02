@@ -17,6 +17,7 @@ import type {
 } from '../../lib/types';
 import { listCredentials } from '../settings/api';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
 import { NodeDrawer } from './NodeDrawer';
 import { Topology } from './Topology';
@@ -257,6 +258,14 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
               </button>
             ))}
           </div>
+          {/* Unlike Delete, a reset leaves no trace in this panel: Deploy and Validate read as never
+              run, so the next deploy is shown fresh. */}
+          <ResetStageButton
+            projectId={projectId}
+            stage="deploy"
+            status={stageStatus}
+            disabled={busy || remove.isPending}
+          />
           <Button
             size="sm"
             variant="secondary"

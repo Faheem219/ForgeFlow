@@ -17,6 +17,8 @@ import { useDeleteProject } from '../dashboard/useDeleteProject';
 import { ChatPanel } from './ChatPanel';
 import { StageNavigator } from './StageNavigator';
 import { StagePanel } from './StagePanel';
+import { ResetDeployDialog } from './StageReset';
+import { resetNeedsConfirm, useStageReset } from './useStageReset';
 import { Pane, PaneHandle, Split } from './layout/SplitPane';
 import { layoutId, resetLayouts } from './layout/layoutStorage';
 import { getProject, listStages, submitIntent } from './api';
@@ -76,6 +78,8 @@ export default function Workspace(): JSX.Element {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [view, setView] = useState<'stage' | 'data'>('stage');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The stage whose reset is waiting on confirmation (only deploy's destroys anything).
+  const [confirmReset, setConfirmReset] = useState<Stage | null>(null);
   // Bumped by "Reset layout" to force the panel groups to remount and re-read their defaults.
   const [layoutNonce, setLayoutNonce] = useState(0);
   const { remove, isDeleting } = useDeleteProject();
@@ -147,6 +151,19 @@ export default function Workspace(): JSX.Element {
       toast({ title: 'Stage action rejected', description: message, variant: 'error' });
     },
   });
+
+  // A reset is answered by its own hook: it refreshes every panel it can change (a deploy reset
+  // blanks three of them), which the generic stage action does not.
+  const reset = useStageReset(projectId);
+  function onStageAction(stage: Stage, action: IntentAction): void {
+    if (action !== 'reset') {
+      navAction.mutate({ stage, action });
+    } else if (resetNeedsConfirm(stage)) {
+      setConfirmReset(stage);
+    } else {
+      reset.mutate(stage);
+    }
+  }
 
   /*
     The panel library keys a saved layout by the ids it is told are mounted, and warns that they
@@ -285,8 +302,8 @@ export default function Workspace(): JSX.Element {
                         statusByStage={statusByStage}
                         activeStage={activeStage}
                         onSelect={setActiveStage}
-                        onAction={(stage, action) => navAction.mutate({ stage, action })}
-                        busy={navAction.isPending}
+                        onAction={onStageAction}
+                        busy={navAction.isPending || reset.isPending}
                       />
                     </Panel>
                     <Panel title="Cost">
@@ -359,6 +376,15 @@ export default function Workspace(): JSX.Element {
           </>
         ) : null}
       </Split>
+
+      <ResetDeployDialog
+        open={confirmReset !== null}
+        loading={reset.isPending}
+        onClose={() => setConfirmReset(null)}
+        onConfirm={() => {
+          if (confirmReset) reset.mutate(confirmReset, { onSettled: () => setConfirmReset(null) });
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

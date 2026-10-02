@@ -78,17 +78,22 @@ class ArtifactDiffResponse(BaseModel):
 
 
 class IntentAction(StrEnum):
-    """The UI affordances (§8): iterate, accept-and-advance, opt out — and undo the opt-out.
+    """The UI affordances (§8): iterate, accept-and-advance, opt out — and undo either.
 
     ``unskip`` is the inverse of ``skip``: it restores the status the stage held before it was
     skipped, without re-running the stage. The conductor answers it itself (no stage handler runs),
     so an accidental skip costs a click to undo rather than a full agent run.
+
+    ``reset`` takes back a "done": a complete stage goes back to "Needs you" with its work kept, and
+    deploy/validate go back to a blank slate (the live deployment is taken down). Also answered by
+    the conductor itself — undoing a status is not new work.
     """
 
     refine = "refine"
     proceed = "proceed"
     skip = "skip"
     unskip = "unskip"
+    reset = "reset"
 
 
 class IntentRequest(BaseModel):
@@ -178,6 +183,8 @@ class IntentResponse(BaseModel):
     messages: list[MessagePublic]
     artifacts: list[ArtifactPublic]
     run_id: str
+    #: Stages a ``reset`` returned to a blank slate (their earlier results are now history).
+    cleared: list[Stage] = Field(default_factory=list)
 
 
 class BuildActivityPublic(BaseModel):

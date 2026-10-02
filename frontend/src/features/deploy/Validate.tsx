@@ -16,6 +16,7 @@ import type {
 } from '../../lib/types';
 import { Escalation } from '../testing/Escalation';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
 import { getLatestValidation, getLiveRun } from './validateApi';
 
@@ -186,6 +187,12 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
           </span>
         </span>
         <div className="flex gap-2">
+          <ResetStageButton
+            projectId={projectId}
+            stage="validate"
+            status={stageStatus}
+            disabled={busy}
+          />
           <Button
             size="sm"
             variant="secondary"
