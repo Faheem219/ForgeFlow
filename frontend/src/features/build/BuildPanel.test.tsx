@@ -451,6 +451,28 @@ describe('BuildPanel', () => {
     expect(screen.queryByTestId('build-approve')).toBeNull();
   });
 
+  it('resets a complete build to Needs you without a confirmation', async () => {
+    // Status only — nothing is deleted, so there is nothing to confirm.
+    installFetch(state); // beforeEach: buildStatus 'complete'
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('build-reset'));
+
+    await waitFor(() =>
+      expect(state.intentCalls.at(-1)).toEqual({ stage: 'build', action: 'reset' }),
+    );
+  });
+
+  it('offers no reset until the build is complete', async () => {
+    state.buildStatus = 'awaiting_user';
+    installFetch(state);
+    renderPanel();
+
+    // Approve is the way forward from here; Reset only takes back a "done".
+    await screen.findByTestId('build-approve');
+    expect(screen.queryByTestId('build-reset')).toBeNull();
+  });
+
   it('offers Un-skip in place of Skip once the stage is skipped', async () => {
     state.buildStatus = 'skipped';
     installFetch(state);
@@ -548,6 +570,28 @@ describe('build scope', () => {
     expect(await screen.findByTestId('build-scope')).toHaveTextContent(
       'Planned build \u00b7 2 phases',
     );
+  });
+
+  it('counts only the phases a planned change added, and keeps the earlier ones as history', async () => {
+    // phase-67: a change request extends the plan. The earlier phases stay on the rail, dimmed,
+    // and the badge says what the change itself did.
+    withReport({
+      scope: 'large',
+      scope_reason: 'a new entity end to end',
+      prior_phases: 2,
+      phases: [
+        { id: 'a', title: 'A', kind: 'backend', status: 'done', note: '', summary: '' },
+        { id: 'b', title: 'B', kind: 'frontend', status: 'done', note: '', summary: '' },
+        { id: 'c', title: 'Tag API', kind: 'backend', status: 'done', note: '', summary: '' },
+      ],
+    });
+    renderPanel();
+
+    expect(await screen.findByTestId('build-scope')).toHaveTextContent(
+      'Planned change \u00b7 1 new phase',
+    );
+    const rows = await screen.findAllByTestId('build-phase-row');
+    expect(rows.map((r) => r.getAttribute('data-earlier'))).toEqual(['true', 'true', null]);
   });
 
   it('shows no badge for a report written before scope routing', async () => {

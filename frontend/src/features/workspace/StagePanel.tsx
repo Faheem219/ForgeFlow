@@ -29,6 +29,7 @@ const ACTION_LABELS: Record<IntentAction, string> = {
   proceed: 'Proceed',
   skip: 'Skip',
   unskip: 'Un-skip',
+  reset: 'Reset',
 };
 
 /**

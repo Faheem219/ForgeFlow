@@ -188,23 +188,32 @@ async def test_a_cross_cutting_request_still_plans() -> None:
     assert decision.scope is BuildScope.large
 
 
-async def test_a_classifier_failure_falls_back_to_planning() -> None:
-    """A build must never be blocked on the classifier."""
+async def test_a_classifier_failure_changes_the_app_directly() -> None:
+    """A build must never be blocked on the classifier — and without a verdict that the change is
+    big, a change to a built app is made directly (phase-67: plan only when it is big)."""
     classifier, _ = _classifier(error=UserError("budget exhausted"))
 
     decision = await _decide(classifier, "fix the button")
 
-    assert decision.scope is BuildScope.large
+    assert decision.scope is BuildScope.small
     assert decision.classified is False
 
 
-async def test_an_unparseable_reply_falls_back_to_planning() -> None:
+async def test_an_unparseable_reply_changes_the_app_directly() -> None:
     classifier, _ = _classifier(text="It depends on what you mean.")
 
     decision = await _decide(classifier, "fix the button")
 
-    assert decision.scope is BuildScope.large
+    assert decision.scope is BuildScope.small
     assert decision.classified is False
+
+
+def test_the_prompt_breaks_ties_toward_a_direct_change() -> None:
+    """The user's rule: fix directly unless the change is big; only then plan phases."""
+    from app.agents.build_scope import SYSTEM_EXTRA
+
+    assert "When genuinely unsure, answer SMALL" in SYSTEM_EXTRA
+    assert "never re-planned" in SYSTEM_EXTRA
 
 
 async def test_the_heuristic_path_makes_no_model_call_at_all() -> None:

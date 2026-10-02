@@ -16,6 +16,7 @@ import type { IntentRequest } from '../../lib/types';
 import { readFile } from '../ide/api';
 import { useIdeStore } from '../ide/ideStore';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   BUILD_REPORT_KIND,
@@ -77,6 +78,8 @@ interface PhaseRow {
    *  live row (the event stream carries status only) and for a pre-phase-64 report. */
   fileCount?: number;
   note?: string;
+  /** phase-67: an earlier build's phase a change request kept as history — shown, not re-run. */
+  earlier?: boolean;
 }
 
 /** The backend's fixed stop_reason vocabulary (build_verify.py + build.py), in plain English. */
@@ -187,13 +190,17 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   });
   const report = parseBuildReport(reportQuery.data?.content);
   // Which path the last build took. Empty for reports written before scope routing (phase-60), and
-  // for those the badge is simply absent rather than guessing.
+  // for those the badge is simply absent rather than guessing. A planned *change* (phase-67) counts
+  // only the phases it added — the earlier ones were kept, not rebuilt.
+  const addedPhases = report ? report.phases.length - report.prior_phases : 0;
   const scopeLabel =
     report?.scope === 'small'
       ? 'Incremental change'
-      : report?.scope === 'large'
-        ? `Planned build · ${report.phases.length} phase${report.phases.length === 1 ? '' : 's'}`
-        : '';
+      : report?.scope === 'large' && report.prior_phases > 0
+        ? `Planned change · ${addedPhases} new phase${addedPhases === 1 ? '' : 's'}`
+        : report?.scope === 'large'
+          ? `Planned build · ${report.phases.length} phase${report.phases.length === 1 ? '' : 's'}`
+          : '';
 
   const intent = useMutation({
     mutationFn: (body: IntentRequest) => submitIntent(projectId, body),
@@ -303,6 +310,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
       index: i + 1,
       fileCount: Array.isArray(p.files) ? p.files.length : undefined,
       note: p.note || undefined,
+      earlier: i < (report?.prior_phases ?? 0),
     }));
   }, [
     live.phases,
@@ -310,6 +318,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
     serverBuild?.phase_id,
     serverBuild?.label,
     report?.phases,
+    report?.prior_phases,
     busy,
   ]);
 
@@ -367,6 +376,9 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               Approve
             </Button>
           ) : null}
+          {/* The inverse of Approve: take back a "done" without touching the code on disk — what a
+              demo project kept built to this stage needs before each showing. */}
+          <ResetStageButton projectId={projectId} stage="build" status={status} disabled={busy} />
           {status === 'skipped' ? (
             <Button
               size="sm"
@@ -516,12 +528,21 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
               data-testid="build-phase-list"
             >
-              {phaseRows.map((phase) => (
+              {phaseRows.map((phase, i) => (
                 <li
                   key={phase.id}
-                  className="flex items-center gap-2 text-[11px]"
+                  className={cn(
+                    'flex items-center gap-2 text-[11px]',
+                    // The first phase of a change sits under a hairline, below the history it kept.
+                    i > 0 && phaseRows[i - 1].earlier && !phase.earlier
+                      ? 'mt-1 border-t border-dashed border-edge pt-1'
+                      : '',
+                    phase.earlier ? 'opacity-60' : '',
+                  )}
+                  title={phase.earlier ? 'From an earlier build — kept, not re-run' : undefined}
                   data-testid="build-phase-row"
                   data-status={phase.status}
+                  data-earlier={phase.earlier ? 'true' : undefined}
                 >
                   <span
                     className={cn('w-3 shrink-0 text-center', PHASE_TONE[phase.status])}

@@ -21,12 +21,18 @@ Truth table (the source the tests in ``test_state_machine.py`` are written again
               |                                        | is marked `stale` (artifacts untouched)
     unskip    | current status == skipped              | status -> the restore point recorded by
               |                                        | the `skip` (`empty` if none); no staleness
+    reset     | status-only stages: status == complete | status -> awaiting_user ("Needs you");
+              | blank stages (deploy, validate): any   | nothing else changes
+              |   status except empty / in_progress    | blank stages: status -> empty, and every
+              |                                        | strictly downstream stage -> empty too;
+              |                                        | each is reported as `cleared`
 
     Hard prereqs (the ONLY mandatory ordering, D12):
       - enter/complete `deploy`   requires `build`  == complete
       - enter/complete `validate` requires `deploy`  == complete
-    `skip`, `refine` and `unskip` are never blocked by hard prereqs — opting out, reopening, or
-    *undoing an opt-out* never requires an upstream stage to be in any particular state.
+    `skip`, `refine`, `unskip` and `reset` are never blocked by hard prereqs — opting out,
+    reopening, *undoing an opt-out* or taking back a "done" never requires an upstream stage to be
+    in any particular state.
 
 Restore points (``unskip``)
 ---------------------------
@@ -36,6 +42,21 @@ an already-working app back to `complete`. The restore point travels in and out 
 :func:`apply_transition` rather than living here — this module stays pure; the caller persists it
 (``StageState.previous_status``). Every transition other than `skip` clears it, because once a
 stage has moved on there is nothing left to restore.
+
+Resets (``reset``, user-requested 2026-10-02)
+---------------------------------------------
+A finished stage can be taken back to "not done" without re-running anything — the case is a demo
+project kept built-to-Build and shown again and again, whose later stages must look undone each
+time. Two policies, by stage:
+
+- **Status-only** (requirements, design, build, test): ``complete`` → ``awaiting_user``. Nothing is
+  deleted and nothing downstream moves; the work is still on disk and an approval (build) or a
+  proceed puts the stage back to ``complete`` without paying for it again.
+- **Blank** (deploy, validate): the stage goes back to ``empty`` — "as if it had never run" — and
+  so does every stage after it, since validation evidence about a deployment that is gone is not
+  evidence of anything. These stages are returned as ``cleared``: the caller hides their earlier
+  results from the panels (and, for deploy, takes the live deployment down). Records are kept, not
+  deleted — §7 versions artifacts rather than destroying them.
 """
 
 from __future__ import annotations
@@ -57,6 +78,14 @@ STAGE_ORDER: tuple[Stage, ...] = (
 
 _REOPENABLE = frozenset({StageStatus.complete, StageStatus.skipped, StageStatus.stale})
 
+#: Stages whose ``reset`` returns them to a blank slate (``empty``, earlier results hidden) rather
+#: than to "Needs you". Their output describes something external and live — a deployment, and the
+#: live tests run against it — so a reset that left it in place would not be a reset.
+RESET_TO_BLANK = frozenset({Stage.deploy, Stage.validate})
+
+#: Statuses a blank-policy stage can never be reset from: nothing to reset, or work in flight.
+_UNRESETTABLE_BLANK = frozenset({StageStatus.empty, StageStatus.in_progress})
+
 
 class Action(StrEnum):
     enter = "enter"
@@ -64,6 +93,7 @@ class Action(StrEnum):
     complete = "complete"
     refine = "refine"
     unskip = "unskip"
+    reset = "reset"
 
 
 StageSnapshot = Mapping[Stage, StageStatus]
@@ -84,6 +114,9 @@ class ApplyResult:
     ``restore_point`` is what the caller should now persist as the stage's restore point: the
     status a later ``unskip`` puts back. It is authoritative, not advisory — ``None`` means
     *clear* it, so a caller that always writes it can never leave a stale one behind.
+
+    ``cleared`` names the stages a ``reset`` returned to a blank slate (the stage itself first,
+    then anything downstream it emptied): the caller hides their earlier results.
     """
 
     states: dict[Stage, StageStatus]
@@ -92,6 +125,7 @@ class ApplyResult:
     to_status: StageStatus
     stale: tuple[Stage, ...] = field(default_factory=tuple)
     restore_point: StageStatus | None = None
+    cleared: tuple[Stage, ...] = field(default_factory=tuple)
 
 
 def downstream_of(stage: Stage) -> tuple[Stage, ...]:
@@ -129,7 +163,27 @@ def can_transition(states: StageSnapshot, stage: Stage, action: Action) -> Trans
     if action is Action.unskip and _status_of(states, stage) is not StageStatus.skipped:
         return TransitionResult(allowed=False, reason="unskip requires the stage to be skipped")
 
+    if action is Action.reset:
+        status = _status_of(states, stage)
+        if stage in RESET_TO_BLANK:
+            if status in _UNRESETTABLE_BLANK:
+                return TransitionResult(
+                    allowed=False,
+                    reason=(
+                        "reset needs the stage to have run — it is still in progress"
+                        if status is StageStatus.in_progress
+                        else "reset has nothing to undo — the stage has not been started"
+                    ),
+                )
+        elif status is not StageStatus.complete:
+            return TransitionResult(allowed=False, reason="reset requires the stage to be complete")
+
     return TransitionResult(allowed=True)
+
+
+def reset_target(stage: Stage) -> StageStatus:
+    """What ``reset`` puts ``stage`` back to: blank for deploy/validate, "Needs you" otherwise."""
+    return StageStatus.empty if stage in RESET_TO_BLANK else StageStatus.awaiting_user
 
 
 def restore_target(recorded: StageStatus | None) -> StageStatus:
@@ -168,6 +222,7 @@ def apply_transition(
     from_status = _status_of(states, stage)
     new_states = dict(states)
     stale: tuple[Stage, ...] = ()
+    cleared: tuple[Stage, ...] = ()
     # Cleared by default: any transition other than a skip leaves nothing to restore.
     next_restore_point: StageStatus | None = None
 
@@ -183,6 +238,14 @@ def apply_transition(
         to_status = StageStatus.complete
     elif action is Action.unskip:
         to_status = restore_target(restore_point)
+    elif action is Action.reset:
+        to_status = reset_target(stage)
+        if stage in RESET_TO_BLANK:
+            # Downstream is emptied whatever its status: its evidence was about what was just reset.
+            downstream = downstream_of(stage)
+            cleared = (stage, *downstream)
+            for s in downstream:
+                new_states[s] = StageStatus.empty
     else:  # Action.refine
         to_status = StageStatus.in_progress
         stale = tuple(
@@ -199,4 +262,5 @@ def apply_transition(
         to_status=to_status,
         stale=stale,
         restore_point=next_restore_point,
+        cleared=cleared,
     )

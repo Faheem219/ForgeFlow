@@ -35,15 +35,19 @@ from app.agents.build_plan import (
     PHASE_RUNNING,
     BuildPhase,
     BuildPlan,
+    extend_plan,
     fallback_plan,
+    incremental_plan,
     parse_build_plan,
     render_markdown,
 )
 from app.agents.models import TaskKind
 from app.agents.prompts import system_prompt
 from app.agents.prompts.codegen import (
+    CHANGE_PLAN_SYSTEM_EXTRA,
     PHASE_IMPLEMENT_SYSTEM_EXTRA,
     PHASE_PLAN_SYSTEM_EXTRA,
+    change_plan_user_prompt,
     phase_plan_user_prompt,
     phase_user_prompt,
 )
@@ -199,6 +203,81 @@ class BuildPlanner:
         await self.persist(project_id, plan)
         await self.write_workspace(project, ctx, plan, {})
         return plan
+
+    async def plan_change(
+        self,
+        project: Project,
+        run: Run,
+        *,
+        ctx: ToolContext,
+        channel: str,
+        prior: BuildPlan,
+        outcomes: dict[str, str],
+        instruction: str,
+        requirements: str | None,
+        existing: str | None,
+    ) -> BuildPlan:
+        """Plan a change to a built app as NEW phases appended to ``prior`` (phase-67).
+
+        Returns the merged plan, persisted as a new version and mirrored into the workspace with
+        every earlier phase's status intact — the file grows a section; it is never rewritten from
+        scratch. If the model's plan is unusable, the change becomes the small path's single
+        synthetic phase, **not** :func:`fallback_plan`: that one plans a whole app, which is the
+        re-implementation this method exists to prevent.
+        """
+        project_id = project.id
+        assert project_id is not None
+        max_phases = int(get_config().get("build_max_phases"))
+
+        change: BuildPlan | None = None
+        try:
+            result = await self._client.run_tool_loop(
+                task_kind=TaskKind.summarize,  # MODEL_ROUTING — planning stays cheap
+                project_id=project_id,
+                run=run,
+                system=system_prompt(CHANGE_PLAN_SYSTEM_EXTRA),
+                messages=[
+                    {
+                        "role": "user",
+                        "content": change_plan_user_prompt(
+                            project.name,
+                            instruction,
+                            _plan_outline(prior, outcomes),
+                            requirements,
+                            existing,
+                            max_phases=max_phases,
+                        ),
+                    }
+                ],
+                channel=channel,
+            )
+            change = parse_build_plan(result.text)
+        except (UserError, NotFoundError):
+            change = None  # the change still gets made — as one direct pass, below
+
+        if change is not None:
+            change = change.validate(max_phases=max_phases)
+        if change is None or not change.phases:
+            change = incremental_plan(instruction)
+
+        merged = extend_plan(prior, change, instruction=instruction)
+        await self.persist(project_id, merged)
+        await self.write_workspace(project, ctx, merged, outcomes)
+        return merged
+
+    async def latest(self, project_id: PydanticObjectId) -> BuildPlan | None:
+        """The most recently persisted plan, or ``None`` (no plan yet, or an unreadable one)."""
+        artifact = await self._artifacts.get_latest_of_kind(
+            project_id, Stage.build, ArtifactType.code_change, BUILD_PLAN_KIND
+        )
+        if artifact is None:
+            return None
+        try:
+            text = await self._artifacts.get_content(artifact)
+            data = json.loads(text) if text else None
+        except (UserError, NotFoundError, json.JSONDecodeError, TypeError):
+            return None
+        return BuildPlan.from_dict(data) if isinstance(data, dict) else None
 
     async def persist(self, project_id: PydanticObjectId, plan: BuildPlan) -> None:
         """Version the plan as an artifact — a new ``meta.kind`` under the existing type (§7).
@@ -501,6 +580,17 @@ class PhaseRunner:
         run.progress.phase_id = phase.id
         run.progress.updated_at = utcnow()
         await run.save()
+
+
+def _plan_outline(plan: BuildPlan, outcomes: dict[str, str]) -> str:
+    """The existing plan as the change planner sees it: one line per phase, with its status."""
+    if not plan.phases:
+        return "(no recorded plan — rely on the repository map)"
+    return "\n".join(
+        f"{i}. [{p.kind}] {p.title} — {outcomes.get(p.id, 'done')}"
+        + (f": {p.goal}" if p.goal else "")
+        for i, p in enumerate(plan.phases, start=1)
+    )
 
 
 def story_so_far(outcomes: list[PhaseOutcome]) -> str:

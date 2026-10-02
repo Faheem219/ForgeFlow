@@ -36,7 +36,15 @@ from app.agents.build_phases import (
     PhaseRunner,
     story_so_far,
 )
-from app.agents.build_plan import PHASE_DONE, PHASE_PENDING, BuildPlan, incremental_plan
+from app.agents.build_plan import (
+    PHASE_DONE,
+    PHASE_PENDING,
+    BuildPhase,
+    BuildPlan,
+    as_phase_kind,
+    extend_plan,
+    incremental_plan,
+)
 from app.agents.build_scope import BuildScope, ScopeClassifier
 from app.agents.tools.context import ToolContext
 from app.agents.tools.definitions import default_registry
@@ -190,6 +198,9 @@ class BuildReport:
     # phase-60 additions — defaulted, so reports written before scope routing still parse.
     scope: str = ""
     scope_reason: str = ""
+    # phase-67 — how many leading entries of `phases` are earlier builds' phases, carried as history
+    # by a change request: shown, never re-run, and not judged by this build's completion gate.
+    prior_phases: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -208,12 +219,23 @@ class BuildReport:
             "stop_reason": self.stop_reason,
             "scope": self.scope,
             "scope_reason": self.scope_reason,
+            "prior_phases": self.prior_phases,
         }
 
     @property
+    def run_phases(self) -> list[PhaseOutcome]:
+        """The phases THIS build was responsible for — everything after the carried history."""
+        return self.phases[self.prior_phases :]
+
+    @property
     def phases_complete(self) -> bool:
-        """Every planned phase reached ``done``. Vacuously true for an unphased report."""
-        return all(p.status == PHASE_DONE for p in self.phases)
+        """Every phase this build ran reached ``done``. Vacuously true for an unphased report.
+
+        Earlier builds' phases a change request carried along are history, not this build's
+        promise: a change must be judged by the change, or one old unfinished phase would hold every
+        later refine out of `complete` forever.
+        """
+        return all(p.status == PHASE_DONE for p in self.run_phases)
 
 
 @dataclass
@@ -356,6 +378,11 @@ class CodegenAgent:
                 )
                 notes += [f"Outstanding follow-up: {f}" for f in previous.follow_ups]
 
+        # A change request to a build that exists (phase-67). It extends what was built — the plan
+        # that built the app, every phase recorded so far, the code on disk — and never re-plans it.
+        is_change = bool(instruction) and bool(existing_paths) and not fresh
+        history_plan, history = await self._history(project_id) if is_change else (BuildPlan(), [])
+
         # Gather minimal upstream context (tolerate missing / stale — D12).
         design, design_note = await self._design_context(project_id, stages)
         requirements, req_note, features = await self._requirements_context(project_id, stages)
@@ -388,6 +415,23 @@ class CodegenAgent:
             # saving is in PLANNING, never in proof — phase-55 verification runs unchanged below.
             assert instruction is not None  # a small scope implies a change request
             build_plan = incremental_plan(instruction)
+            if is_change:  # appended to the history, so the report keeps every earlier phase
+                build_plan = extend_plan(history_plan, build_plan, instruction=instruction)
+        elif is_change:
+            # A large change gets phases of its OWN, appended to the plan that built the app. Only
+            # those run; the earlier ones — and the code they wrote — are left exactly as they are.
+            assert instruction is not None
+            build_plan = await self._planner.plan_change(
+                project,
+                run,
+                ctx=ctx,
+                channel=channel,
+                prior=history_plan,
+                outcomes={o.id: o.status for o in history},
+                instruction=instruction,
+                requirements=requirements,
+                existing=existing,
+            )
         else:
             build_plan = await self._planner.plan(
                 project,
@@ -407,11 +451,23 @@ class CodegenAgent:
         #
         # A small change never resumes: its synthetic phase id is stable, so a second refine would
         # see the first one's `change` phase recorded as done and skip the new request entirely.
-        if decision.is_small:
+        #
+        # A change request (either size) starts exactly where the history ends: every earlier phase
+        # is carried as recorded, and only the phases it appended run (phase-67).
+        prior_phases = len(history)
+        if is_change:
+            resume_from, carried = prior_phases, list(history)
+            left_open = [o.title for o in history if o.status != PHASE_DONE]
+            if left_open:
+                notes.append(
+                    f"{len(left_open)} earlier phase(s) are still unfinished and were left as "
+                    f"they are: {', '.join(left_open)}. Rebuild to finish them."
+                )
+        elif decision.is_small:
             resume_from, carried = 0, cast(list[PhaseOutcome], [])
         else:
             resume_from, carried = await self._resume_point(project_id, build_plan, fresh=fresh)
-        if resume_from:
+        if resume_from and not is_change:
             notes.append(
                 f"Resuming at phase {resume_from + 1} of {len(build_plan.phases)} — "
                 f"{resume_from} phase(s) already done."
@@ -455,6 +511,7 @@ class CodegenAgent:
                 stop_reason="failed",
                 scope=str(decision.scope),
                 scope_reason=decision.reason,
+                prior_phases=prior_phases if is_change else 0,
             )
             await self._persist_report(project_id, partial, failed=True)
             await emit(
@@ -476,8 +533,8 @@ class CodegenAgent:
             follow_ups.insert(0, phased.follow_up)
             notes = [*notes, f"Build unfinished: {phased.note}."]
             summary = summary or f"Build unfinished — {phased.note}."
-        elif not phased.complete:
-            unfinished = [p for p in phased.phases if p.status != PHASE_DONE]
+        elif not all(p.status == PHASE_DONE for p in phased.phases[len(history) :]):
+            unfinished = [p for p in phased.phases[len(history) :] if p.status != PHASE_DONE]
             detail = "; ".join(f"{p.title} ({p.note or p.status})" for p in unfinished)
             follow_ups.insert(
                 0,
@@ -496,10 +553,14 @@ class CodegenAgent:
             summary=summary,
             plan=plan,
             phases=phased.phases,
-            outcome=("complete" if phased.complete and phased.stop_reason is None else "partial"),
+            outcome="",  # set below, from the phases THIS build ran
             stop_reason=phased.stop_reason,
             scope=str(decision.scope),
             scope_reason=decision.reason,
+            prior_phases=prior_phases if is_change else 0,
+        )
+        report.outcome = (
+            "complete" if report.phases_complete and phased.stop_reason is None else "partial"
         )
         await self._persist_report(project_id, report)
         await emit(
@@ -622,6 +683,42 @@ class CodegenAgent:
         return _PhaseLoopResult(
             phases=outcomes, stop_reason=stop_reason, summary=summary, note=note
         )
+
+    async def _history(self, project_id: PydanticObjectId) -> tuple[BuildPlan, list[PhaseOutcome]]:
+        """Everything earlier builds recorded, as a plan a change request can extend (phase-67).
+
+        The last report's phases are authoritative for *what ran* (and include earlier changes);
+        the persisted plan contributes each phase's goal and files, and the change sections. The
+        returned plan lines up with the outcomes one-to-one, which is what lets the build run only
+        what a change appends by slicing past them.
+        """
+        previous = await self._previous_report(project_id)
+        history = list(previous.phases) if previous is not None else []
+        stored = await self._planner.latest(project_id)
+        by_id = {p.id: p for p in stored.phases} if stored is not None else {}
+        phases = [
+            by_id.get(o.id)
+            or BuildPhase(
+                id=o.id,
+                title=o.title,
+                kind=as_phase_kind(o.kind, default="wiring"),
+                goal=o.summary,
+            )
+            for o in history
+        ]
+        known = {o.id for o in history}
+        plan = BuildPlan(
+            phases=phases,
+            assumptions=list(stored.assumptions) if stored is not None else [],
+            notes=list(stored.notes) if stored is not None else [],
+            source=stored.source if stored is not None else "model",
+            changes=(
+                [c for c in stored.changes if set(c.phase_ids) <= known]
+                if stored is not None
+                else []
+            ),
+        )
+        return plan, history
 
     async def _resume_point(
         self, project_id: PydanticObjectId, plan: BuildPlan, *, fresh: bool
@@ -847,6 +944,9 @@ class CodegenAgent:
             stop_reason=(
                 str(data["stop_reason"]) if isinstance(data.get("stop_reason"), str) else None
             ),
+            scope=str(data.get("scope", "")),
+            scope_reason=str(data.get("scope_reason", "")),
+            prior_phases=_as_count(data.get("prior_phases")),
         )
 
     def _follow_ups(self, tracker: _BuildTracker) -> list[str]:
@@ -882,6 +982,7 @@ class CodegenAgent:
                 "failed": failed,
                 # phase-56: badge the report so the UI can render a summary without fetching it.
                 "phase_count": len(report.phases),
+                "prior_phases": report.prior_phases,
                 "outcome": report.outcome,
                 "stop_reason": report.stop_reason,
             },
@@ -902,6 +1003,11 @@ class CodegenAgent:
             run.progress.target = ""
             run.progress.updated_at = utcnow()
             await run.save()
+
+
+def _as_count(value: Any) -> int:
+    """A non-negative int from a persisted report field, or 0 for anything else."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
 def _human_size(size: int) -> str:

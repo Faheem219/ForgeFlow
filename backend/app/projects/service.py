@@ -75,6 +75,12 @@ class TransitionOutcome:
     from_status: StageStatus
     to_status: StageStatus
     stale: tuple[Stage, ...]
+    #: Stages a blank-slate ``reset`` emptied and whose earlier results are now history.
+    cleared: tuple[Stage, ...] = ()
+    #: Provider deployments a deploy ``reset`` took down (target keys across every record).
+    deployments_destroyed: int = 0
+    #: What a deploy ``reset`` could not reclaim at the provider — to be cleaned up by hand.
+    warnings: tuple[str, ...] = ()
 
 
 class ProjectService:
@@ -214,8 +220,11 @@ class ProjectService:
         user_id: PydanticObjectId,
         report: DeleteReport,
     ) -> int:
-        """Take down every live deployment this project owns. Fail-soft, like the other legs."""
-        from app.db.models import STATUS_DELETED
+        """Take down every deployment this project still holds a provider handle for.
+
+        Fail-soft, like the other legs. Live records, and retired ones whose teardown a provider
+        refused last time — both still carry refs, and nothing else does.
+        """
         from app.deploy.teardown import DeploymentTeardown
 
         destroyed = 0
@@ -227,7 +236,9 @@ class ProjectService:
 
         teardown = DeploymentTeardown()
         for record in records:
-            if record.status == STATUS_DELETED or not record.refs:
+            # A retired record that still holds refs is a teardown the provider refused last time
+            # (phase-62 keeps them for exactly this): retry it rather than leave it running.
+            if not record.refs:
                 continue
             try:
                 result = await teardown.destroy(record, user_id=user_id)
@@ -267,26 +278,54 @@ class ProjectService:
         )
         for stale_stage in result.stale:
             await self._stages.set_status(project_id, stale_stage, StageStatus.stale)
+        # A blank-slate reset: every cleared stage is `empty` now, and what it produced before this
+        # moment stops being its current result (the panels read past `cleared_at`).
+        emptied: list[tuple[Stage, StageStatus]] = []
+        for cleared_stage in result.cleared:
+            if cleared_stage is not result.stage:
+                was = snapshot.get(cleared_stage, StageStatus.empty)
+                await self._stages.set_status(project_id, cleared_stage, StageStatus.empty)
+                if was is not StageStatus.empty:
+                    emptied.append((cleared_stage, was))
+            await self._stages.mark_cleared(project_id, cleared_stage)
 
         project.current_stage = stage
         project.updated_at = utcnow()
         await project.save()
 
-        await emit(
-            str(project_id),
-            EventType.stage_transition,
-            {
-                "stage": str(result.stage),
-                "from": str(result.from_status),
-                "to": str(result.to_status),
-                "stale": [str(s) for s in result.stale],
-            },
-            stage=result.stage,
-        )
+        payload: dict[str, object] = {
+            "stage": str(result.stage),
+            "from": str(result.from_status),
+            "to": str(result.to_status),
+            "stale": [str(s) for s in result.stale],
+        }
+        if result.cleared:  # only a blank-slate reset; every other transition keeps its shape
+            payload["cleared"] = [str(s) for s in result.cleared]
+        await emit(str(project_id), EventType.stage_transition, payload, stage=result.stage)
+        for emptied_stage, was in emptied:
+            await emit(
+                str(project_id),
+                EventType.stage_transition,
+                {"stage": str(emptied_stage), "from": str(was), "to": str(StageStatus.empty)},
+                stage=emptied_stage,
+            )
+
+        # Resetting deploy means the deployment is gone, not merely unlisted — the user wants to
+        # show a fresh one, and a hidden-but-live site would keep serving (and billing). Hosting
+        # only: the project database is untouched (D8). Fail-soft, like project delete.
+        destroyed = 0
+        warnings: tuple[str, ...] = ()
+        if action is Action.reset and stage is Stage.deploy:
+            teardown = DeleteReport()
+            destroyed = await self._destroy_deployments(project_id, user_id, teardown)
+            warnings = tuple(teardown.warnings)
 
         return TransitionOutcome(
             stage=result.stage,
             from_status=result.from_status,
             to_status=result.to_status,
             stale=result.stale,
+            cleared=result.cleared,
+            deployments_destroyed=destroyed,
+            warnings=warnings,
         )

@@ -194,6 +194,12 @@ async def test_destroy_deletes_the_service(platform_token: str) -> None:
     assert api.paths == ["/v1/services/srv-abc123"]
 
 
+async def test_a_service_that_is_already_gone_counts_as_destroyed(platform_token: str) -> None:
+    api = FakeDeployApi({("DELETE", "/v1/services"): (404, {"message": "not found"})})
+
+    assert await provider(api).destroy(DeployRef(id="srv-abc123"), mode=DeployMode.seamless)
+
+
 # ---------------------------------------------------------------- errors + resilience
 
 

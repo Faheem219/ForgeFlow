@@ -97,5 +97,21 @@ def _summarize(deployment: Deployment) -> str:
     if deployment.urls.get("be"):
         lines.append(f"Backend: {deployment.urls['be']}")
     if deployment.status != STATUS_LIVE:
-        lines.append("Not fully live yet — check the step logs and retry, or open the topology.")
+        # Say WHY, and what to do about it — "check the step logs" sent the user hunting for a
+        # reason the record already had.
+        nodes = deployment.topology_snapshot.get("nodes")
+        hints: list[str] = []
+        for node in nodes if isinstance(nodes, list) else []:
+            if not isinstance(node, dict) or not node.get("error"):
+                continue
+            name = _NODE_NAMES.get(str(node.get("id")), str(node.get("id")))
+            lines.append(f"{name} failed: {node['error']}")
+            hint = node.get("hint")
+            if isinstance(hint, str) and hint and hint not in hints:
+                hints.append(hint)
+        lines += hints
+        lines.append("Not fully live yet — fix the cause above and deploy again.")
     return "\n".join(lines)
+
+
+_NODE_NAMES = {"fe": "Frontend", "be": "Backend", "db": "Database"}

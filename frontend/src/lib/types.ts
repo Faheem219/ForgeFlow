@@ -8,8 +8,11 @@ export type StageStatus =
 /**
  * `unskip` is the inverse of `skip` — it restores the status a stage held before it was skipped,
  * without re-running the stage (backend app/orchestrator/conductor.py).
+ *
+ * `reset` takes back a "done" without re-running anything: most stages go back to "Needs you" with
+ * their work kept; deploy and validate go back to a blank slate (the live deployment is taken down).
  */
-export type IntentAction = 'refine' | 'proceed' | 'skip' | 'unskip';
+export type IntentAction = 'refine' | 'proceed' | 'skip' | 'unskip' | 'reset';
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -243,6 +246,8 @@ export interface IntentResponse {
   messages: MessageDto[];
   artifacts: ArtifactDto[];
   run_id: string;
+  /** Stages a `reset` returned to a blank slate — their earlier results are no longer shown. */
+  cleared?: Stage[];
 }
 
 // --- Requirements stage (phase-25 schema / phase-26 UI) ---
@@ -357,6 +362,10 @@ export interface TopologyNodeDto {
   provider: string;
   url?: string | null;
   status: string;
+  /** Why this target failed, as recorded on the deployment — survives a reload, unlike events. */
+  error?: string | null;
+  /** What to do about it (e.g. which token to replace), when the failure has a known fix. */
+  hint?: string | null;
 }
 
 /** A wiring edge; `label` is the env **key** that carries the target's URL/URI (never its value). */

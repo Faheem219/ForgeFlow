@@ -8,6 +8,7 @@ import { toastError } from '../../lib/errors';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   fileToBase64,
@@ -275,6 +276,12 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
           ) : null}
         </span>
         <div className="flex gap-2">
+          <ResetStageButton
+            projectId={projectId}
+            stage="design"
+            status={designStatus}
+            disabled={busy}
+          />
           <Button
             size="sm"
             variant="secondary"

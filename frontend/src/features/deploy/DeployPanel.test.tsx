@@ -46,6 +46,8 @@ interface MockState {
   beProvider: string;
   deleted: number;
   deleteWarnings: string[];
+  deployStatus: string;
+  intents: Array<Record<string, unknown>>;
 }
 
 let state: MockState;
@@ -69,8 +71,32 @@ function installFetch(): void {
         }),
       );
     }
+    if (url.includes('/intent')) {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      state.intents.push(body);
+      if (body.action === 'reset') {
+        // What the server does: the deployment is taken down and the panel reads as never run.
+        state.deployment = null;
+        state.deployStatus = 'empty';
+      }
+      return Promise.resolve(
+        json({
+          stage: 'deploy',
+          action: body.action,
+          from_status: 'complete',
+          to_status: state.deployStatus,
+          stale: [],
+          messages: [],
+          artifacts: [],
+          run_id: 'r',
+          cleared: ['deploy', 'validate'],
+        }),
+      );
+    }
     if (url.includes('/stages')) {
-      return Promise.resolve(json([stage('build', 'complete'), stage('deploy', 'complete')]));
+      return Promise.resolve(
+        json([stage('build', 'complete'), stage('deploy', state.deployStatus)]),
+      );
     }
     if (url.includes('/deploy/config')) {
       return Promise.resolve(
@@ -122,6 +148,8 @@ beforeEach(() => {
     beProvider: 'vercel',
     deleted: 0,
     deleteWarnings: [],
+    deployStatus: 'complete',
+    intents: [],
   };
   useRealtimeStore.setState({ channel: PROJECT, events: [] });
   installFetch();
@@ -292,6 +320,39 @@ describe('deleting a deployment', () => {
 
     expect(screen.queryByTestId('deploy-delete')).toBeNull();
     expect(screen.getByTestId('deploy-run')).toHaveTextContent('Deploy');
+  });
+});
+
+describe('resetting deploy', () => {
+  it('asks before taking the deployment down', async () => {
+    await renderPanel();
+
+    fireEvent.click(screen.getByTestId('deploy-reset'));
+
+    expect(await screen.findByText('Reset Deploy?')).toBeInTheDocument();
+    expect(state.intents).toEqual([]);
+  });
+
+  it('resets on confirm and shows the panel as never deployed', async () => {
+    await renderPanel();
+    expect(screen.getByTestId('deploy-run')).toHaveTextContent('Redeploy');
+
+    fireEvent.click(screen.getByTestId('deploy-reset'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => expect(state.intents).toEqual([{ stage: 'deploy', action: 'reset' }]));
+    await waitFor(() => expect(screen.getByTestId('deploy-run')).toHaveTextContent('Deploy'));
+    expect(screen.getByTestId('deploy-stage-status')).toHaveTextContent('Not started');
+    expect(screen.queryByTestId('deploy-delete')).toBeNull();
+    expect(screen.queryByTestId('deploy-reset')).toBeNull();
+  });
+
+  it('offers no reset before anything has been deployed', async () => {
+    state.deployment = null;
+    state.deployStatus = 'empty';
+    await renderPanel();
+
+    expect(screen.queryByTestId('deploy-reset')).toBeNull();
   });
 });
 

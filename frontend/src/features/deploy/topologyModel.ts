@@ -201,7 +201,8 @@ export function nodeViews(
     label: NODE_LABELS[node.id] ?? node.id,
     liveStatus: state.statuses[node.id] ?? toNodeStatus(node.status),
     liveUrl: state.urls[node.id] ?? node.url ?? null,
-    error: state.errors[node.id] ?? null,
+    // The live event wins while a deploy runs; after a reload, the reason the record kept.
+    error: state.errors[node.id] ?? node.error ?? null,
     envKeys: envKeysFor(node.id, snapshot),
   }));
 }

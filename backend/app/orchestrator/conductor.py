@@ -17,9 +17,12 @@ Intent → state-machine action mapping:
   - ``proceed``  → ``complete`` (accept the stage and advance; honors the hard prereqs)
   - ``refine``   → ``refine`` if the stage is already complete/skipped/stale (a jump-back that
                    stales downstream), else ``enter`` (start/continue an in-flight stage).
+  - ``reset``    → ``reset`` (take back a "done": "Needs you" for most stages, a blank slate for
+                   deploy/validate — the live deployment is taken down)
 
-``unskip`` is answered by step 6 alone — it is a pure state restore, so no stage handler runs and
-no artifact is produced (step 5 is skipped entirely).
+``unskip`` and ``reset`` are answered by step 6 alone — each is a pure state change, so no stage
+handler runs and no artifact is produced (step 5 is skipped entirely). A reset is refused while
+work for the stage is still running: a build finishing after it would put `complete` straight back.
 """
 
 from __future__ import annotations
@@ -53,7 +56,7 @@ from app.orchestrator.schemas import (
 from app.orchestrator.stages import get_handler
 from app.orchestrator.stages.base import StageContext
 from app.projects.service import ProjectService
-from app.projects.state_machine import Action, can_transition
+from app.projects.state_machine import RESET_TO_BLANK, Action, can_transition, downstream_of
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
 
@@ -79,6 +82,22 @@ _DETACHED_STAGES = {Stage.build}
 #: Run kinds that mean "a build is in flight" — the conductor's own trace and the codegen agent's.
 BUILD_RUN_KINDS = ("conductor:build", "codegen:build")
 
+#: Run kinds that mean "this stage is working", beyond the conductor's own `conductor:<stage>`. A
+#: reset is refused while any of them is open: the work would land after it and undo the reset.
+_STAGE_RUN_KINDS: dict[Stage, tuple[str, ...]] = {
+    Stage.requirements: ("requirements:draft", "requirements:suggest"),
+    Stage.build: ("codegen:build",),
+    Stage.test: ("repair:loop",),
+    Stage.deploy: ("deploy",),
+    Stage.validate: ("validate",),
+}
+
+#: What a reset tells the user to do to put a stage back to `complete` without re-running it.
+_REDO_HINTS = {
+    Stage.build: "Press Approve to mark it complete again, or Rebuild to run it.",
+    Stage.test: "Run the tests, or press Proceed to mark it complete again.",
+}
+
 #: Strong refs to detached tasks; asyncio only holds weak ones, so without this they can vanish
 #: mid-build with no error anywhere.
 _DETACHED: set[asyncio.Task[None]] = set()
@@ -97,6 +116,14 @@ def _runs_detached(intent: Intent, action: Action) -> bool:
     if action not in (Action.enter, Action.complete, Action.refine):
         return False
     return not intent.is_approval
+
+
+def _busy_kinds(stages: tuple[Stage, ...]) -> list[str]:
+    """Every run kind that means one of ``stages`` is still working."""
+    kinds: list[str] = []
+    for stage in stages:
+        kinds += [f"conductor:{stage}", *_STAGE_RUN_KINDS.get(stage, ())]
+    return kinds
 
 
 async def reap_orphaned_runs() -> int:
@@ -136,6 +163,8 @@ def _resolve_action(action: IntentAction, current: StageStatus) -> Action:
         return Action.skip
     if action is IntentAction.unskip:
         return Action.unskip
+    if action is IntentAction.reset:
+        return Action.reset
     if action is IntentAction.proceed:
         return Action.complete
     # refine: a jump-back only makes sense once the stage has produced something.
@@ -167,6 +196,19 @@ class Conductor:
             await self._messages.append(
                 intent.project_id, MessageRole.user, intent.message, stage=intent.stage
             )
+
+        # A reset taken while the stage is still working would be overwritten the moment that work
+        # finishes — the build closing `complete`, the deploy closing `live` — so it is refused, as
+        # is a blank reset of deploy while validation runs against the deployment it would remove.
+        if action is Action.reset:
+            covered: tuple[Stage, ...] = (intent.stage,)
+            if intent.stage in RESET_TO_BLANK:
+                covered += downstream_of(intent.stage)
+            if await self._runs.active_for_project(intent.project_id, _busy_kinds(covered)):
+                raise UserError(
+                    f"{intent.stage.value.capitalize()} is still running — wait for it to finish "
+                    "before resetting it."
+                )
 
         # Refuse to start a second build on top of one already running: they share one workspace
         # and would race on the same files. The open `Run` is the durable lock.
@@ -253,6 +295,8 @@ class Conductor:
         """Dispatch to the stage handler, then persist everything it produced."""
         if action is Action.unskip:
             return await self._unskip(user_id, intent, current, run)
+        if action is Action.reset:
+            return await self._reset(user_id, intent, current, run)
 
         try:
             result = await get_handler(intent.stage).handle(intent, ctx)
@@ -389,6 +433,70 @@ class Conductor:
             messages=[MessageOut.from_message(message)],
             artifacts=[],
             run_id=str(run.id),
+        )
+
+    async def _reset(
+        self,
+        user_id: PydanticObjectId,
+        intent: Intent,
+        current: StageStatus,
+        run: Run,
+    ) -> IntentResponse:
+        """Take back a "done" — answered here, with no stage handler, for the same reason as
+        :meth:`_unskip`: it changes what the stage *claims*, not what exists.
+
+        The service does the work (status, the cleared stages, and for deploy the provider
+        teardown); this records what happened in the conversation, which is where a user who
+        reset a stage by accident finds out how to put it back.
+        """
+        outcome = await self._projects.transition_stage(
+            intent.project_id, user_id, intent.stage, Action.reset
+        )
+        name = intent.stage.value.capitalize()
+        if intent.stage is Stage.deploy:
+            later = [s.value.capitalize() for s in outcome.cleared if s is not Stage.deploy]
+            parts = [
+                (
+                    f"Deploy reset — the app's hosting was deleted at the provider "
+                    f"({outcome.deployments_destroyed} removed, e.g. its Vercel projects)"
+                    if outcome.deployments_destroyed
+                    else "Deploy reset — there was no live deployment left to take down"
+                )
+                + ", and the stage is back to not started"
+                + (f", along with {', '.join(later)}" if later else "")
+                + ". Your app's database and data are untouched. Deploy again whenever you're "
+                "ready."
+            ]
+            if outcome.warnings:
+                parts.append(
+                    "Some provider resources could not be removed and may need deleting by hand: "
+                    + "; ".join(outcome.warnings)
+                )
+            content = "\n\n".join(parts)
+        elif intent.stage in RESET_TO_BLANK:
+            content = (
+                f"{name} reset — it is back to not started and its earlier results are hidden. "
+                "Nothing was deleted."
+            )
+        else:
+            content = (
+                f"{name} reset — marked {_STATUS_WORDS[outcome.to_status]} instead of complete. "
+                "Nothing was deleted or re-run. "
+                + _REDO_HINTS.get(intent.stage, "Press Proceed to mark it complete again.")
+            )
+        message = await self._messages.append(
+            intent.project_id, MessageRole.assistant, content, stage=intent.stage
+        )
+        return IntentResponse(
+            stage=intent.stage,
+            action=intent.action,
+            from_status=current,
+            to_status=outcome.to_status,
+            stale=list(outcome.stale),
+            messages=[MessageOut.from_message(message)],
+            artifacts=[],
+            run_id=str(run.id),
+            cleared=list(outcome.cleared),
         )
 
     # -- helpers -----------------------------------------------------------------------------

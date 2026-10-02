@@ -92,4 +92,27 @@ describe('StageNavigator', () => {
     expect(screen.getByTestId('stage-action-build-skip')).toBeInTheDocument();
     expect(screen.queryByTestId('stage-action-build-unskip')).toBeNull();
   });
+
+  it('offers Reset on a finished stage and reports it', () => {
+    // A demo project kept built to Build gets its later stages taken back before each showing.
+    const { onAction } = renderNav({ build: 'complete', test: 'complete' });
+    fireEvent.click(screen.getByTestId('stage-menu-test'));
+
+    fireEvent.click(screen.getByTestId('stage-action-test-reset'));
+    expect(onAction).toHaveBeenCalledWith('test', 'reset');
+  });
+
+  it('offers no Reset for a stage that is not done', () => {
+    renderNav({ build: 'awaiting_user' });
+    fireEvent.click(screen.getByTestId('stage-menu-build'));
+
+    expect(screen.queryByTestId('stage-action-build-reset')).toBeNull();
+  });
+
+  it('offers Reset for a half-finished deploy, which a blank slate is for', () => {
+    renderNav({ build: 'complete', deploy: 'awaiting_user' });
+    fireEvent.click(screen.getByTestId('stage-menu-deploy'));
+
+    expect(screen.getByTestId('stage-action-deploy-reset')).toBeInTheDocument();
+  });
 });

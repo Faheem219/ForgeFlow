@@ -42,7 +42,12 @@ from app.deploy.providers import (
     backend_uploads_source,
     provider_for,
 )
-from app.deploy.providers.base import DeployResult, DeploySpec, DeployState
+from app.deploy.providers.base import (
+    MANAGED_NAME_PREFIX,
+    DeployResult,
+    DeploySpec,
+    DeployState,
+)
 from app.realtime.hub import emit
 from app.realtime.schemas import EventType
 
@@ -190,7 +195,14 @@ class DeployOrchestrator:
             urls=urls,
             refs=_refs(be_result, fe_result),
             status=status,
-            topology_snapshot=_topology(plan, be_result, fe_result, db_target, status),
+            topology_snapshot=_topology(
+                plan,
+                be_result,
+                fe_result,
+                db_target,
+                status,
+                errors=_node_errors(plan, be_result, be_error, fe_result, fe_error, backend_ok),
+            ),
             logs_ref=await self._store_log(log),
         ).insert()
 
@@ -350,7 +362,7 @@ class DeployOrchestrator:
 
 def _service_name(project: Project, suffix: str) -> str:
     """A stable, provider-valid (lowercase, dashed) service name for a project's target."""
-    return f"forgeflow-{suffix}-{str(project.id)[-8:]}"
+    return f"{MANAGED_NAME_PREFIX}{suffix}-{str(project.id)[-8:]}"
 
 
 def _urls(be: DeployResult | None, fe: DeployResult | None) -> dict[str, str]:
@@ -394,12 +406,46 @@ def _overall_status(
     return STATUS_LIVE
 
 
+def _node_errors(
+    plan: InfraPlan,
+    be: DeployResult | None,
+    be_error: Exception | None,
+    fe: DeployResult | None,
+    fe_error: Exception | None,
+    backend_ok: bool,
+) -> dict[str, dict[str, str]]:
+    """Why each failed target failed, kept on the record (phase-66 follow-up).
+
+    The reason used to live only in the pipeline log blob and in the transient ``deploy.status``
+    events, so after a reload the topology said *failed* and nothing else, and the stage reply said
+    "check the step logs". A failed deploy now carries its own explanation, and its fix.
+    """
+    errors: dict[str, dict[str, str]] = {}
+    for key, result, error in (("be", be, be_error), ("fe", fe, fe_error)):
+        if error is not None:
+            entry = {"error": str(error)}
+            hint = getattr(error, "fallback_hint", None)
+            if isinstance(hint, str) and hint:
+                entry["hint"] = hint
+            errors[key] = entry
+        elif result is not None and result.status is not DeployState.live:
+            errors[key] = {"error": f"the provider reported the deployment as {result.status}"}
+    if plan.fe is not None and fe is None and fe_error is None and not backend_ok:
+        errors["fe"] = {
+            "error": "not deployed — the backend did not come up, so there was nothing to point "
+            "the frontend at"
+        }
+    return errors
+
+
 def _topology(
     plan: InfraPlan,
     be: DeployResult | None,
     fe: DeployResult | None,
     db_target: str | None,
     status: str,
+    *,
+    errors: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """The graph phase-38 renders — real nodes/edges/urls from this deploy, not a mock."""
     nodes: list[dict[str, Any]] = []
@@ -430,6 +476,8 @@ def _topology(
         nodes.append(
             {"id": "db", "kind": "database", "provider": db_target or "platform", "status": "ready"}
         )
+    for node in nodes:
+        node.update((errors or {}).get(node["id"], {}))
     if plan.fe is not None and plan.be is not None:
         edges.append({"source": "fe", "target": "be", "label": "VITE_API_BASE_URL"})
     if plan.be is not None and plan.db is not None:
