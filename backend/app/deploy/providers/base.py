@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -31,6 +32,12 @@ from app.deploy.providers.errors import DeployErrorKind, deploy_error, kind_of
 from app.deploy.secrets import SecretVault
 
 logger = logging.getLogger(__name__)
+
+
+#: Every provider-side project/service ForgeFlow creates is named with this prefix
+#: (``forgeflow-web-<id>`` / ``forgeflow-api-<id>``). It is how a teardown tells a resource
+#: ForgeFlow owns — and may delete outright — from anything else in the same account.
+MANAGED_NAME_PREFIX = "forgeflow-"
 
 
 class DeployTarget(StrEnum):
@@ -234,8 +241,13 @@ class BaseDeployProvider:
         *,
         json_body: Any | None = None,
         params: Mapping[str, Any] | None = None,
+        missing_ok: bool = False,
     ) -> Any:
-        """One authenticated call with bounded retry on transient failures."""
+        """One authenticated call with bounded retry on transient failures.
+
+        ``missing_ok`` turns a 404 into ``None`` rather than an error — for deletes, where "it is
+        already gone" is the outcome that was asked for, and a retry must be idempotent.
+        """
         config = get_config()
         max_retries = int(config.get("deploy_max_retries"))
         timeout = float(config.get("deploy_timeout_s"))
@@ -260,6 +272,8 @@ class BaseDeployProvider:
                     continue
                 raise self._error(DeployErrorKind.transient, f"Could not reach {self.key}") from exc
 
+            if missing_ok and response.status_code == 404:
+                return None
             try:
                 self._raise_for_status(response, method, path)
             except ProviderError as exc:
@@ -282,10 +296,23 @@ class BaseDeployProvider:
         status = response.status_code
         if status < 400:
             return
-        # The body can echo the request (which carries env values) — never include it.
+        # The body can echo the request (which carries env values) — never include it. Only the
+        # provider's own error *code* is read out of it: a short identifier ("forbidden",
+        # "invalid_token", "team_unauthorized") that tells a revoked token from a wrong team scope,
+        # and that nothing in a request can put there.
+        code = _provider_error_code(response)
+        detail = f"{status}, {code}" if code else str(status)
         if status in (401, 403):
             raise self._error(
-                DeployErrorKind.auth, f"{self.key} rejected the credentials ({status})"
+                DeployErrorKind.auth,
+                f"{self.key} rejected the credentials ({detail})",
+                hint=(
+                    f"{self.key} refused the token this deploy used. On seamless deploys that is "
+                    f"the platform token ({self.key.upper()}_TOKEN, set in Admin → Settings); on "
+                    "bring-your-own deploys it is yours (Settings → Provider credentials). Check "
+                    "it has not expired or been revoked, and that it belongs to the same "
+                    "account/team as the app's projects."
+                ),
             )
         if status == 429:
             raise self._error(DeployErrorKind.quota, f"{self.key} rate/plan limit reached")
@@ -293,7 +320,7 @@ class BaseDeployProvider:
             raise self._error(DeployErrorKind.transient, f"{self.key} is unavailable ({status})")
         raise self._error(
             DeployErrorKind.fatal,
-            f"{self.key} rejected {method} {path} ({status})",
+            f"{self.key} rejected {method} {path} ({detail})",
         )
 
     # -- guards + helpers -------------------------------------------------------------------
@@ -327,7 +354,30 @@ class BaseDeployProvider:
         return deploy_error(self.key, kind, message, target=target or str(self.target), hint=hint)
 
 
+_ERROR_CODE = re.compile(r"[A-Za-z0-9_.\-]{1,48}")
+
+
+def _provider_error_code(response: httpx.Response) -> str | None:
+    """The provider's error identifier (``error.code`` / ``code``), if it is a plain token.
+
+    Anything that is not a short identifier is discarded rather than echoed, so free text from the
+    body — which could quote the request — never reaches a log or the user.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    inner = body.get("error")
+    raw = inner.get("code") if isinstance(inner, dict) else body.get("code")
+    if isinstance(raw, str) and _ERROR_CODE.fullmatch(raw):
+        return raw
+    return None
+
+
 __all__ = [
+    "MANAGED_NAME_PREFIX",
     "BaseDeployProvider",
     "DeployProvider",
     "DeployRef",

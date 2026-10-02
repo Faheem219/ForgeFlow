@@ -276,6 +276,29 @@ async def test_a_deploy_reset_reports_what_the_provider_refused(provider: StubPr
     assert "401 unauthorized" in resp.messages[0].content
 
 
+async def test_a_later_reset_retries_what_the_provider_refused(provider: StubProvider) -> None:
+    """The first reset's teardown is refused (the reported 403); the handles stay on the retired
+    record, so the next reset takes the site down instead of leaving it orphaned."""
+    provider.error = RuntimeError("403")
+    user = PydanticObjectId()
+    pid = await _project(user)
+    await _all_done(user, pid)
+    deployment = await _deployment(pid)
+    await _reset(user, pid, Stage.deploy)
+    record = await Deployment.get(deployment.id)
+    assert record is not None and sorted(record.refs) == ["be", "fe"]
+
+    # Fixed provider, redeploy, reset again: the old refs are retried along with the new ones.
+    provider.error = None
+    provider.destroyed.clear()
+    await ProjectService().transition_stage(pid, user, Stage.deploy, Action.complete)
+    await _reset(user, pid, Stage.deploy)
+
+    assert sorted(ref.id for ref in provider.destroyed) == ["dpl_be", "dpl_fe"]
+    record = await Deployment.get(deployment.id)
+    assert record is not None and record.refs == {}
+
+
 async def test_a_deploy_can_be_reset_with_no_deployment_left(provider: StubProvider) -> None:
     user = PydanticObjectId()
     pid = await _project(user)

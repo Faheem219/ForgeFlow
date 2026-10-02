@@ -220,8 +220,11 @@ class ProjectService:
         user_id: PydanticObjectId,
         report: DeleteReport,
     ) -> int:
-        """Take down every live deployment this project owns. Fail-soft, like the other legs."""
-        from app.db.models import STATUS_DELETED
+        """Take down every deployment this project still holds a provider handle for.
+
+        Fail-soft, like the other legs. Live records, and retired ones whose teardown a provider
+        refused last time — both still carry refs, and nothing else does.
+        """
         from app.deploy.teardown import DeploymentTeardown
 
         destroyed = 0
@@ -233,7 +236,9 @@ class ProjectService:
 
         teardown = DeploymentTeardown()
         for record in records:
-            if record.status == STATUS_DELETED or not record.refs:
+            # A retired record that still holds refs is a teardown the provider refused last time
+            # (phase-62 keeps them for exactly this): retry it rather than leave it running.
+            if not record.refs:
                 continue
             try:
                 result = await teardown.destroy(record, user_id=user_id)

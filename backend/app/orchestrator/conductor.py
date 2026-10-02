@@ -457,8 +457,8 @@ class Conductor:
             later = [s.value.capitalize() for s in outcome.cleared if s is not Stage.deploy]
             parts = [
                 (
-                    f"Deploy reset — the live deployment was taken down "
-                    f"({outcome.deployments_destroyed} provider deployment(s) removed)"
+                    f"Deploy reset — the app's hosting was deleted at the provider "
+                    f"({outcome.deployments_destroyed} removed, e.g. its Vercel projects)"
                     if outcome.deployments_destroyed
                     else "Deploy reset — there was no live deployment left to take down"
                 )

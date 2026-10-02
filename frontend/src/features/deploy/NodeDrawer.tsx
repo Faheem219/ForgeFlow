@@ -99,6 +99,11 @@ export function NodeDrawer({
           data-testid="drawer-error"
         >
           {node.error}
+          {node.hint ? (
+            <span className="mt-1 block text-fg-muted" data-testid="drawer-error-hint">
+              {node.hint}
+            </span>
+          ) : null}
         </p>
       ) : null}
 

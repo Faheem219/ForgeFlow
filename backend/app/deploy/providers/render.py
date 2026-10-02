@@ -135,7 +135,8 @@ class RenderDeployProvider(BaseDeployProvider):
         self, ref: DeployRef, *, mode: DeployMode, user_id: PydanticObjectId | None = None
     ) -> bool:
         token = await self._token(mode, user_id)
-        await self._request("DELETE", f"/v1/services/{ref.id}", token)
+        # A service that is already gone is the outcome asked for, so a retry stays idempotent.
+        await self._request("DELETE", f"/v1/services/{ref.id}", token, missing_ok=True)
         return True
 
     # -- internals --------------------------------------------------------------------------

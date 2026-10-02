@@ -311,3 +311,34 @@ async def test_a_refusing_provider_still_deletes_and_reports(
     assert body["destroyed"] == []
     assert body["record_deleted"] is True
     assert len(body["warnings"]) == 2
+
+
+async def test_a_target_that_never_reached_the_provider_says_so(client: AsyncClient) -> None:
+    """A deploy refused before the provider created anything has no ref — that is not an old
+    record, and "predates provider log support" sent the user looking in the wrong place."""
+    token = await _register(client, "neverreached@deployed.test")
+    pid = await _project(client, token)
+    await Deployment(
+        project_id=PydanticObjectId(pid),
+        mode=DeployMode.seamless,
+        status="failed",
+        topology_snapshot={
+            "nodes": [
+                {
+                    "id": "be",
+                    "kind": "backend",
+                    "status": "failed",
+                    "error": "vercel rejected the credentials (403, forbidden)",
+                }
+            ],
+            "edges": [],
+            "status": "failed",
+        },
+    ).insert()
+
+    resp = await client.get(f"/projects/{pid}/deploy/latest/logs/be", headers=_auth(token))
+    error = resp.json()["error"]
+
+    assert "never reached the provider" in error
+    assert "403, forbidden" in error
+    assert "predates" not in error

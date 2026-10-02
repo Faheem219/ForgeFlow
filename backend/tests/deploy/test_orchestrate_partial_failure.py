@@ -151,3 +151,41 @@ async def test_a_live_backend_still_ships_the_frontend() -> None:
 
     assert len(fe.deploy_specs) == 1
     assert deployment.status == STATUS_LIVE
+
+
+async def test_a_failed_target_keeps_its_reason_and_the_reply_states_it() -> None:
+    """Reported 2026-10-02: a redeploy failed with both nodes red and nothing saying why — the
+    reason lived only in the pipeline log and in transient events. The record keeps it now, and the
+    stage reply says what failed and how to fix it."""
+    from app.orchestrator.stages.deploy import _summarize
+
+    fe = FakeDeployProvider("vercel", DeployTarget.fe, _FE_URL)
+    be = FakeDeployProvider("vercel", DeployTarget.be, _BE_URL, fail=True)
+    project = await project_with_build()
+
+    deployment = await _orchestrator(fe, be, RecordingEmitter()).deploy(
+        project, mode=DeployMode.seamless
+    )
+
+    nodes = {n["id"]: n for n in deployment.topology_snapshot["nodes"]}
+    assert nodes["be"]["status"] == "failed" and nodes["be"]["error"]
+    assert nodes["be"]["hint"]  # the provider error's own remedy travels with it
+    assert "backend did not come up" in nodes["fe"]["error"]
+    assert "error" not in nodes["db"]
+    reply = _summarize(deployment)
+    assert f"Backend failed: {nodes['be']['error']}" in reply
+    assert nodes["be"]["hint"] in reply
+    assert "check the step logs" not in reply
+
+
+async def test_a_live_deploy_records_no_errors() -> None:
+    fe = FakeDeployProvider("vercel", DeployTarget.fe, _FE_URL)
+    be = FakeDeployProvider("vercel", DeployTarget.be, _BE_URL)
+    project = await project_with_build()
+
+    deployment = await _orchestrator(fe, be, RecordingEmitter()).deploy(
+        project, mode=DeployMode.seamless
+    )
+
+    assert deployment.status == STATUS_LIVE
+    assert all("error" not in n for n in deployment.topology_snapshot["nodes"])

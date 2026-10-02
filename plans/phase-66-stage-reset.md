@@ -142,6 +142,33 @@ agent.
 Additive. `cleared_at` defaults to `None` and older rows parse unchanged. Reverting the code removes
 the action, and any `cleared_at` already written is then simply ignored.
 
+## Follow-up (2026-10-02, reported from a live reset)
+
+The first live Deploy reset left both Vercel projects in the dashboard. The teardown reported
+`vercel rejected the credentials (403)` for each target, and the redeploy after it failed with both
+nodes red and no reason anywhere on screen. Fixed:
+
+- **Teardown deletes the Vercel project, not the deployment.** Vercel will not delete a project's
+  *current production* deployment, which is the one ForgeFlow ships. Even a deleted deployment
+  leaves the project, its alias and its env vars in the dashboard. `VercelDeployProvider.destroy`
+  now issues `DELETE /v9/projects/{name}` for projects ForgeFlow named (`MANAGED_NAME_PREFIX`,
+  `forgeflow-`). Anything else falls back to the single deployment. A 404 counts as success, so the
+  records of several redeploys, which all name the same project, tear down idempotently. Render
+  deletes are idempotent too.
+- **A refused teardown is retried, not orphaned.** The retired record keeps the refs the provider
+  refused, and the next reset (or project delete) retries them. Previously they were dropped, which
+  left a live site nothing in ForgeFlow pointed at.
+- **A failed deploy says why.** A provider error now names the provider's own error code
+  (`403, forbidden`; never its free-text body, which can quote the request). A refused token comes
+  with a hint naming which token to replace. Each failed node keeps its reason and hint on the
+  record. The deploy reply lists them instead of "check the step logs", the node drawer shows them
+  after a reload, and a target that never reached the provider no longer claims to "predate
+  provider log support".
+
+A 403 on the *deploy itself* means Vercel refused the token: expired, revoked, or for a different
+account/team than the projects. No code change can fix that. The message and hint now say so and
+name the setting to replace.
+
 ## Design notes
 
 - **Why a cut-off and not a delete.** "Blank as if nothing was done" is about what the panel
