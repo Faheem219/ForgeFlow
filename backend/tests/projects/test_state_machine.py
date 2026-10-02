@@ -6,11 +6,13 @@ import pytest
 
 from app.db.models.enums import Stage, StageStatus
 from app.projects.state_machine import (
+    RESET_TO_BLANK,
     STAGE_ORDER,
     Action,
     apply_transition,
     can_transition,
     downstream_of,
+    reset_target,
 )
 
 # ---------------------------------------------------------------------- downstream_of
@@ -173,7 +175,7 @@ def test_re_skipping_keeps_the_original_restore_point() -> None:
     assert result.restore_point is StageStatus.complete
 
 
-@pytest.mark.parametrize("action", [Action.enter, Action.complete, Action.refine])
+@pytest.mark.parametrize("action", [Action.enter, Action.complete, Action.refine, Action.reset])
 def test_every_other_transition_clears_the_restore_point(action: Action) -> None:
     """Once a stage has moved on under its own steam there is nothing left to restore."""
     states = {Stage.build: StageStatus.complete}
@@ -344,3 +346,92 @@ def test_apply_transition_raises_on_illegal_refine() -> None:
 def test_apply_transition_raises_on_unskip_of_a_stage_that_is_not_skipped() -> None:
     with pytest.raises(ValueError, match="skipped"):
         apply_transition({Stage.build: StageStatus.complete}, Stage.build, Action.unskip)
+
+
+# ---------------------------------------------------------------------- reset (2026-10-02)
+
+_STATUS_ONLY = [Stage.requirements, Stage.design, Stage.build, Stage.test]
+_ALL_DONE = {stage: StageStatus.complete for stage in STAGE_ORDER}
+
+
+@pytest.mark.parametrize("stage", _STATUS_ONLY)
+def test_reset_of_a_complete_stage_goes_back_to_needs_you(stage: Stage) -> None:
+    """The work is kept, so the honest status is "Needs you", not "Not started"."""
+    result = apply_transition(_ALL_DONE, stage, Action.reset)
+    assert result.to_status is StageStatus.awaiting_user
+    assert reset_target(stage) is StageStatus.awaiting_user
+
+
+@pytest.mark.parametrize("stage", _STATUS_ONLY)
+def test_a_status_only_reset_moves_nothing_else(stage: Stage) -> None:
+    """Resetting Test before a demo must not touch the Deploy shown after it."""
+    result = apply_transition(_ALL_DONE, stage, Action.reset)
+    assert result.stale == ()
+    assert result.cleared == ()
+    assert {s: v for s, v in result.states.items() if s is not stage} == {
+        s: v for s, v in _ALL_DONE.items() if s is not stage
+    }
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        StageStatus.empty,
+        StageStatus.in_progress,
+        StageStatus.awaiting_user,
+        StageStatus.skipped,
+        StageStatus.stale,
+    ],
+)
+def test_a_status_only_reset_needs_a_complete_stage(status: StageStatus) -> None:
+    result = can_transition({Stage.build: status}, Stage.build, Action.reset)
+    assert result.allowed is False
+    assert result.reason is not None and "complete" in result.reason
+
+
+def test_deploy_and_validate_reset_to_a_blank_slate() -> None:
+    assert RESET_TO_BLANK == frozenset({Stage.deploy, Stage.validate})
+    assert reset_target(Stage.deploy) is StageStatus.empty
+    assert reset_target(Stage.validate) is StageStatus.empty
+
+
+def test_resetting_deploy_empties_validate_too() -> None:
+    """Validation evidence about a deployment that is gone is not evidence of anything."""
+    result = apply_transition(_ALL_DONE, Stage.deploy, Action.reset)
+    assert result.to_status is StageStatus.empty
+    assert result.states[Stage.validate] is StageStatus.empty
+    assert result.cleared == (Stage.deploy, Stage.validate)
+    # Upstream is untouched: the build the demo deploys from stays complete.
+    assert result.states[Stage.build] is StageStatus.complete
+    assert result.states[Stage.test] is StageStatus.complete
+
+
+def test_resetting_validate_alone_leaves_deploy_live() -> None:
+    result = apply_transition(_ALL_DONE, Stage.validate, Action.reset)
+    assert result.to_status is StageStatus.empty
+    assert result.cleared == (Stage.validate,)
+    assert result.states[Stage.deploy] is StageStatus.complete
+
+
+@pytest.mark.parametrize(
+    "status",
+    [StageStatus.complete, StageStatus.awaiting_user, StageStatus.stale, StageStatus.skipped],
+)
+def test_a_blank_reset_works_from_anything_that_has_run(status: StageStatus) -> None:
+    """A deploy that failed half-way is exactly what a fresh start is for."""
+    states = {Stage.build: StageStatus.complete, Stage.deploy: status}
+    assert can_transition(states, Stage.deploy, Action.reset).allowed is True
+
+
+@pytest.mark.parametrize("status", [StageStatus.empty, StageStatus.in_progress])
+def test_a_blank_reset_is_refused_with_nothing_to_undo_or_work_in_flight(
+    status: StageStatus,
+) -> None:
+    result = can_transition({Stage.deploy: status}, Stage.deploy, Action.reset)
+    assert result.allowed is False
+
+
+def test_reset_is_not_gated_by_hard_prereqs() -> None:
+    """Taking back a "done" never requires an upstream stage to be in a particular state."""
+    states = {Stage.build: StageStatus.awaiting_user, Stage.deploy: StageStatus.complete}
+    assert can_transition(states, Stage.deploy, Action.reset).allowed is True

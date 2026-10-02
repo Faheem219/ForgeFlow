@@ -9,6 +9,7 @@ import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentAction, RequirementSpecInput, StageStatus } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import {
   draftRequirements,
@@ -144,6 +145,12 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
           </span>
         </span>
         <div className="flex gap-2">
+          <ResetStageButton
+            projectId={projectId}
+            stage="requirements"
+            status={status}
+            disabled={busy}
+          />
           <Button
             size="sm"
             variant="secondary"

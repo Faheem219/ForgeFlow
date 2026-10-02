@@ -120,7 +120,7 @@ class BuildStageHandler:
                 # build, and its hint names how many phases wrote nothing.
                 expect=_expectation(report.phases),
                 phases_wrote_nothing=sum(
-                    1 for p in report.phases if p.note.startswith(NOTE_WROTE_NOTHING)
+                    1 for p in report.run_phases if p.note.startswith(NOTE_WROTE_NOTHING)
                 ),
             )
         finally:
@@ -128,8 +128,9 @@ class BuildStageHandler:
             await run.save()
 
         # `complete` now requires a *working* app: typecheck clean, no placeholder, both dev servers
-        # healthy (the verification gate) — not merely a boot — AND every planned phase done
-        # (phase-56). Anything else holds for the user.
+        # healthy (the verification gate) — not merely a boot — AND every phase this build ran done
+        # (phase-56; a change request's carried history is not re-judged, phase-67). Anything else
+        # holds for the user.
         phases_ok = report.phases_complete
         stop_reason = verify.stop_reason or (None if phases_ok else STOP_PHASES)
         ok = verify.ok and phases_ok
@@ -231,16 +232,22 @@ def _summarize(report: BuildReport, verify: BuildVerifyReport) -> str:
     lines = [report.summary or "Build complete."]
     if report.features_built:
         lines.append("Features: " + ", ".join(report.features_built))
-    if report.phases:
-        done = sum(1 for p in report.phases if p.status == PHASE_DONE)
-        lines.append(f"Phases: {done}/{len(report.phases)} complete.")
+    ran = report.run_phases
+    if ran:
+        done = sum(1 for p in ran if p.status == PHASE_DONE)
+        if report.prior_phases:
+            # A change request (phase-67): say what it added, and that nothing earlier was redone.
+            lines.append(
+                f"Change phases: {done}/{len(ran)} complete — added to the existing plan; its "
+                f"{report.prior_phases} earlier phase(s) were kept, not re-run."
+            )
+        else:
+            lines.append(f"Phases: {done}/{len(ran)} complete.")
     if not report.phases_complete:
         # phase-56's addition to the fixed stop_reason vocabulary. Each unfinished phase carries
         # its own reason (phase-64: "wrote nothing after 2 attempt(s)" is the one that matters).
         unfinished = [
-            f"{p.title} ({p.note})" if p.note else p.title
-            for p in report.phases
-            if p.status != PHASE_DONE
+            f"{p.title} ({p.note})" if p.note else p.title for p in ran if p.status != PHASE_DONE
         ]
         lines.append(
             "Some planned phases did not finish: " + ", ".join(unfinished) + ". Run Build again "

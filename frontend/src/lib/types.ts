@@ -8,8 +8,11 @@ export type StageStatus =
 /**
  * `unskip` is the inverse of `skip` — it restores the status a stage held before it was skipped,
  * without re-running the stage (backend app/orchestrator/conductor.py).
+ *
+ * `reset` takes back a "done" without re-running anything: most stages go back to "Needs you" with
+ * their work kept; deploy and validate go back to a blank slate (the live deployment is taken down).
  */
-export type IntentAction = 'refine' | 'proceed' | 'skip' | 'unskip';
+export type IntentAction = 'refine' | 'proceed' | 'skip' | 'unskip' | 'reset';
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -243,6 +246,8 @@ export interface IntentResponse {
   messages: MessageDto[];
   artifacts: ArtifactDto[];
   run_id: string;
+  /** Stages a `reset` returned to a blank slate — their earlier results are no longer shown. */
+  cleared?: Stage[];
 }
 
 // --- Requirements stage (phase-25 schema / phase-26 UI) ---

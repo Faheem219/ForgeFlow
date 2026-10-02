@@ -80,3 +80,31 @@ export function prereqUnmet(
   }
   return null;
 }
+
+/**
+ * Stages whose reset is a blank slate rather than "Needs you": deploy takes its live deployment
+ * down, and validate (whose evidence was about that deployment) goes back to never-run with it.
+ * Mirrors `RESET_TO_BLANK` in backend app/projects/state_machine.py.
+ */
+export const RESET_TO_BLANK: readonly Stage[] = ['deploy', 'validate'];
+
+/**
+ * Whether `reset` is offered for a stage in this status. A hint only — the conductor owns legality.
+ * Most stages can take back a "done" (`complete`); a blank-slate stage can be reset from anything
+ * that has run, so a half-failed deploy can be cleared too. Never while work is in flight.
+ */
+export function canReset(stage: Stage, status: StageStatus): boolean {
+  if (RESET_TO_BLANK.includes(stage)) return status !== 'empty' && status !== 'in_progress';
+  return status === 'complete';
+}
+
+/** One line on what a reset of `stage` will do — the button's tooltip and the menu's hint. */
+export function resetHint(stage: Stage): string {
+  if (stage === 'deploy') {
+    return 'Take the live deployment down and return Deploy and Validate to not started. Your data is untouched.';
+  }
+  if (stage === 'validate') {
+    return 'Return live validation to not started. The deployment stays live.';
+  }
+  return 'Mark this stage not done ("Needs you"). Nothing is deleted or re-run.';
+}

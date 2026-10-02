@@ -8,7 +8,7 @@ Concrete stage prompts (codegen/testgen/repair) extend these in their own phases
 from __future__ import annotations
 
 # Bump whenever the base prompts change so eval results stay attributable to a prompt version.
-PROMPT_VERSION = "2026-09-19.2"  # phase-65: sandbox network rules, offline test database
+PROMPT_VERSION = "2026-10-02.1"  # phase-67: change requests extend the plan, never replace it
 
 # The sandbox's network rules (phase-65). Stated to every agent because a model that does not know
 # them rediscovers them by failing — the reported case spent a repair session concluding it was

@@ -5,6 +5,7 @@ type-checker-friendly; str-backed enums encode directly as their values.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
 from beanie import PydanticObjectId
@@ -103,6 +104,19 @@ class StageStateRepo(BaseRepo[StageState]):
         state.updated_at = utcnow()
         await state.save()
         return state
+
+    async def mark_cleared(self, project_id: PydanticObjectId, stage: Stage) -> StageState:
+        """Record that ``stage``'s results up to now are history (a blank-slate ``reset``)."""
+        state = await self.get_or_create(project_id, stage)
+        state.cleared_at = utcnow()
+        state.updated_at = state.cleared_at
+        await state.save()
+        return state
+
+    async def cleared_at(self, project_id: PydanticObjectId, stage: Stage) -> datetime | None:
+        """The cut-off before which ``stage``'s results are no longer current, if it was reset."""
+        state = await StageState.find_one({"project_id": project_id, "stage": stage})
+        return None if state is None else state.cleared_at
 
 
 class MessageRepo(BaseRepo[Message]):

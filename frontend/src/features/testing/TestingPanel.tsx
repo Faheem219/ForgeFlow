@@ -9,6 +9,7 @@ import { toast } from '../../lib/stores/toastStore';
 import { useTaskStream } from '../../lib/useTaskStream';
 import type { IntentRequest, TestRunSummaryDto } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
+import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
 import { Escalation } from './Escalation';
 import { RepairView } from './RepairView';
@@ -99,6 +100,12 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
           ) : null}
         </span>
         <div className="flex gap-2">
+          <ResetStageButton
+            projectId={projectId}
+            stage="test"
+            status={status}
+            disabled={intent.isPending || task.busy}
+          />
           <Button
             size="sm"
             variant="secondary"

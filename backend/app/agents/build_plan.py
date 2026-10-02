@@ -9,6 +9,12 @@ workspace, and the deterministic fallback.
 with requirements-only, design-only, both, or neither; a plan step that can return nothing would
 break that. So no requirements, no design, unparseable model output, and an empty phase list all
 land on the same deterministic three-phase plan, and :func:`parse_build_plan` never raises.
+
+**A change request extends the plan; it never replaces it** (phase-67). Refining a finished build
+used to re-plan the whole app — a new plan file, every phase implemented again, and the wiring phase
+rewriting routes and layout that already worked. Now the change's own phases are appended to the
+plan that built the app (:func:`extend_plan`), recorded as a :class:`PlanChange` so the workspace
+file shows each request as its own section beneath the original plan, and only those phases run.
 """
 
 from __future__ import annotations
@@ -73,12 +79,26 @@ class BuildPhase:
         }
 
 
+@dataclass(frozen=True)
+class PlanChange:
+    """One change request appended to a plan (phase-67): what was asked, and the phases it added."""
+
+    instruction: str
+    phase_ids: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"instruction": self.instruction, "phase_ids": list(self.phase_ids)}
+
+
 @dataclass
 class BuildPlan:
     phases: list[BuildPhase] = field(default_factory=list)
     assumptions: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     source: str = SOURCE_MODEL
+    #: Change requests appended after the original plan, oldest first (phase-67). Their phases sit
+    #: at the end of ``phases``, in the order the changes were made.
+    changes: list[PlanChange] = field(default_factory=list)
 
     def validate(self, *, max_phases: int) -> BuildPlan:
         """Return a plan that is safe to execute: unique ids, no cycles, topo-ordered, capped.
@@ -130,7 +150,48 @@ class BuildPlan:
             "assumptions": list(self.assumptions),
             "notes": list(self.notes),
             "source": self.source,
+            "changes": [c.to_dict() for c in self.changes],
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BuildPlan:
+        """Read back a plan this module persisted. Ids are kept exactly (they are already slugs),
+        and the order is kept exactly — re-validating would re-sort appended change phases in among
+        the original ones. Anything malformed is dropped rather than raised on."""
+        phases: list[BuildPhase] = []
+        for item in data.get("phases") or []:
+            if not isinstance(item, dict):
+                continue
+            pid = str(item.get("id") or "").strip()
+            title = str(item.get("title") or "").strip()
+            if not pid or not title:
+                continue
+            phases.append(
+                BuildPhase(
+                    id=pid,
+                    title=title,
+                    kind=as_phase_kind(item.get("kind")),
+                    goal=str(item.get("goal") or "").strip(),
+                    files=_str_list(item.get("files")),
+                    depends_on=_str_list(item.get("depends_on")),
+                    done_when=_str_list(item.get("done_when")),
+                )
+            )
+        changes = [
+            PlanChange(
+                instruction=str(c.get("instruction") or "").strip(),
+                phase_ids=_str_list(c.get("phase_ids")),
+            )
+            for c in data.get("changes") or []
+            if isinstance(c, dict)
+        ]
+        return cls(
+            phases=phases,
+            assumptions=_str_list(data.get("assumptions")),
+            notes=_str_list(data.get("notes")),
+            source=str(data.get("source") or SOURCE_MODEL),
+            changes=changes,
+        )
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2)
@@ -146,6 +207,15 @@ class BuildPlan:
         if self.assumptions:
             lines.append("Assumptions: " + "; ".join(self.assumptions))
         return "\n".join(lines)
+
+
+def as_phase_kind(value: Any, default: PhaseKind = "backend") -> PhaseKind:
+    """``value`` as a known phase kind, or ``default`` for anything unrecognised."""
+    raw = str(value or "").strip().lower()
+    for kind in KIND_ORDER:
+        if raw == kind:
+            return kind
+    return default
 
 
 def _slug(value: Any) -> str:
@@ -250,6 +320,64 @@ def _extract_object(text: str) -> dict[str, Any] | None:
     return None
 
 
+def extend_plan(prior: BuildPlan, change: BuildPlan, *, instruction: str) -> BuildPlan:
+    """``prior`` with a change request's phases appended — never re-planned, never re-ordered.
+
+    The change's ids are made unique against the plan they join: two refines can both produce a
+    phase called ``change`` (the small path's synthetic id), and resume and the workspace checklist
+    both key on ids. ``depends_on`` is rewritten to follow a renamed id. The change plan is expected
+    to be validated already; the merged plan is deliberately *not* re-validated, because the
+    topological sort would move a new backend phase in front of an old frontend one, and the build
+    runs the new phases by slicing everything after the ones already done.
+    """
+    taken = {p.id for p in prior.phases}
+    renamed: dict[str, str] = {}
+    added: list[BuildPhase] = []
+    for phase in change.phases:
+        pid = phase.id
+        n = 2
+        while pid in taken:
+            pid = f"{phase.id}-{n}"
+            n += 1
+        taken.add(pid)
+        renamed[phase.id] = pid
+        added.append(phase if pid == phase.id else _with_id(phase, pid))
+    added = [_with_id(p, p.id, depends_on=[renamed.get(d, d) for d in p.depends_on]) for p in added]
+    return BuildPlan(
+        phases=[*prior.phases, *added],
+        assumptions=list(prior.assumptions),
+        notes=list(prior.notes),
+        source=prior.source,
+        changes=[
+            *prior.changes,
+            PlanChange(instruction=instruction.strip(), phase_ids=[p.id for p in added]),
+        ],
+    )
+
+
+def _with_id(phase: BuildPhase, pid: str, *, depends_on: list[str] | None = None) -> BuildPhase:
+    return BuildPhase(
+        id=pid,
+        title=phase.title,
+        kind=phase.kind,
+        goal=phase.goal,
+        files=list(phase.files),
+        depends_on=list(phase.depends_on if depends_on is None else depends_on),
+        done_when=list(phase.done_when),
+    )
+
+
+_HEADLINE_CHARS = 60
+
+
+def change_headline(instruction: str) -> str:
+    """A change request shortened to a phase title: its first line, at most ~60 characters."""
+    line = next((ln.strip() for ln in instruction.strip().splitlines() if ln.strip()), "")
+    if len(line) <= _HEADLINE_CHARS:
+        return line
+    return line[:_HEADLINE_CHARS].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+
+
 def incremental_plan(instruction: str) -> BuildPlan:
     """A single-phase plan for a small change request (phase-60).
 
@@ -266,7 +394,8 @@ def incremental_plan(instruction: str) -> BuildPlan:
         phases=[
             BuildPhase(
                 id="change",
-                title="Apply the requested change",
+                # The request itself, so a build's phase history reads as a log of what was asked.
+                title=f"Change: {change_headline(goal)}" if goal else "Apply the requested change",
                 kind="wiring",
                 goal=goal,
                 done_when=[
@@ -362,29 +491,52 @@ _STATUS_GLYPH = {
 
 
 def render_markdown(plan: BuildPlan, outcomes: dict[str, str] | None = None) -> str:
-    """The human checklist written to the workspace, re-rendered after every phase."""
+    """The human checklist written to the workspace, re-rendered after every phase.
+
+    Phases a change request added are listed under their own heading after the original plan, so
+    the file reads as the plan that built the app followed by a log of what was asked of it since.
+    """
     outcomes = outcomes or {}
     lines = [
         "# Build phase plan",
         "",
         "ForgeFlow implements this app one phase at a time. Each phase is written, typechecked "
-        "and committed on its own; this file is rewritten as the build progresses.",
+        "and committed on its own; this file is rewritten as the build progresses. A change "
+        "request adds its own phases below the plan — it never replaces it.",
         "",
         f"_Plan source: {plan.source}_",
         "",
     ]
-    for index, phase in enumerate(plan.phases, start=1):
+    numbers = {phase.id: index for index, phase in enumerate(plan.phases, start=1)}
+    by_id = {phase.id: phase for phase in plan.phases}
+    in_change = {pid for change in plan.changes for pid in change.phase_ids}
+
+    def phase_lines(phase: BuildPhase) -> list[str]:
         status = outcomes.get(phase.id, PHASE_PENDING)
-        lines.append(
-            f"- [{_STATUS_GLYPH.get(status, ' ')}] **{index}. {phase.title}** "
+        out = [
+            f"- [{_STATUS_GLYPH.get(status, ' ')}] **{numbers[phase.id]}. {phase.title}** "
             f"(`{phase.kind}`) — {status}"
-        )
+        ]
         if phase.goal:
-            lines.append(f"      - {phase.goal}")
+            out.append(f"      - {phase.goal}")
         for check in phase.done_when:
-            lines.append(f"      - done when: {check}")
+            out.append(f"      - done when: {check}")
         if phase.files:
-            lines.append("      - files: " + ", ".join(f"`{f}`" for f in phase.files))
+            out.append("      - files: " + ", ".join(f"`{f}`" for f in phase.files))
+        return out
+
+    for phase in plan.phases:
+        if phase.id not in in_change:
+            lines += phase_lines(phase)
+    for number, change in enumerate(plan.changes, start=1):
+        phases = [by_id[pid] for pid in change.phase_ids if pid in by_id]
+        if not phases:
+            continue
+        lines += ["", f"## Change {number}: {change_headline(change.instruction)}", ""]
+        if change.instruction:
+            lines += [f"> {line}" for line in change.instruction.strip().splitlines()] + [""]
+        for phase in phases:
+            lines += phase_lines(phase)
     if plan.assumptions:
         lines += ["", "## Assumptions", ""] + [f"- {a}" for a in plan.assumptions]
     if plan.notes:
@@ -395,12 +547,16 @@ def render_markdown(plan: BuildPlan, outcomes: dict[str, str] | None = None) -> 
 __all__ = [
     "BuildPhase",
     "BuildPlan",
+    "PlanChange",
+    "change_headline",
+    "extend_plan",
     "KIND_ORDER",
     "PHASE_DONE",
     "PHASE_FAILED",
     "PHASE_PENDING",
     "PHASE_RUNNING",
     "PhaseKind",
+    "as_phase_kind",
     "SOURCE_FALLBACK",
     "SOURCE_MODEL",
     "fallback_plan",

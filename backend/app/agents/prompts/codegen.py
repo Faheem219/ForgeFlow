@@ -81,6 +81,35 @@ PHASE_PLAN_SYSTEM_EXTRA = (
     "- Keep the plan small. Fewer, larger phases beat many trivial ones."
 )
 
+# System guidance for planning a CHANGE to an app that is already built (phase-67) — routed to
+# MODEL_ROUTING like every plan. The full-build planner above is the wrong tool for this: it is told
+# to end on a `wiring` phase that rewrites routes, layout and tests, and to produce at least three
+# phases — which, handed a one-feature change, re-planned and re-implemented a working app and broke
+# what was already there. This planner sees the plan that built the app and adds only the delta.
+CHANGE_PLAN_SYSTEM_EXTRA = (
+    "The app is ALREADY BUILT and working. You are planning ONE change request to it as a short, "
+    "ORDERED list of NEW phases that will be appended to the existing plan. You write no code "
+    "here.\n"
+    "Reply with STRICT JSON and nothing else, in exactly this shape:\n"
+    '{"phases":[{"id":"be-tags","title":"Tag model and API","kind":"backend","goal":"…",'
+    '"files":["backend/src/features/tags/"],"depends_on":[],'
+    '"done_when":["backend typechecks","GET /api/tags lists tags"]}],"assumptions":[],"notes":[]}\n'
+    "Rules:\n"
+    "- Plan ONLY what this change needs. The existing phases are done: never repeat, redo or "
+    "re-plan any of them, and never plan a phase whose goal the existing code already meets.\n"
+    "- Extend what exists. A phase edits the existing files where that functionality already "
+    "lives, and creates new files only for genuinely new functionality. Never rewrite a working "
+    "file wholesale, and never recreate a page, route, model or layout that already exists.\n"
+    "- Leave everything the change does not mention alone — its behaviour must stay exactly as "
+    "it is.\n"
+    "- Do NOT add a routing/identity/placeholder-test phase: the app's routes, layout, title and "
+    "tests are already done. Register a new route only if this change adds a new page.\n"
+    "- `kind` is one of data | backend | frontend | wiring; order the phases data, then backend, "
+    "then frontend, then wiring, and keep each one INDEPENDENTLY TYPECHECKABLE.\n"
+    "- `depends_on` holds ids of earlier NEW phases only; never create a cycle.\n"
+    "- Use as few phases as the change allows — usually one to three."
+)
+
 # System guidance for implementing ONE phase (phase-56) — routed to MODEL_CODEGEN (Sonnet). It
 # extends CODEGEN_SYSTEM_EXTRA rather than replacing it: the skeleton conventions still bind.
 PHASE_IMPLEMENT_SYSTEM_EXTRA = (
@@ -166,6 +195,35 @@ def phase_plan_user_prompt(
         f"Produce the phase plan as JSON: at least 3 and at most {max_phases} phases. If feature "
         "code already exists, plan only the REMAINING work — do not plan a phase whose goal is "
         "already met."
+    )
+
+
+def change_plan_user_prompt(
+    project_name: str,
+    instruction: str,
+    existing_plan: str,
+    requirements: str | None,
+    existing: str | None,
+    *,
+    max_phases: int = 8,
+) -> str:
+    """The change planner's user turn (phase-67): the request, the plan that built the app, the
+    repository map, and the requirements as reference only. No design HTML — it is the largest
+    block by far and describes a UI that already exists."""
+    reference = (
+        "Requirements (reference only — the existing phases already implement these; do not "
+        f"re-plan them):\n{requirements}"
+        if requirements
+        else "Requirements: none recorded."
+    )
+    return (
+        f"Project: {project_name}\n\n"
+        f"Change request:\n{instruction.strip()}\n\n"
+        f"Existing plan (ALREADY BUILT — do not repeat any of it):\n{existing_plan}\n\n"
+        f"{format_existing(existing)}\n\n"
+        f"{reference}\n\n"
+        f"Produce ONLY the new phases this change needs, as JSON: at least 1 and at most "
+        f"{max_phases}."
     )
 
 
