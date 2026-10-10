@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgeFlow Project Poster</title>
+<!-- Fonts are bundled locally (assets/fonts, SIL Open Font License) so print and offline renders match. -->
+<style>
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 400; font-display: block; src: url(assets/fonts/SourceSans3-Regular.ttf) format('truetype'); }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-weight: 400; font-display: block; src: url(assets/fonts/SourceSans3-It.ttf) format('truetype'); }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 600; font-display: block; src: url(assets/fonts/SourceSans3-Semibold.ttf) format('truetype'); }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-weight: 600; font-display: block; src: url(assets/fonts/SourceSans3-SemiboldIt.ttf) format('truetype'); }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 700; font-display: block; src: url(assets/fonts/SourceSans3-Bold.ttf) format('truetype'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: block; src: url(assets/fonts/JetBrainsMono-Regular.ttf) format('truetype'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: block; src: url(assets/fonts/JetBrainsMono-Bold.ttf) format('truetype'); }
+/* Printed size: 48 x 36 in (4:3, same proportions as the SIT template).
+   All type is set in pt so sizes are physical on the printed sheet. */
+@page { size: 48in 36in; margin: 0; }
+:root {
+  --sit-red: #a30000;     /* template frame */
+  --sit-title: #c00000;   /* template header text */
+  --navy: #121f33;        /* template rule + headings */
+  --ink: #1d232c;
+  --ink-2: #4a5361;
+  --ink-3: #6b7380;
+  --hair: #d9dde3;
+  --tint: #f4f6f9;
+  --chart-a: #24589e;     /* after repair */
+  --chart-b: #878f9b;     /* no repair */
+  --serif: Cambria, "Source Serif 4", Georgia, serif;
+  --sans: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+  --mono: "JetBrains Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; width: 48in; height: 36in; overflow: hidden;
+  background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+body { font-family: var(--sans); color: var(--ink); font-size: 26pt; line-height: 1.3; }
+.poster { position: relative; width: 48in; height: 36in; background: var(--sit-red); overflow: hidden; }
+
+/* ---------- header (template layout) ---------- */
+.hdr { position: absolute; inset: 0 0 auto 0; height: 4.62in; background: #fff; }
+.hdr-top { position: absolute; top: 0.22in; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 0.3in; }
+.emblem { height: 1.45in; }
+.inst { text-align: center; }
+.inst-name { font-family: var(--serif); font-weight: 700; color: var(--sit-title); font-size: 78pt; line-height: 1; letter-spacing: 0.005em; }
+.inst-sub { font-family: var(--serif); color: var(--sit-title); font-size: 27pt; margin-top: 0.12in; }
+.hdr-title { position: absolute; left: 0.55in; top: 2.06in; right: 5.4in; font-family: var(--serif); font-weight: 700; color: var(--navy); font-size: 50pt; line-height: 1.12; }
+.hdr-title .lbl { font-size: 0.78em; letter-spacing: 0.03em; margin-right: 0.12in; }
+.hdr-people { position: absolute; left: 0.55in; right: 5.4in; top: 3.42in; display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-weight: 700; color: var(--sit-title); font-size: 29pt; }
+.hdr-people .sep { color: #d98a85; padding: 0 0.16in; font-weight: 400; }
+.hdr-people .prn { font-weight: 400; }
+.jubilee { position: absolute; right: 0.45in; top: 0.3in; height: 3.95in; }
+.rule { position: absolute; left: 0; right: 0; top: 4.62in; height: 0.22in; background: var(--navy); }
+
+/* ---------- body grid ---------- */
+.body {
+  position: absolute; left: 0.25in; right: 0.25in; top: 5.09in; bottom: 0.25in;
+  display: grid; grid-template-columns: 11.6in 22.4in 13in; grid-template-rows: 1fr 2.5in; gap: 0.25in;
+}
+.col { display: flex; flex-direction: column; gap: 0.25in; min-height: 0; }
+.panel { background: #fff; padding: 0.36in 0.45in 0.4in; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.h2 {
+  font-family: var(--serif); font-weight: 700; color: var(--navy); font-size: 38pt; line-height: 1;
+  letter-spacing: 0.03em; text-transform: uppercase; margin: 0 0 0.28in; padding-bottom: 0.14in;
+  border-bottom: 1.5pt solid var(--navy); position: relative;
+}
+.h2::after { content: ""; position: absolute; left: 0; bottom: -4.5pt; width: 1.3in; height: 7.5pt; background: var(--sit-red); }
+.h3 { font-family: var(--sans); font-weight: 700; color: var(--navy); font-size: 25pt; line-height: 1.15; margin: 0 0 0.12in; }
+.h3 .n { color: var(--sit-red); font-family: var(--serif); margin-right: 0.1in; }
+.h3 .aside { font-weight: 400; color: var(--ink-3); font-size: 19pt; margin-left: 0.08in; }
+p { margin: 0 0 0.16in; }
+.cite { color: var(--ink-3); font-size: 0.78em; white-space: nowrap; }
+.mono { font-family: var(--mono); font-size: 0.84em; }
+.note { font-size: 17.5pt; color: var(--ink-2); line-height: 1.3; }
+svg { display: block; overflow: visible; font-family: var(--sans); }
+
+/* ---------- introduction ---------- */
+.lead { font-size: 30.5pt; line-height: 1.2; color: var(--navy); font-weight: 600; margin-bottom: 0.22in; }
+.evidence { list-style: none; margin: 0 0 0.2in; padding: 0; }
+.evidence li { position: relative; padding-left: 0.38in; margin-bottom: 0.13in; font-size: 25pt; line-height: 1.28; }
+.evidence li::before { content: ""; position: absolute; left: 0.04in; top: 0.18in; width: 0.13in; height: 0.13in; background: var(--sit-red); }
+.gap { border-left: 6pt solid var(--navy); background: var(--tint); padding: 0.18in 0.24in; font-size: 25pt; line-height: 1.28; margin: 0 0 0.24in; }
+.gap b { color: var(--navy); }
+.gapt { margin: 0.04in 0 0.26in; }
+.gap-h { font-size: 24pt; color: var(--navy); margin-bottom: 0.06in; }
+.matrix { width: 100%; border-collapse: collapse; font-size: 19.5pt; line-height: 1.18; }
+.matrix th { font-size: 15.5pt; font-weight: 700; color: var(--ink-2); text-align: center; vertical-align: bottom; padding: 0 0.05in 0.07in; line-height: 1.12; width: 1.32in; }
+.matrix th:first-child { width: auto; }
+.matrix td { border-top: 1pt solid var(--hair); padding: 0.065in 0.05in; text-align: center; }
+.matrix td:first-child { text-align: left; padding-left: 0; }
+.matrix tbody tr:last-child td { border-bottom: 1.5pt solid var(--navy); }
+.matrix thead th { border-bottom: 1.5pt solid var(--navy); }
+.matrix .ff { background: var(--tint); color: var(--navy); }
+.matrix th.ff { font-size: 17pt; }
+.matrix .y { color: var(--navy); font-weight: 400; font-size: 1.12em; line-height: 1; font-family: "Segoe UI Symbol", var(--sans); }
+.matrix .x { color: #a7adb5; font-family: "Segoe UI Symbol", var(--sans); font-size: 0.85em; }
+.matrix .p { color: var(--ink-2); font-style: italic; font-size: 0.78em; }
+.gap-n { font-size: 15pt; color: var(--ink-3); margin-top: 0.07in; line-height: 1.25; }
+.answer { margin-bottom: 0; font-size: 26.5pt; line-height: 1.3; }
+.answer b { color: var(--navy); }
+
+/* ---------- objectives ---------- */
+.objectives { list-style: none; counter-reset: obj; margin: 0; padding: 0; }
+.objectives li { counter-increment: obj; position: relative; padding-left: 0.66in; margin-bottom: 0.17in; font-size: 25pt; line-height: 1.26; }
+.objectives li::before { content: counter(obj, decimal-leading-zero); position: absolute; left: 0; top: 0.02in; font-family: var(--serif); font-weight: 700; color: var(--sit-red); font-size: 25pt; }
+.objectives b { color: var(--navy); }
+.objectives li.core { background: var(--tint); margin-left: -0.14in; padding: 0.1in 0.14in 0.1in 0.8in; }
+.objectives li.core::before { left: 0.14in; top: 0.1in; }
+.hyp { margin-top: auto; border-top: 1.5pt solid var(--navy); padding-top: 0.2in; }
+.hyp .h3 { margin-bottom: 0.14in; }
+.hyp dl { margin: 0; display: grid; grid-template-columns: 0.66in 1fr; row-gap: 0.14in; font-size: 23.5pt; line-height: 1.26; }
+.hyp dt { font-family: var(--serif); font-weight: 700; color: var(--navy); }
+.hyp dd { margin: 0; }
+
+/* ---------- methodology ---------- */
+.method { display: flex; flex-direction: column; gap: 0.44in; flex: 1; min-height: 0; }
+.mrow { display: grid; grid-template-columns: 1fr 1fr; gap: 0.42in; }
+.why { font-size: 18pt; color: var(--ink-2); line-height: 1.3; margin-top: 0.1in; }
+.shot { margin: 0; }
+.shot img { width: 100%; display: block; border: 1.2pt solid #c3c9d1; }
+.shot figcaption { font-size: 18pt; color: var(--ink-2); line-height: 1.3; margin-top: 0.1in; }
+.shot figcaption b { color: var(--navy); }
+
+/* architecture (HTML so chips wrap naturally) */
+.arch { display: grid; grid-template-columns: 1fr 2.7in; gap: 0.22in; font-size: 18pt; line-height: 1.2; }
+.planes { display: flex; flex-direction: column; }
+.plane { border: 1.6pt solid var(--navy); padding: 0.1in 0.14in 0.13in; }
+.plane.exec { border-width: 3pt; }
+.plane.ctrl { background: var(--tint); }
+.plane-t { font-weight: 700; color: var(--navy); font-size: 19pt; margin-bottom: 0.08in; }
+.plane-t span { font-weight: 400; color: var(--ink-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.07in; }
+.chip { border: 1pt solid #aab2bd; background: #fff; padding: 0.025in 0.1in; border-radius: 4pt; white-space: nowrap; }
+.plane-f { margin-top: 0.08in; font-size: 16.5pt; color: var(--sit-red); font-weight: 600; }
+.link { text-align: center; font-size: 16pt; color: var(--ink-2); padding: 0.05in 0; }
+.link::before { content: "\2195\00a0"; color: var(--navy); }
+.ext { border: 1.6pt dashed #7a8290; padding: 0.1in 0.13in; display: flex; flex-direction: column; gap: 0.08in; }
+.ext .plane-t { margin-bottom: 0.02in; }
+.ext div.item { border: 1pt solid #aab2bd; padding: 0.05in 0.09in; background: #fff; }
+.ext div.item span { display: block; color: var(--ink-3); font-size: 15.5pt; }
+
+/* chains (traceability, deployment) */
+.chain { display: grid; gap: 0.32in; position: relative; }
+.chain.c5 { grid-template-columns: repeat(5, 1fr); }
+.chain.c6 { grid-template-columns: repeat(6, 1fr); }
+.step { border: 1.6pt solid var(--navy); padding: 0.1in 0.14in 0.12in; position: relative; font-size: 18.5pt; line-height: 1.24; background: #fff; }
+.step b { display: block; color: var(--navy); font-size: 20pt; margin-bottom: 0.03in; }
+.step + .step::before {
+  content: ""; position: absolute; left: -0.3in; top: 50%; width: 0.22in; height: 2pt; background: #7a8290;
+}
+.step + .step::after {
+  content: ""; position: absolute; left: -0.1in; top: calc(50% - 6pt); border-left: 9pt solid #7a8290; border-top: 7pt solid transparent; border-bottom: 7pt solid transparent; transform: translateY(1pt);
+}
+.step.hl { background: var(--tint); }
+.step.vlive { border-color: var(--sit-red); border-width: 2.4pt; }
+.tag { display: inline-block; font-family: var(--mono); font-size: 15pt; border: 1pt solid #7fb79a; color: #1d6b45; border-radius: 99pt; padding: 0 0.07in; margin-left: 0.04in; }
+.loopback { margin-top: 0.14in; font-size: 18.5pt; color: var(--ink-2); }
+.loopback b { color: var(--sit-red); }
+
+/* ---------- results ---------- */
+.setup { font-size: 17.5pt; color: var(--ink-2); line-height: 1.3; margin-bottom: 0.2in; }
+.rblock { margin-bottom: 0.2in; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3in; margin: 0.04in 0 0; }
+.tile { border-top: 3pt solid var(--navy); padding-top: 0.08in; }
+.tile .v { font-weight: 600; font-size: 42pt; line-height: 1; color: var(--navy); }
+.tile .l { font-size: 17pt; color: var(--ink-2); line-height: 1.25; margin-top: 0.05in; }
+.fn { font-size: 15.5pt; color: var(--ink-3); line-height: 1.28; margin-top: 0.08in; }
+.concl { list-style: none; padding: 0; margin: 0; }
+.concl li { position: relative; padding-left: 0.32in; font-size: 20.5pt; line-height: 1.28; margin-bottom: 0.12in; }
+.concl li::before { content: ""; position: absolute; left: 0.02in; top: 0.13in; width: 0.12in; height: 0.12in; background: var(--sit-red); }
+.concl b { color: var(--navy); }
+.status { display: grid; grid-template-columns: auto auto 1fr; column-gap: 0.16in; row-gap: 0.07in; font-size: 18pt; line-height: 1.22; margin: 0.06in 0 0.16in; align-items: baseline; }
+.status dt { font-family: var(--serif); font-weight: 700; color: var(--navy); }
+.status .s { font-weight: 700; font-size: 15pt; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.01in 0.08in; border: 1.2pt solid; white-space: nowrap; }
+.s.ok { color: #1d4f8f; border-color: #1d4f8f; }
+.s.part { color: #7a5200; border-color: #b07a10; }
+.s.no { color: var(--ink-3); border-color: #9aa1ab; }
+.status dd { margin: 0; color: var(--ink-2); }
+
+/* ---------- references / acknowledgement ---------- */
+.refs { list-style: none; margin: 0; padding: 0; font-size: 15pt; line-height: 1.24; color: var(--ink); }
+.refs li { padding-left: 0.32in; text-indent: -0.32in; margin-bottom: 0.075in; }
+.refs a { color: inherit; text-decoration: none; }
+.ack { font-size: 19.5pt; line-height: 1.3; }
+
+/* ---------- footer row ---------- */
+.foot { grid-column: 1 / -1; display: grid; grid-template-columns: 5.3in 1fr 6.4in; gap: 0.25in; min-height: 0; }
+.fbox { background: #fff; padding: 0.22in 0.35in; min-height: 0; }
+.flogo { display: flex; align-items: center; justify-content: center; gap: 0.16in; }
+.fl-em { height: 1.6in; }
+.fl-t .a { font-family: var(--serif); font-weight: 700; color: var(--sit-title); font-size: 37pt; line-height: 1; letter-spacing: 0.02em; }
+.fl-t .b { font-family: var(--serif); font-weight: 700; color: var(--sit-title); font-size: 12.5pt; margin-top: 0.07in; white-space: nowrap; }
+.outcome .h2 { font-size: 26pt; margin-bottom: 0.17in; padding-bottom: 0.08in; }
+.outcome .h2::after { width: 0.9in; height: 6pt; bottom: -3.75pt; }
+.oc { display: grid; grid-template-columns: 1fr 1.05fr 0.95fr 1.15fr 1.05fr; }
+.oc div { padding: 0 0.24in; border-left: 1.2pt solid var(--hair); font-size: 18pt; line-height: 1.25; color: var(--ink-2); }
+.oc div:first-child { padding-left: 0; border-left: 0; }
+.oc b { display: block; font-size: 21.5pt; color: var(--navy); margin-bottom: 0.02in; }
+.trylive { display: grid; grid-template-columns: 1.82in 1fr; gap: 0.25in; align-items: center; }
+.trylive svg { width: 1.82in; height: 1.82in; }
+.trylive .h2 { font-size: 24pt; margin-bottom: 0.13in; padding-bottom: 0.07in; }
+.trylive .h2::after { width: 0.7in; height: 6pt; bottom: -3.75pt; }
+.trylive p { font-size: 16pt; line-height: 1.25; color: var(--ink-2); margin: 0 0 0.06in; }
+.trylive .url { font-family: var(--mono); font-size: 14.5pt; color: var(--navy); font-weight: 700; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- ================= HEADER ================= -->
+  <header class="hdr">
+    <div class="hdr-top">
+      <img class="emblem" src="assets/sit-emblem.png" alt="Symbiosis emblem">
+      <div class="inst">
+        <div class="inst-name">SYMBIOSIS INSTITUTE OF TECHNOLOGY (SIT)</div>
+        <div class="inst-sub">B. Tech. Project Poster AY 2026-27</div>
+      </div>
+    </div>
+    <div class="hdr-title"><span class="lbl">TITLE:</span>ForgeFlow: An AI-Native End-to-End Software Development Lifecycle Automation Platform</div>
+    <div class="hdr-people">
+      <div>Faheemuddin Sayyed <span class="prn">(23070122196)</span><span class="sep">|</span>Sanidhya Awasthi <span class="prn">(23070122192)</span><span class="sep">|</span>Raghav Sonchhatra <span class="prn">(23070122172)</span></div>
+      <div>Guide Name: Dr. Payal Kadam</div>
+    </div>
+    <img class="jubilee" src="assets/golden-jubilee.png" alt="Symbiosis Golden Jubilee">
+  </header>
+  <div class="rule"></div>
+
+  <main class="body">
+
+    <!-- ================= LEFT COLUMN ================= -->
+    <div class="col">
+      <section class="panel" style="flex: 0 0 14.25in;">
+        <h2 class="h2">Introduction</h2>
+        <p class="lead">An LLM can now generate a web app in minutes. Knowing that the app works, and knowing when to stop fixing it, is still hard.</p>
+        <ul class="evidence">
+          <li>Asking a model to keep improving its own code can make the code less secure. <span class="cite">(Shukla et al., 2025)</span></li>
+          <li>Fewer than 1 in 3 model-generated infrastructure deployments succeed on the first attempt. <span class="cite">(Zhang et al., 2026)</span></li>
+          <li>Most of a repair loop's gain arrives in the first 1&ndash;3 rounds; later rounds mostly spend tokens. <span class="cite">(Kiecker et al., 2026; Arimbur, 2026)</span></li>
+          <li>Developers steer coding agents closely rather than hand over control. <span class="cite">(Huang et al., 2025; Tang et al., 2026)</span></li>
+        </ul>
+        <div class="gapt">
+          <div class="gap-h"><b>The gap</b></div>
+          <table class="matrix"><thead><tr><th></th><th>Research repair agents</th><th>LLM test / repair tools</th><th>Prompt-to-app builders</th><th class="ff">Forge&shy;Flow</th></tr></thead><tbody><tr><td>Repair with an iteration cap and stall detection</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Hands back to a person when repair stalls</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Requirements compiled into traceable tests</td><td class="x">&#10005;</td><td class="p">partial</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Automated cloud deployment</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y">&#10003;</td><td class="y ff">&#10003;</td></tr><tr><td>Re-tests the deployed, live URL</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Any stage can be skipped or revisited</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="p">partial</td><td class="y ff">&#10003;</td></tr></tbody></table>
+          <div class="gap-n">Capabilities as described in the cited work, adapted from Table I of our paper; not a performance comparison.</div>
+        </div>
+        <p class="answer"><b>ForgeFlow</b> takes a web-app idea, given as screenshots or a structured spec, to a live URL that has been tested, and lets a person enter, refine or skip any stage on the way.</p>
+      </section>
+
+      <section class="panel" style="flex: 1;">
+        <h2 class="h2">Objectives &amp; Aims</h2>
+        <ol class="objectives">
+          <li><b>Non-linear control.</b> No stage is mandatory; every artifact is versioned and can be revisited.</li>
+          <li><b>Generation.</b> Screenshots or a spec become a full-stack app on one fixed stack.</li>
+          <li><b>Requirements to tests.</b> Acceptance criteria compile into unit and E2E tests, each traceable to its criterion.</li>
+          <li class="core"><b>Bounded self-healing repair.</b> A diff-aware loop with caps, stall detection and escalation to a person. (Core contribution)</li>
+          <li><b>Infrastructure reasoning.</b> Work out what each app needs, then deploy it.</li>
+          <li><b>Live validation.</b> Re-test the deployed URL; repair and redeploy on failure.</li>
+          <li><b>Isolation.</b> Generated code runs only in a per-project sandbox.</li>
+          <li><b>Measurement.</b> First-pass vs. post-repair success, cost and latency, reproducibly.</li>
+        </ol>
+        <div class="hyp">
+          <div class="h3">Hypotheses under test</div>
+          <dl>
+            <dt>H1</dt><dd>Bounded repair captures most of the achievable gain at a fraction of an unbounded loop's cost.</dd>
+            <dt>H2</dt><dd>A minimal, diff-aware context repairs more per token than broad repository context.</dd>
+            <dt>H3</dt><dd>Re-testing the live URL catches faults that sandbox tests miss.</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= CENTRE: METHODOLOGY ================= -->
+    <section class="panel">
+      <h2 class="h2">Methodology</h2>
+      <div class="method">
+
+        <!-- 1. stage model -->
+        <div>
+          <div class="h3"><span class="n">1</span>Six stages, none mandatory <span class="aside">The conductor, not the UI, decides which transitions are legal.</span></div>
+          <svg viewBox="0 0 1548 352" width="100%" role="img" aria-label="Six-stage pipeline with optional entry and two enforced orderings">
+            <defs>
+              <marker id="pg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7a8290"/></marker>
+              <marker id="pr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.6" markerHeight="4.6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a30000"/></marker>
+            </defs>
+            <g font-size="17.5" fill="#4a5361">
+              <text x="0" y="22"><tspan font-weight="700" fill="#121f33">You</tspan> can enter at any stage, skip any stage, or jump back to refine one.</text>
+            </g>
+            <path d="M104 44 H1444" stroke="#7a8290" stroke-width="1.8" stroke-dasharray="8 6" fill="none"/>
+            <g stroke="#7a8290" stroke-width="1.8" stroke-dasharray="8 6" fill="none" marker-end="url(#pg)">
+              <path d="M104 44 V97"/><path d="M372 44 V97"/><path d="M640 44 V97"/><path d="M908 44 V97"/><path d="M1176 44 V97"/><path d="M1444 44 V97"/>
+            </g>
+            <!-- boxes -->
+            <g stroke="#121f33" stroke-width="1.8">
+              <rect x="0" y="100" width="208" height="100" rx="9" fill="#fff"/>
+              <rect x="268" y="100" width="208" height="100" rx="9" fill="#fff"/>
+              <rect x="536" y="100" width="208" height="100" rx="9" fill="#fff"/>
+              <rect x="804" y="100" width="208" height="100" rx="9" fill="#121f33"/>
+              <rect x="1072" y="100" width="208" height="100" rx="9" fill="#fff"/>
+              <rect x="1340" y="100" width="208" height="100" rx="9" fill="#fff"/>
+            </g>
+            <g font-size="23" font-weight="700" fill="#121f33" text-anchor="middle">
+              <text x="104" y="139">Requirements</text>
+              <text x="372" y="139">Design</text>
+              <text x="640" y="139">Build</text>
+              <text x="908" y="139" fill="#fff">Test + Repair</text>
+              <text x="1176" y="139">Deploy</text>
+              <text x="1444" y="139">Validate</text>
+            </g>
+            <g font-size="16" fill="#4a5361" text-anchor="middle">
+              <text x="104" y="166">features + acceptance</text><text x="104" y="186">criteria (form or draft)</text>
+              <text x="372" y="166">Stitch, Figma or</text><text x="372" y="186">your own screenshots</text>
+              <text x="640" y="166">fixed stack: React +</text><text x="640" y="186">Express + MongoDB</text>
+              <text x="908" y="166" fill="#d3dae5">unit + E2E tests,</text><text x="908" y="186" fill="#d3dae5">bounded repair loop (2)</text>
+              <text x="1176" y="166">infra-aware, Vercel +</text><text x="1176" y="186">MongoDB Atlas</text>
+              <text x="1444" y="166">same E2E suite run</text><text x="1444" y="186">on the live URL</text>
+            </g>
+            <!-- default order -->
+            <g stroke="#7a8290" stroke-width="2.2" fill="none" marker-end="url(#pg)">
+              <path d="M212 150 H263"/><path d="M480 150 H531"/><path d="M748 150 H799"/><path d="M1016 150 H1067"/><path d="M1284 150 H1335"/>
+            </g>
+            <!-- enforced orderings -->
+            <g stroke="#a30000" stroke-width="3.2" fill="none" marker-end="url(#pr)">
+              <path d="M680 201 V246 H1146 V205"/>
+              <path d="M1206 201 V246 H1414 V205"/>
+            </g>
+            <g font-size="17" font-weight="700" fill="#a30000" text-anchor="middle">
+              <text x="913" y="273">deploy needs a build</text>
+              <text x="1310" y="273">validate needs a deploy</text>
+            </g>
+            <!-- legend -->
+            <g font-size="16" fill="#4a5361">
+              <path d="M0 313 H34" stroke="#7a8290" stroke-width="2.2" marker-end="url(#pg)"/>
+              <text x="46" y="319">default order: drives the navigator, gates nothing</text>
+              <path d="M450 313 H484" stroke="#a30000" stroke-width="3.2" marker-end="url(#pr)"/>
+              <text x="496" y="319">the only two enforced orderings</text>
+              <path d="M772 313 H810" stroke="#7a8290" stroke-width="1.8" stroke-dasharray="8 6"/>
+              <text x="822" y="319">optional entry or skip</text>
+              <text x="1060" y="319"><tspan font-weight="700" fill="#121f33">Refine</tspan> a stage and later stages turn stale.</text>
+              <text x="1060" y="342">Nothing is deleted; every artifact is versioned.</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- 2 + 3 -->
+        <div class="mrow">
+          <div>
+            <div class="h3"><span class="n">2</span>Bounded, diff-aware self-healing repair</div>
+            <svg viewBox="0 0 763 922" width="100%" role="img" aria-label="Repair loop: minimal context, patch, re-run, guards, fixed or escalate">
+              <defs>
+                <marker id="rg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#121f33"/></marker>
+                <marker id="rr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a30000"/></marker>
+              </defs>
+              <!-- start -->
+              <rect x="190" y="0" width="220" height="44" rx="22" fill="#f4f6f9" stroke="#121f33" stroke-width="1.6"/>
+              <text x="300" y="29" text-anchor="middle" font-size="18.5" font-weight="700" fill="#121f33">Failing test run</text>
+              <g stroke="#121f33" stroke-width="2" fill="none" marker-end="url(#rg)">
+                <path d="M300 44 V68"/><path d="M300 292 V314"/><path d="M300 380 V402"/><path d="M300 468 V488"/>
+              </g>
+              <!-- B1 -->
+              <rect x="44" y="70" width="512" height="222" rx="8" fill="#fff" stroke="#121f33" stroke-width="1.6"/>
+              <circle cx="70" cy="95" r="14" fill="#a30000"/><text x="70" y="101" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">1</text>
+              <text x="94" y="102" font-size="19.5" font-weight="700" fill="#121f33">Assemble the minimal repair context</text>
+              <text x="94" y="125" font-size="15.5" font-style="italic" fill="#4a5361">deterministic and model-free</text>
+              <g fill="#a30000"><rect x="96" y="150" width="7" height="7"/><rect x="96" y="180" width="7" height="7"/><rect x="96" y="210" width="7" height="7"/><rect x="96" y="240" width="7" height="7"/></g>
+              <g font-size="16.5" fill="#1d232c">
+                <text x="112" y="159">Failing tests only: assertion, stack, <tspan font-family="JetBrains Mono, monospace" font-size="14.5">criterion_id</tspan></text>
+                <text x="112" y="189">Files they reach: import graph, depth ≤ 3, ≤ 24 files</text>
+                <text x="112" y="219">Git diff since the last green run</text>
+                <text x="112" y="249">Acceptance-criterion text of each failure</text>
+              </g>
+              <text x="94" y="279" font-family="JetBrains Mono, monospace" font-size="13.5" fill="#4a5361">caps: 24k chars total · 8k per file · 8k diff</text>
+              <!-- B2 -->
+              <rect x="44" y="316" width="512" height="64" rx="8" fill="#fff" stroke="#121f33" stroke-width="1.6"/>
+              <circle cx="70" cy="338" r="14" fill="#a30000"/><text x="70" y="344" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">2</text>
+              <text x="94" y="345" font-size="19.5" font-weight="700" fill="#121f33">Targeted patch by the code-generation model</text>
+              <text x="94" y="368" font-size="15.5" fill="#4a5361">committed to the sandbox's git workspace</text>
+              <!-- B3 -->
+              <rect x="44" y="404" width="512" height="64" rx="8" fill="#fff" stroke="#121f33" stroke-width="1.6"/>
+              <circle cx="70" cy="426" r="14" fill="#a30000"/><text x="70" y="432" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">3</text>
+              <text x="94" y="433" font-size="19.5" font-weight="700" fill="#121f33">Re-run the affected suite, then the full suite</text>
+              <text x="94" y="456" font-size="15.5" fill="#4a5361">the full run catches regressions the fast path misses</text>
+              <!-- decision -->
+              <path d="M300 490 L402 534 L300 578 L198 534 Z" fill="#fff" stroke="#121f33" stroke-width="1.6"/>
+              <text x="300" y="540" text-anchor="middle" font-size="18.5" font-weight="700" fill="#121f33">All green?</text>
+              <path d="M402 534 H452" stroke="#121f33" stroke-width="2" fill="none" marker-end="url(#rg)"/>
+              <text x="427" y="524" text-anchor="middle" font-size="15.5" fill="#4a5361">yes</text>
+              <rect x="456" y="503" width="307" height="62" rx="8" fill="#f4f6f9" stroke="#121f33" stroke-width="1.6"/>
+              <text x="474" y="529" font-size="18.5" font-weight="700" fill="#121f33">Fixed</text>
+              <text x="474" y="551" font-size="15.5" fill="#4a5361">the last-green reference moves forward</text>
+              <path d="M300 578 V602" stroke="#121f33" stroke-width="2" fill="none" marker-end="url(#rg)"/>
+              <text x="312" y="597" font-size="15.5" fill="#4a5361">no</text>
+              <!-- B4 guards -->
+              <rect x="44" y="604" width="512" height="196" rx="8" fill="#f4f6f9" stroke="#121f33" stroke-width="1.6"/>
+              <circle cx="70" cy="627" r="14" fill="#a30000"/><text x="70" y="633" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">4</text>
+              <text x="94" y="634" font-size="19.5" font-weight="700" fill="#121f33">Guards, checked in this order</text>
+              <g font-family="JetBrains Mono, monospace" font-size="15.5" font-weight="700" fill="#a30000">
+                <text x="94" y="673">G1</text><text x="94" y="704">G2</text><text x="94" y="735">G3</text><text x="94" y="766">G4</text>
+              </g>
+              <g font-size="16.5" fill="#1d232c">
+                <text x="128" y="673"><tspan font-weight="700">Regression:</tspan> a 2nd patch breaks a passing test</text>
+                <text x="128" y="704"><tspan font-weight="700">Stall:</tspan> failing set not shrinking for 2 rounds</text>
+                <text x="128" y="735"><tspan font-weight="700">Iteration cap:</tspan> 5 attempts</text>
+                <text x="128" y="766"><tspan font-weight="700">Budget:</tspan> spent, user cancels, or nothing safe to patch</text>
+              </g>
+              <text x="94" y="790" font-size="14.5" fill="#4a5361">every bound is an admin setting (shown at the defaults)</text>
+              <!-- loop back -->
+              <path d="M44 668 H16 V181 H40" stroke="#121f33" stroke-width="2" fill="none" marker-end="url(#rg)"/>
+              <text transform="translate(35 425) rotate(-90)" text-anchor="middle" font-size="15.5" fill="#4a5361">no guard trips: next attempt</text>
+              <!-- escalate -->
+              <path d="M300 800 V834" stroke="#a30000" stroke-width="3" fill="none" marker-end="url(#rr)"/>
+              <text x="314" y="823" font-size="15.5" font-weight="700" fill="#a30000">any guard trips</text>
+              <rect x="44" y="838" width="512" height="82" rx="8" fill="#fbf0f0" stroke="#a30000" stroke-width="2.2"/>
+              <circle cx="70" cy="861" r="14" fill="#a30000"/><text x="70" y="867" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">5</text>
+              <text x="94" y="868" font-size="19.5" font-weight="700" fill="#7d0000">Escalate to the user</text>
+              <text x="94" y="891" font-size="15.5" fill="#1d232c">with the failing tests, patches tried and metrics:</text>
+              <text x="94" y="910" font-size="15.5" fill="#1d232c">an expected end state, not an error or a silent loop</text>
+              <!-- side notes -->
+              <g font-size="15" font-style="italic" fill="#4a5361">
+                <text x="580" y="128">Everything else stays out:</text>
+                <text x="580" y="148">the rest of the repo,</text>
+                <text x="580" y="168">passing tests, untouched</text>
+                <text x="580" y="188">modules.</text>
+                <text x="580" y="350">A patch that breaks a test</text>
+                <text x="580" y="370">and fixes none is reverted,</text>
+                <text x="580" y="390">so the app never ends up</text>
+                <text x="580" y="410">worse than it started.</text>
+                <text x="580" y="664">Sandbox faults escalate</text>
+                <text x="580" y="684">before any model call, at</text>
+                <text x="580" y="704">zero token cost.</text>
+                <text x="580" y="868">To resume, refine Build</text>
+                <text x="580" y="888">with guidance and run</text>
+                <text x="580" y="908">repair again.</text>
+              </g>
+            </svg>
+            <p class="why"><b>Why a diff:</b> generated tests lose validity when code changes, and highlighting the change is the recommended fix <span class="cite">(Haroon et al., 2026)</span>. <b>Why a cap:</b> most gain comes in the first rounds <span class="cite">(Kiecker et al., 2026)</span>.</p>
+          </div>
+
+          <div>
+            <figure class="shot">
+              <img src="assets/workspace.png" alt="ForgeFlow workspace showing requirements with tagged acceptance criteria and the stage navigator">
+              <figcaption><b>The workspace (real UI).</b> Each acceptance criterion carries a <span class="mono">unit</span> or <span class="mono">e2e</span> tag. Deploy and Validate stay locked until Build and Deploy finish; every other stage can be skipped.</figcaption>
+            </figure>
+            <div class="h3" style="margin-top: 0.3in;"><span class="n">3</span>Three planes; generated code never runs in the control plane</div>
+            <div class="arch">
+              <div class="planes">
+                <div class="plane">
+                  <div class="plane-t">Presentation <span>· React 18 PWA</span></div>
+                  <div class="chips"><span class="chip">stage navigator</span><span class="chip">Monaco IDE</span><span class="chip">xterm.js terminal</span><span class="chip">live preview</span><span class="chip">deploy topology</span></div>
+                </div>
+                <div class="link">REST + WebSocket, resumable typed events</div>
+                <div class="plane ctrl">
+                  <div class="plane-t">Control plane <span>· FastAPI, Python 3.11, MongoDB</span></div>
+                  <div class="chips"><span class="chip">conductor</span><span class="chip">6 stage handlers</span><span class="chip">agents + model router</span><span class="chip">sandbox manager</span><span class="chip">deploy orchestrator</span><span class="chip">encrypted vault</span></div>
+                </div>
+                <div class="link">Docker SDK: exec, files, logs</div>
+                <div class="plane exec">
+                  <div class="plane-t">Execution <span>· one Docker sandbox per project</span></div>
+                  <div class="chips"><span class="chip">git-backed workspace</span><span class="chip">generated app</span><span class="chip">Vitest · Jest · Playwright</span></div>
+                  <div class="plane-f">non-root · no host network · CPU, memory and PID limits</div>
+                </div>
+              </div>
+              <div class="ext">
+                <div class="plane-t">External</div>
+                <div class="item">LLM<span>Anthropic or any OpenAI-compatible API</span></div>
+                <div class="item">Design<span>Google Stitch or Figma</span></div>
+                <div class="item">Hosting<span>Vercel</span></div>
+                <div class="item">Database<span>MongoDB Atlas, one per project</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. traceability -->
+        <div>
+          <div class="h3"><span class="n">4</span>One identifier from requirement to repair <span class="aside">An unmet criterion is reported, not averaged into a pass rate.</span></div>
+          <div class="chain c5">
+            <div class="step"><b>Acceptance criterion</b>"Deleting a todo removes it from the list and from storage" <span class="tag">e2e</span></div>
+            <div class="step"><b>Tagged test</b>each generated test carries the criterion's <span class="mono">criterion_id</span></div>
+            <div class="step"><b>Normalised result</b><span class="mono">{status, assertion, stack, files, criterion_id}</span></div>
+            <div class="step"><b>Criterion verdict</b>met only if a tagged test ran and none failed; untested counts as unmet</div>
+            <div class="step hl"><b>Repair context</b>the failing criterion's text is handed to the patch step (2)</div>
+          </div>
+        </div>
+
+        <!-- 5. deploy -->
+        <div>
+          <div class="h3"><span class="n">5</span>Deploy in order, then test the live URL</div>
+          <div class="chain c6">
+            <div class="step"><b>Classify</b>static site, frontend + API, or frontend + API + database</div>
+            <div class="step"><b>Provision DB</b>MongoDB Atlas, one database per project</div>
+            <div class="step"><b>Deploy API</b>Express as a Vercel function, database URI injected</div>
+            <div class="step"><b>Deploy UI</b>static SPA on Vercel, API URL injected</div>
+            <div class="step"><b>Health-check</b>every node, so a dead API never ships behind a live UI</div>
+            <div class="step vlive"><b>Validate live</b>the same Playwright suite, run against the public URL</div>
+          </div>
+          <div class="loopback"><b>Live failure &rarr; same bounded loop &rarr; redeploy &rarr; re-validate</b> (at most 2 cycles). Tokens are platform-owned or the user's own, Fernet-encrypted at rest and never sent to the browser.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= RIGHT COLUMN ================= -->
+    <div class="col">
+      <section class="panel" style="flex: 0 0 17.83in;">
+        <h2 class="h2">Results &amp; Conclusions</h2>
+        <p class="setup">One model (GLM-5.3-flash) through ForgeFlow's own model interface; one reproducible run, 2 Oct 2026. Problems from HumanEval <span class="cite">(Chen et al., 2021)</span>, MBPP <span class="cite">(Austin et al., 2021)</span> and HumanEval-TS <span class="cite">(Cassano et al., 2023)</span>.</p>
+
+        <div class="rblock">
+          <div class="h3">Bounded repair on 580 coding problems</div>
+          <svg viewBox="0 0 871 252" width="100%" role="img" aria-label="Dot plot: pass@1 and pass rate after bounded repair, per benchmark">
+            <rect x="0" y="4" width="14" height="14" fill="#878f9b"/><text x="22" y="17" font-size="16" fill="#4a5361">pass@1, no repair</text>
+            <circle cx="196" cy="11" r="7.5" fill="#24589e"/><text x="210" y="17" font-size="16" fill="#4a5361">after bounded repair (at most 5 attempts)</text>
+            <text x="871" y="17" text-anchor="end" font-size="15" font-weight="700" fill="#4a5361">repaired</text>
+            <g stroke="#e6e9ed" stroke-width="1"><path d="M210 32 V222"/><path d="M320 32 V222"/><path d="M430 32 V222"/><path d="M540 32 V222"/><path d="M650 32 V222"/><path d="M760 32 V222"/></g>
+            <path d="M0 176 H871" stroke="#c9ced5" stroke-width="1"/>
+            <g font-size="14.5" fill="#6b7380" text-anchor="middle"><text x="210" y="244">95%</text><text x="320" y="244">96%</text><text x="430" y="244">97%</text><text x="540" y="244">98%</text><text x="650" y="244">99%</text><text x="760" y="244">100%</text></g>
+            <text x="0" y="52" font-size="17.5" font-weight="700" fill="#1d232c">HumanEval</text><text x="0" y="70" font-size="14" fill="#6b7380">Python · 164</text>
+            <path d="M438 56 H685" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="422.5" y="48.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="694" cy="56" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="414" y="62" font-size="16" fill="#4a5361" text-anchor="end">97.0</text>
+            <text x="710" y="62" font-size="16.5" font-weight="700" fill="#1d232c">99.4</text>
+            <text x="871" y="62" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">4 / 5</text>
+            <text x="0" y="98" font-size="17.5" font-weight="700" fill="#1d232c">MBPP</text><text x="0" y="116" font-size="14" fill="#6b7380">Python · 257</text>
+            <path d="M339 102 H619" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="323.5" y="94.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="628" cy="102" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="315" y="108" font-size="16" fill="#4a5361" text-anchor="end">96.1</text>
+            <text x="644" y="108" font-size="16.5" font-weight="700" fill="#1d232c">98.8</text>
+            <text x="871" y="108" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">7 / 10</text>
+            <text x="0" y="144" font-size="17.5" font-weight="700" fill="#1d232c">HumanEval-TS</text><text x="0" y="162" font-size="14" fill="#6b7380">TypeScript · 159</text>
+            <path d="M493 148 H608" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="477.5" y="140.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="617" cy="148" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="469" y="154" font-size="16" fill="#4a5361" text-anchor="end">97.5</text>
+            <text x="633" y="154" font-size="16.5" font-weight="700" fill="#1d232c">98.7</text>
+            <text x="871" y="154" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">2 / 4</text>
+            <text x="0" y="200" font-size="17.5" font-weight="700" fill="#1d232c">Pooled</text><text x="0" y="218" font-size="14" fill="#6b7380">all 580</text>
+            <path d="M405 204 H641" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="389.5" y="196.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="650" cy="204" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="381" y="210" font-size="16" fill="#4a5361" text-anchor="end">96.7</text>
+            <text x="666" y="210" font-size="16.5" font-weight="700" fill="#1d232c">99.0</text>
+            <text x="871" y="210" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">13 / 19</text>
+            </svg>
+          <div class="fn">Per-benchmark 95% Wilson intervals overlap. The pooled gain is significant (exact McNemar p = 0.00024); per benchmark only MBPP is (p = 0.016).</div>
+        </div>
+
+        <div class="rblock">
+          <div class="h3">What happened to the 19 first-attempt failures</div>
+          <svg viewBox="0 0 871 100" width="100%" role="img" aria-label="19 failures: 10 fixed on first attempt, 3 on second, 6 stopped by stall guard">
+            <g fill="#1b3a6b">
+              <rect x="0" y="0" width="38" height="38" rx="4"/><rect x="43" y="0" width="38" height="38" rx="4"/><rect x="86" y="0" width="38" height="38" rx="4"/><rect x="129" y="0" width="38" height="38" rx="4"/><rect x="172" y="0" width="38" height="38" rx="4"/><rect x="215" y="0" width="38" height="38" rx="4"/><rect x="258" y="0" width="38" height="38" rx="4"/><rect x="301" y="0" width="38" height="38" rx="4"/><rect x="344" y="0" width="38" height="38" rx="4"/><rect x="387" y="0" width="38" height="38" rx="4"/>
+            </g>
+            <g fill="#56739f">
+              <rect x="430" y="0" width="38" height="38" rx="4"/><rect x="473" y="0" width="38" height="38" rx="4"/><rect x="516" y="0" width="38" height="38" rx="4"/>
+            </g>
+            <g fill="#9badc6">
+              <rect x="559" y="0" width="38" height="38" rx="4"/><rect x="602" y="0" width="38" height="38" rx="4"/><rect x="645" y="0" width="38" height="38" rx="4"/><rect x="688" y="0" width="38" height="38" rx="4"/><rect x="731" y="0" width="38" height="38" rx="4"/><rect x="774" y="0" width="38" height="38" rx="4"/>
+            </g>
+            <g stroke="#9aa1ab" stroke-width="1.4" fill="none">
+              <path d="M1 46 V52 H424 V46"/><path d="M431 46 V52 H553 V46"/><path d="M560 46 V52 H811 V46"/>
+            </g>
+            <g font-size="16" fill="#1d232c" text-anchor="middle">
+              <text x="212" y="75"><tspan font-weight="700">fixed on 1st attempt</tspan> (10)</text>
+              <text x="492" y="75"><tspan font-weight="700">2nd</tspan> (3)</text>
+              <text x="685" y="75"><tspan font-weight="700">stall guard stopped</tspan> (6)</text>
+            </g>
+            <text x="685" y="95" font-size="14.5" fill="#6b7380" text-anchor="middle">after 2&ndash;4 attempts each</text>
+          </svg>
+          <div class="tiles">
+            <div class="tile"><div class="v">+5.7%</div><div class="l">model calls for the repairs (33 on top of 580)</div></div>
+            <div class="tile"><div class="v">0</div><div class="l">runs reached the cap of 5; the stall guard did the bounding</div></div>
+          </div>
+        </div>
+
+        <div class="rblock">
+          <div class="h3">Whole applications <span class="aside">2 of 10 specs run, once each</span></div>
+          <svg viewBox="0 0 871 132" width="100%" role="img" aria-label="Unit tests 78 of 78, browser E2E tests 2 of 13, criteria met 12 of 16">
+            <path d="M300 2 V130" stroke="#c4c9d0" stroke-width="1"/>
+            <g font-size="17" fill="#1d232c">
+              <text x="0" y="28">Unit tests passing</text>
+              <text x="0" y="72">Browser E2E tests passing</text>
+              <text x="0" y="116">Acceptance criteria met</text>
+            </g>
+            <g fill="#1b3a6b">
+              <path d="M301 10 H766 Q770 10 770 14 V30 Q770 34 766 34 H301 Z"/>
+              <path d="M301 54 H368 Q372 54 372 58 V74 Q372 78 368 78 H301 Z"/>
+              <path d="M301 98 H649 Q653 98 653 102 V118 Q653 122 649 122 H301 Z"/>
+            </g>
+            <g font-size="17.5" font-weight="700" fill="#1d232c">
+              <text x="780" y="28">78 / 78</text><text x="382" y="72">2 / 13</text><text x="663" y="116">12 / 16</text>
+            </g>
+          </svg>
+          <div class="fn" style="font-size: 16.5pt; color: var(--ink-2);">Every unmet criterion was a browser test. Browser tests import no app source, so the minimal context had nothing to edit and the loop escalated (reason: <span class="mono">blocked</span>) in about 1.3 s instead of guessing. Neither app was delivered.</div>
+        </div>
+
+        <div style="margin-top: auto;">
+          <div class="h3">Conclusions</div>
+          <ul class="concl">
+            <li><b>Repair pays where a failing test reaches the code:</b> 13 of 19 first-attempt failures fixed for 5.7% more model calls, and the guards, not the cap, ended every unproductive run.</li>
+            <li><b>It knows when to stop:</b> all 580 problems and both apps ended with a recorded, typed reason, and each unmet criterion traces to a failing test.</li>
+          </ul>
+          <dl class="status">
+            <dt>H1</dt><span class="s ok">supported</span><dd>at function level; one model, one run</dd>
+            <dt>H2</dt><span class="s no">not yet tested</span><dd>context-ablated arm still to run</dd>
+            <dt>H3</dt><span class="s part">qualitative</span><dd>e.g. a database URI that failed only once deployed</dd>
+          </dl>
+          <div class="note"><b style="color: var(--navy);">Next:</b> map failing browser tests to the pages and routes they visit, so repair can act on them; then run all 10 apps.</div>
+        </div>
+      </section>
+
+      <section class="panel" style="flex: 1;">
+        <h2 class="h2" style="font-size: 30pt; margin-bottom: 0.2in;">References <span style="font-size: 0.62em; letter-spacing: 0.02em;">(APA)</span></h2>
+        <ol class="refs">
+          <li>Arimbur, J. J. (2026). <i>How many tries does it take? Iterative self-repair in LLM code generation across model scales and benchmarks</i> (arXiv:2604.10508). arXiv.</li>
+          <li>Austin, J., Odena, A., Nye, M., et al. (2021). <i>Program synthesis with large language models</i> (arXiv:2108.07732). arXiv.</li>
+          <li>Cassano, F., Gouwar, J., Nguyen, D., et al. (2023). MultiPL-E: A scalable and polyglot approach to benchmarking neural code generation. <i>IEEE Transactions on Software Engineering, 49</i>(7), 3675&ndash;3691. https://doi.org/10.1109/TSE.2023.3267446</li>
+          <li>Chen, M., Tworek, J., Jun, H., et al. (2021). <i>Evaluating large language models trained on code</i> (arXiv:2107.03374). arXiv.</li>
+          <li>Haroon, S., Khan, M. T., &amp; Gulzar, M. A. (2026). <i>Evaluating LLM-based test generation under software evolution</i> (arXiv:2603.23443). arXiv.</li>
+          <li>Huang, R., Reyna, A., Lerner, S., Xia, H., &amp; Hempel, B. (2025). <i>Professional software developers don't vibe, they control: AI agent use for coding in 2025</i> (arXiv:2512.14012). arXiv.</li>
+          <li>Kiecker, T., Reichmann, E., Kang, H., An, G., &amp; Grunske, L. (2026). <i>Is three the magic number? An empirical evaluation of LLM-based repair loops</i> (arXiv:2607.05197). arXiv.</li>
+          <li>Shukla, S., Joshi, H., &amp; Syed, R. (2025). Security degradation in iterative AI code generation: A systematic analysis of the paradox. In <i>Proc. 2025 IEEE International Symposium on Technology and Society (ISTAS)</i> (pp. 1&ndash;8). https://doi.org/10.1109/ISTAS65609.2025.11269659</li>
+          <li>Tang, N., Chen, C., Xu, G., et al. (2026). <i>How coding agents fail their users: A large-scale analysis of developer-agent misalignment in 20,574 real-world sessions</i> (arXiv:2605.29442). arXiv.</li>
+          <li>Zhang, T., Pan, S., Zhang, Z., Xing, Z., &amp; Sun, X. (2026). Deployability-centric infrastructure-as-code generation: Fail, learn, refine, and succeed through LLM-empowered DevOps simulation. In <i>Proc. ACM International Conference on the Foundations of Software Engineering (FSE)</i>. arXiv:2506.05623</li>
+        </ol>
+      </section>
+
+      <section class="panel" style="flex: 0 0 2.62in;">
+        <h2 class="h2" style="font-size: 30pt; margin-bottom: 0.2in;">Acknowledgement</h2>
+        <p class="ack" style="margin: 0;">We thank our guide, <b>Dr. Payal Kadam</b>, whose questions about what the system could actually demonstrate shaped its design and how we report results; <b>Dr. Sonali Kothari</b>, Head of the Department of CSE, for facilities and support; and the faculty who reviewed our progress and invention disclosure.</p>
+      </section>
+    </div>
+
+    <!-- ================= FOOTER ROW ================= -->
+    <div class="foot">
+      <div class="fbox flogo"><img class="fl-em" src="assets/sit-emblem.png" alt="Symbiosis emblem"><div class="fl-t"><div class="a">SYMBIOSIS</div><div class="b">INSTITUTE OF TECHNOLOGY (SIT)</div></div></div>
+      <div class="fbox outcome">
+        <h2 class="h2">Outcome of the Project Work</h2>
+        <div class="oc">
+          <div><b>IEEE conference paper</b>Submitted; under review.</div>
+          <div><b>Invention disclosure</b>Bounded diff-aware self-healing delivery; submitted for filing.</div>
+          <div><b>IBM Bob 2.0 Hackathon</b>ForgeFlow submitted, lablab.ai, 25&ndash;27 Sep 2026.</div>
+          <div><b>Working platform</b>65 phases, about 54k lines, 2,323 automated tests; all 2,253 run on the dev host pass.</div>
+          <div><b>Platform CI/CD</b>Six-job CI; health-checked deploys. Rollback drill: 807 requests, 0 failed.</div>
+        </div>
+      </div>
+      <div class="fbox trylive">
+        <svg viewBox="-2 -2 33 33" shape-rendering="crispEdges" role="img" aria-label="QR code for forgeflow-ecru.vercel.app"><rect x="-2" y="-2" width="33" height="33" fill="#fff"/><path stroke="#121f33" d="M0 0.5h7m1 0h1m3 0h4m1 0h3m2 0h7m-29 1h1m5 0h1m1 0h1m1 0h1m2 0h1m2 0h1m1 0h1m3 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m4 0h1m4 0h1m2 0h2m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m5 0h2m1 0h1m2 0h1m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m2 0h1m1 0h2m1 0h1m1 0h4m2 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h1m2 0h2m1 0h5m2 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h1m3 0h1m2 0h3m1 0h2m-21 1h1m1 0h2m1 0h3m2 0h4m1 0h6m1 0h1m2 0h1m1 0h2m-26 1h1m3 0h1m1 0h1m2 0h4m2 0h7m3 0h1m-29 1h1m1 0h1m1 0h5m2 0h3m3 0h2m2 0h1m2 0h1m1 0h2m-24 1h1m5 0h2m4 0h1m1 0h1m2 0h3m4 0h1m-28 1h3m2 0h3m1 0h3m1 0h2m1 0h1m7 0h2m-25 1h1m2 0h1m1 0h1m1 0h1m4 0h1m2 0h3m2 0h1m3 0h3m-28 1h3m2 0h1m1 0h2m2 0h2m2 0h2m1 0h4m1 0h1m1 0h3m-29 1h2m1 0h2m5 0h2m2 0h2m2 0h1m1 0h3m1 0h1m2 0h1m-27 1h1m4 0h2m3 0h1m2 0h1m1 0h1m1 0h1m1 0h2m2 0h2m1 0h1m-20 1h1m1 0h1m1 0h1m1 0h2m4 0h1m2 0h1m1 0h3m-28 1h1m2 0h1m1 0h4m1 0h2m1 0h3m1 0h2m1 0h1m1 0h2m2 0h1m-25 1h2m1 0h1m1 0h8m2 0h2m5 0h1m1 0h1m-26 1h2m3 0h3m3 0h3m2 0h2m1 0h7m-19 1h1m1 0h1m5 0h1m1 0h1m1 0h1m3 0h5m-29 1h7m1 0h1m1 0h3m1 0h1m1 0h5m1 0h1m1 0h2m1 0h1m-28 1h1m5 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m3 0h2m1 0h2m-29 1h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h1m1 0h1m2 0h5m1 0h2m-28 1h1m1 0h3m1 0h1m1 0h5m2 0h2m2 0h1m1 0h1m1 0h3m2 0h1m-29 1h1m1 0h3m1 0h1m1 0h4m2 0h1m1 0h1m1 0h1m4 0h1m2 0h1m1 0h1m-29 1h1m5 0h1m3 0h1m1 0h3m1 0h1m1 0h3m1 0h1m2 0h1m1 0h1m-28 1h7m1 0h1m6 0h1m3 0h4m4 0h1"/></svg>
+        <div>
+          <h2 class="h2">Try it live</h2>
+          <p>Scan to open the deployed platform.</p>
+          <div class="url">forgeflow-ecru.vercel.app</div>
+          <p style="font-size: 13.5pt; color: var(--ink-3); margin-top: 0.08in;">No industry collaborator on this project.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
