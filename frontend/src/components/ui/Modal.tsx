@@ -117,7 +117,7 @@ export function Modal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-black/55"
             onClick={onClose}
             aria-hidden
           />
@@ -127,21 +127,21 @@ export function Modal({
             aria-modal="true"
             tabIndex={-1}
             aria-label={typeof title === 'string' ? title : 'Dialog'}
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            initial={{ opacity: 0, scale: 0.98, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 4 }}
-            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className={`relative w-full rounded-xl border border-edge bg-surface-overlay shadow-2xl outline-none ${SIZES[size]}`}
+            exit={{ opacity: 0, scale: 0.98, y: 4 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className={`relative w-full rounded-xl bg-surface-overlay shadow-pop outline-none ${SIZES[size]}`}
           >
             {title ? (
-              <header className="border-b border-edge px-4 py-3">
-                <h2 className="text-sm font-semibold text-fg">{title}</h2>
+              <header className="px-5 pb-1 pt-4">
+                <h2 className="text-[15px] font-semibold text-fg">{title}</h2>
                 {description ? <p className="mt-1 text-xs text-fg-subtle">{description}</p> : null}
               </header>
             ) : null}
-            <div className="px-4 py-3.5 text-sm text-fg-muted">{children}</div>
+            <div className="px-5 py-3.5 text-sm text-fg-muted">{children}</div>
             {footer ? (
-              <footer className="flex justify-end gap-2 border-t border-edge px-4 py-3">
+              <footer className="flex justify-end gap-2 rounded-b-xl border-t border-edge bg-fg/[0.02] px-5 py-3">
                 {footer}
               </footer>
             ) : null}

@@ -1,9 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, MoreHorizontal, Play, RotateCcw, SkipForward, Undo2, Wand2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
-import { Badge } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { DURATION, EASE } from '../../lib/motion';
 import type { IntentAction, Stage, StageStatus } from '../../lib/types';
@@ -12,7 +11,6 @@ import {
   STAGE_LABELS,
   STAGE_ORDER,
   STATUS_LABELS,
-  STATUS_TONES,
   canReset,
   prereqUnmet,
   resetHint,
@@ -49,14 +47,26 @@ function actionsFor(stage: Stage, status: StageStatus): StageAction[] {
   return canReset(stage, status) ? [...actions, RESET] : actions;
 }
 
-/** Status → tint for the stage's icon well, so progress reads down the rail at a glance. */
-const WELL_TINTS: Record<StageStatus, string> = {
-  empty: 'border-edge text-fg-subtle',
-  in_progress: 'border-brand/50 text-brand-text',
-  awaiting_user: 'border-warning/50 text-warning',
-  complete: 'border-success/40 text-success',
-  skipped: 'border-edge text-fg-faint',
-  stale: 'border-warning/40 text-warning',
+/** Status → the node's ring and glyph colour, so progress reads down the rail at a glance. */
+const NODE_TINTS: Record<StageStatus, string> = {
+  empty: 'border-edge-strong text-fg-faint',
+  // A stored status, not a live signal — so a still halo rather than motion. (A stage can sit at
+  // "In progress" with nothing running; a spinner there would claim work that is not happening.)
+  in_progress: 'border-brand/60 text-brand-text ring-[3px] ring-brand/15',
+  awaiting_user: 'border-warning/60 text-warning',
+  complete: 'border-success/45 text-success',
+  skipped: 'border-dashed border-edge-strong text-fg-faint',
+  stale: 'border-warning/45 text-warning',
+};
+
+/** Status → the small dot beside the status word. The word carries the meaning; the dot the hue. */
+const STATUS_DOTS: Record<StageStatus, string> = {
+  empty: 'bg-fg-faint/60',
+  in_progress: 'bg-brand-text',
+  awaiting_user: 'bg-warning',
+  complete: 'bg-success',
+  skipped: 'bg-fg-faint/60',
+  stale: 'bg-warning',
 };
 
 function StageRow({
@@ -64,6 +74,10 @@ function StageRow({
   status,
   active,
   lockedBy,
+  /** Whether the rail segment *below* this node reads as travelled (this stage is done). */
+  railDone,
+  last,
+  highlightId,
   onSelect,
   onAction,
   busy,
@@ -72,6 +86,9 @@ function StageRow({
   status: StageStatus;
   active: boolean;
   lockedBy: Stage | null;
+  railDone: boolean;
+  last: boolean;
+  highlightId: string;
   onSelect: (stage: Stage) => void;
   onAction: (stage: Stage, action: IntentAction) => void;
   busy?: boolean;
@@ -98,31 +115,60 @@ function StageRow({
   }, [menuOpen]);
 
   return (
-    <li ref={rowRef} className="group relative">
-      <div
-        className={cn(
-          'flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors',
-          active ? 'bg-brand/10 ring-1 ring-inset ring-brand/25' : 'hover:bg-surface-raised',
-        )}
-      >
+    <li ref={rowRef} className="group/row relative">
+      {/* The rail segment from this node down to the next one. Drawn per row so each segment can
+          carry its own state: solid where the pipeline has been travelled, hairline where not. */}
+      {!last ? (
+        <span
+          aria-hidden
+          className={cn(
+            'absolute left-[1.3rem] top-[2.15rem] -bottom-[0.4rem] w-px transition-colors duration-300',
+            railDone ? 'bg-success/40' : 'bg-edge',
+          )}
+        />
+      ) : null}
+
+      <div className="relative flex items-start gap-1 rounded-lg">
+        {active ? (
+          // One highlight glides between rows instead of blinking in per row.
+          <motion.span
+            layoutId={highlightId}
+            aria-hidden
+            className="absolute inset-0 rounded-lg bg-fg/[0.065]"
+            transition={{ duration: 0.22, ease: EASE }}
+          />
+        ) : null}
+
         {/* Name and status stack rather than compete for one line — at rail width the pair does not
             fit side by side, and truncating either one is worse than a second row. */}
         <button
           type="button"
           data-testid={`stage-${stage}`}
+          aria-current={active ? 'step' : undefined}
           onClick={() => onSelect(stage)}
-          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+          className={cn(
+            'relative flex min-w-0 flex-1 items-start gap-2.5 rounded-lg py-2 pl-2 pr-1 text-left transition-colors duration-150',
+            !active && 'hover:bg-fg/[0.03]',
+          )}
         >
           <span
             className={cn(
-              'relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-surface transition-colors',
-              WELL_TINTS[status],
+              'relative z-10 mt-px flex h-[1.375rem] w-[1.375rem] shrink-0 items-center justify-center rounded-full border bg-surface transition-colors duration-300',
+              NODE_TINTS[status],
             )}
           >
-            <Icon aria-hidden className="h-4 w-4" strokeWidth={1.75} />
+            <Icon aria-hidden className="h-3 w-3" strokeWidth={2} />
           </span>
-          <span className="flex min-w-0 flex-col items-start gap-1 pt-0.5">
-            <span className="flex min-w-0 max-w-full items-center gap-1.5 text-sm text-fg">
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={cn(
+                  'truncate text-[13px] leading-5',
+                  active ? 'font-medium text-fg' : 'text-fg-muted group-hover/row:text-fg',
+                )}
+              >
+                {STAGE_LABELS[stage]}
+              </span>
               {lockedBy ? (
                 <Lock
                   aria-label="locked"
@@ -130,38 +176,47 @@ function StageRow({
                   strokeWidth={2}
                 />
               ) : null}
-              <span className="truncate font-medium">{STAGE_LABELS[stage]}</span>
             </span>
-            <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
+            <span className="flex items-center gap-1.5 text-2xs text-fg-subtle">
+              <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOTS[status])} />
+              {STATUS_LABELS[status]}
+            </span>
+            {lockedBy ? (
+              <span className="text-2xs leading-snug text-fg-faint">
+                Locked until {STAGE_LABELS[lockedBy]} is complete
+              </span>
+            ) : null}
           </span>
         </button>
         <button
           type="button"
           aria-label={`Actions for ${STAGE_LABELS[stage]}`}
           aria-expanded={menuOpen}
+          aria-haspopup="menu"
           data-testid={`stage-menu-${stage}`}
           onClick={() => setMenuOpen((v) => !v)}
-          className="rounded-md p-1 text-fg-faint transition-colors hover:bg-edge-strong/60 hover:text-fg"
+          className={cn(
+            'relative mr-1 mt-2 rounded-md p-1 text-fg-faint transition-[opacity,color,background-color] duration-150',
+            'hover:bg-fg/[0.08] hover:text-fg focus-visible:opacity-100',
+            menuOpen
+              ? 'bg-fg/[0.08] text-fg opacity-100'
+              : 'opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100',
+          )}
         >
-          <MoreHorizontal aria-hidden className="h-4 w-4" />
+          <MoreHorizontal aria-hidden className="h-3.5 w-3.5" />
         </button>
       </div>
-
-      {lockedBy ? (
-        <p className="px-2 pt-1 text-xs text-warning">
-          Locked until {STAGE_LABELS[lockedBy]} is complete
-        </p>
-      ) : null}
 
       <AnimatePresence>
         {menuOpen ? (
           <motion.div
             role="menu"
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            aria-label={`${STAGE_LABELS[stage]} actions`}
+            initial={{ opacity: 0, scale: 0.96, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -2 }}
+            exit={{ opacity: 0, scale: 0.98, y: -2 }}
             transition={{ duration: DURATION.fast, ease: EASE }}
-            className="absolute right-0 z-10 mt-1 w-36 origin-top-right rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
+            className="absolute right-1 top-9 z-20 w-40 origin-top-right rounded-lg bg-surface-overlay p-1 shadow-pop"
           >
             {actionsFor(stage, status).map(({ action, label, icon: ActionIcon }) => (
               <button
@@ -175,7 +230,7 @@ function StageRow({
                   setMenuOpen(false);
                   onAction(stage, action);
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-raised disabled:opacity-50"
+                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-fg transition-colors hover:bg-surface-raised disabled:opacity-50"
               >
                 <ActionIcon aria-hidden className="h-3.5 w-3.5 text-fg-subtle" />
                 {label}
@@ -195,26 +250,30 @@ export function StageNavigator({
   onAction,
   busy,
 }: StageNavigatorProps): JSX.Element {
+  // Scoped per navigator, so two mounted rails could never steal each other's highlight.
+  const highlightId = `stage-active-${useId()}`;
   return (
     <nav aria-label="Stages">
-      <div className="relative">
-        {/* The rail: a hairline behind the icon wells that turns the list into a pipeline. */}
-        <span aria-hidden className="absolute bottom-6 left-6 top-6 w-px bg-edge" />
-        <ul className="relative space-y-1">
-          {STAGE_ORDER.map((stage) => (
+      <ul className="relative space-y-0.5">
+        {STAGE_ORDER.map((stage, i) => {
+          const status = statusByStage[stage] ?? 'empty';
+          return (
             <StageRow
               key={stage}
               stage={stage}
-              status={statusByStage[stage] ?? 'empty'}
+              status={status}
               active={stage === activeStage}
               lockedBy={prereqUnmet(stage, statusByStage)}
+              railDone={status === 'complete' || status === 'skipped'}
+              last={i === STAGE_ORDER.length - 1}
+              highlightId={highlightId}
               onSelect={onSelect}
               onAction={onAction}
               busy={busy}
             />
-          ))}
-        </ul>
-      </div>
+          );
+        })}
+      </ul>
     </nav>
   );
 }

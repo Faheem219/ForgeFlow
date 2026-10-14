@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, ImageUp, FileCode, Lightbulb, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
-import { Badge, Button, EmptyState, Input, Spinner } from '../../components/ui';
+import { Badge, Button, EmptyState, Input, Spinner, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { toastError } from '../../lib/errors';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
 import type { IntentRequest, ProviderHealth } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { StageHeader } from '../workspace/StageHeader';
 import {
   fileToBase64,
   getDesignArtifact,
@@ -260,51 +262,55 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Design
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Design"
+        status={
           <span data-testid="design-status">
             <Badge tone={STATUS_TONES[designStatus]}>{STATUS_LABELS[designStatus]}</Badge>
           </span>
-          {provider ? (
-            <span data-testid="provider-health">
-              <Badge tone={HEALTH_TONES[provider.health]}>
+        }
+        meta={
+          provider ? (
+            <span data-testid="provider-health" title="Design provider">
+              <Badge tone={HEALTH_TONES[provider.health]} dot>
                 {provider.key}: {provider.health}
               </Badge>
             </span>
-          ) : null}
-        </span>
-        <div className="flex gap-2">
-          <ResetStageButton
-            projectId={projectId}
-            stage="design"
-            status={designStatus}
-            disabled={busy}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            data-testid="design-skip"
-            onClick={() => intent.mutate({ stage: 'design', action: 'skip' })}
-          >
-            Skip
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy || !hasDesign}
-            data-testid="design-approve"
-            onClick={() => intent.mutate({ stage: 'design', action: 'proceed' })}
-          >
-            Approve
-          </Button>
-        </div>
-      </header>
+          ) : null
+        }
+        actions={
+          <>
+            <ResetStageButton
+              projectId={projectId}
+              stage="design"
+              status={designStatus}
+              disabled={busy}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              data-testid="design-skip"
+              onClick={() => intent.mutate({ stage: 'design', action: 'skip' })}
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy || !hasDesign}
+              data-testid="design-approve"
+              onClick={() => intent.mutate({ stage: 'design', action: 'proceed' })}
+            >
+              Approve
+            </Button>
+          </>
+        }
+      />
 
       {question ? (
         <aside
-          className="space-y-3 rounded-xl border border-brand/40 bg-brand/5 p-3"
+          className="space-y-3 rounded-xl border border-brand/30 bg-brand/[0.06] p-3.5"
           data-testid="design-question"
         >
           <div className="flex items-start gap-2">
@@ -349,7 +355,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Your answer…"
               disabled={busy}
-              className="flex-1 rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand disabled:opacity-50"
+              className={cn(fieldClasses, 'flex-1')}
             />
             <Button type="submit" size="sm" disabled={busy || !answer.trim()}>
               Send answer
@@ -376,12 +382,19 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
 
       {showRequirementsNudge ? (
         <aside
-          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-edge bg-surface-sunken/60 px-3 py-2"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-edge bg-surface px-3 py-2"
           data-testid="requirements-nudge"
         >
-          <p className="text-xs text-fg-muted">
-            Defining what your app needs to do first makes for a better design — but you can design
-            now and capture requirements later.
+          <p className="flex min-w-0 items-start gap-2 text-xs leading-relaxed text-fg-muted">
+            <Lightbulb
+              aria-hidden
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning"
+              strokeWidth={1.75}
+            />
+            <span>
+              Defining what your app needs to do first makes for a better design — but you can
+              design now and capture requirements later.
+            </span>
           </p>
           <div className="flex gap-2">
             <Button
@@ -398,21 +411,22 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
               data-testid="requirements-nudge-dismiss"
               onClick={() => setNudgeDismissed(true)}
             >
+              <X aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
               Dismiss
             </Button>
           </div>
         </aside>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_17rem]">
         {/* Preview + refine */}
         <div className="flex min-h-0 flex-col gap-2">
           {projectScreens.length > 1 ? (
             <div
-              className="flex flex-wrap items-center gap-2 rounded-xl border border-edge px-3 py-2"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-edge bg-surface px-3 py-1.5"
               data-testid="screen-picker"
             >
-              <label htmlFor="design-screen" className="text-xs text-fg-muted">
+              <label htmlFor="design-screen" className="text-xs font-medium text-fg-muted">
                 Screen
               </label>
               <select
@@ -420,7 +434,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                 data-testid="screen-select"
                 value={shownRef}
                 onChange={(e) => setScreenRef(e.target.value || null)}
-                className="max-w-xs flex-1 rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg outline-none focus:border-brand"
+                className={cn(fieldClasses, 'h-7 w-auto min-w-[10rem] max-w-xs py-0')}
               >
                 {projectScreens.map((s) => (
                   <option key={s.ref} value={s.ref}>
@@ -429,27 +443,31 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-fg-subtle">
+              <span className="min-w-0 truncate text-2xs text-fg-subtle">
                 {projectScreens.length} screens in this project · a refine changes the one shown
               </span>
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-edge">
-            {busy ? (
-              // Generating a design is a provider round-trip measured in tens of seconds, and the
-              // preview is blank the whole time — the pipeline mark says what is happening.
-              <div className="flex h-full items-center justify-center">
-                <AgentWorking label="Generating the design" />
-              </div>
-            ) : contentQuery.isFetching || screenQuery.isFetching ? (
-              // A refetch of an existing design is quick; a spinner is the honest weight for it.
-              <div className="flex h-full items-center justify-center">
-                <Spinner />
-              </div>
-            ) : (
-              <DesignPreview html={design.html} css={design.css} screens={design.screens} />
-            )}
+          {/* An artboard on a canvas: the design sits on its own sheet, inset from the pane, so a
+              white page reads as the thing being designed and not as a hole in the UI. */}
+          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-edge bg-fg/[0.03] bg-[radial-gradient(rgb(var(--ff-edge-strong)/0.55)_1px,transparent_1px)] p-3 [background-size:14px_14px]">
+            <div className="h-full overflow-hidden rounded-lg bg-surface shadow-pop">
+              {busy ? (
+                // Generating a design is a provider round-trip measured in tens of seconds, and the
+                // preview is blank the whole time — the pipeline mark says what is happening.
+                <div className="flex h-full items-center justify-center">
+                  <AgentWorking label="Generating the design" />
+                </div>
+              ) : contentQuery.isFetching || screenQuery.isFetching ? (
+                // A refetch of an existing design is quick; a spinner is the honest weight for it.
+                <div className="flex h-full items-center justify-center">
+                  <Spinner />
+                </div>
+              ) : (
+                <DesignPreview html={design.html} css={design.css} screens={design.screens} />
+              )}
+            </div>
           </div>
           <form
             className="flex gap-2"
@@ -474,18 +492,18 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                 hasDesign ? 'Refine, e.g. "make the header violet"' : 'Generate a design first'
               }
               disabled={!hasDesign || busy}
-              className="flex-1 rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand disabled:opacity-50"
+              className={cn(fieldClasses, 'h-8 flex-1')}
             />
-            <Button type="submit" size="sm" disabled={!hasDesign || busy || !instruction.trim()}>
+            <Button type="submit" size="md" disabled={!hasDesign || busy || !instruction.trim()}>
               Refine
             </Button>
           </form>
         </div>
 
         {/* Intake + version history */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto">
-          <section className="space-y-2 rounded-xl border border-edge p-3">
-            <h4 className="text-xs uppercase tracking-wide text-fg-subtle">New design</h4>
+        <div className="flex min-h-0 flex-col overflow-auto rounded-xl border border-edge bg-surface">
+          <section className="space-y-2 p-3">
+            <h4 className="text-xs font-medium text-fg-muted">New design</h4>
             <form
               className="space-y-2"
               onSubmit={(e) => {
@@ -544,6 +562,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
               data-testid="design-upload"
               onClick={() => fileInput.current?.click()}
             >
+              <ImageUp aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
               Upload screenshots
             </Button>
 
@@ -554,6 +573,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
               data-testid="design-import-toggle"
               onClick={() => setImportOpen((v) => !v)}
             >
+              <FileCode aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
               {importOpen ? 'Cancel import' : 'Import own design'}
             </Button>
             {importOpen ? (
@@ -576,7 +596,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   onChange={(e) => setOwnHtml(e.target.value)}
                   placeholder="<html>…"
                   rows={3}
-                  className="w-full rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 font-mono text-xs text-fg"
+                  className={cn(fieldClasses, 'font-mono text-xs')}
                 />
                 <textarea
                   aria-label="Import CSS"
@@ -585,7 +605,7 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
                   onChange={(e) => setOwnCss(e.target.value)}
                   placeholder="/* css */"
                   rows={2}
-                  className="w-full rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 font-mono text-xs text-fg"
+                  className={cn(fieldClasses, 'font-mono text-xs')}
                 />
                 <Button
                   type="submit"
@@ -599,31 +619,35 @@ export function DesignPanel({ projectId }: { projectId: string }): JSX.Element {
             ) : null}
           </section>
 
-          <section className="space-y-1 rounded-xl border border-edge p-3">
-            <h4 className="text-xs uppercase tracking-wide text-fg-subtle">Versions</h4>
+          <section className="space-y-1.5 border-t border-edge p-3">
+            <h4 className="text-xs font-medium text-fg-muted">Versions</h4>
             {versions.length === 0 ? (
-              <EmptyState title="No versions yet" description="Generate or import a design." />
+              <EmptyState
+                className="py-6"
+                title="No versions yet"
+                description="Generate or import a design."
+              />
             ) : (
-              <ul className="space-y-1" data-testid="design-versions">
+              <ul className="space-y-0.5" data-testid="design-versions">
                 {[...versions].reverse().map((v) => (
                   <li key={v.id}>
                     <button
                       type="button"
                       data-testid={`design-version-${v.version}`}
                       onClick={() => setSelectedId(v.id)}
-                      className={`flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-sm ${
+                      aria-current={v.id === selectedId ? 'true' : undefined}
+                      className={cn(
+                        'flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px] transition-colors',
                         v.id === selectedId
-                          ? 'border-brand bg-brand/10'
-                          : 'border-edge hover:bg-surface-raised'
-                      }`}
+                          ? 'bg-brand/[0.12] text-fg'
+                          : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg',
+                      )}
                     >
-                      <span className="text-fg">
-                        v{v.version}
-                        {v.id === latest?.id ? (
-                          <span className="ml-1 text-xs text-fg-subtle">latest</span>
-                        ) : null}
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs tabular-nums">v{v.version}</span>
+                        {v.id === latest?.id ? <Badge tone="brand">latest</Badge> : null}
                       </span>
-                      <span className="text-xs text-fg-subtle">
+                      <span className="text-2xs text-fg-subtle">
                         {String((v.meta.source as string) ?? '')}
                       </span>
                     </button>

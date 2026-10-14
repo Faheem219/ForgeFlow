@@ -91,7 +91,7 @@ export function DesignPreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="design-screens">
-      <div className="flex flex-wrap gap-1 border-b border-edge bg-surface px-2 py-1.5">
+      <div className="flex flex-wrap gap-0.5 border-b border-edge bg-surface px-2 py-1.5">
         {screens.map((screen) => (
           <button
             key={screen.id}
@@ -99,10 +99,10 @@ export function DesignPreview({
             data-testid={`screen-tab-${screen.id}`}
             aria-current={screen.id === active?.id}
             onClick={() => setActiveId(screen.id)}
-            className={`max-w-[16rem] truncate rounded-md px-2 py-1 text-xs ${
+            className={`max-w-[16rem] truncate rounded-md px-2 py-1 text-xs font-medium transition-colors ${
               screen.id === active?.id
-                ? 'bg-brand/20 text-brand-text'
-                : 'text-fg-muted hover:bg-surface-raised'
+                ? 'bg-fg/[0.08] text-fg'
+                : 'text-fg-subtle hover:bg-fg/[0.04] hover:text-fg-muted'
             }`}
           >
             {screen.title || screen.id}

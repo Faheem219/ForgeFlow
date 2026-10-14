@@ -1,3 +1,4 @@
+import { RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { ThemeToggle } from '../../app/layout/ThemeToggle';
@@ -7,6 +8,7 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  IconButton,
   Input,
   Kbd,
   Modal,
@@ -29,7 +31,7 @@ export default function UiKit(): JSX.Element {
   return (
     <main className="mx-auto max-w-3xl space-y-8 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-fg">UI Kit</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight text-fg">UI Kit</h1>
         <ThemeToggle />
       </div>
 
@@ -39,9 +41,22 @@ export default function UiKit(): JSX.Element {
           <Button variant="secondary">Secondary</Button>
           <Button variant="ghost">Ghost</Button>
           <Button variant="danger">Danger</Button>
+          <Button size="xs">Extra small</Button>
           <Button size="sm">Small</Button>
+          <Button size="lg">Large</Button>
           <Button loading>Loading</Button>
           <Button disabled>Disabled</Button>
+        </div>
+        <div className="mt-4 flex items-center gap-1">
+          <IconButton label="Refresh">
+            <RefreshCw aria-hidden strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="Selected" active>
+            <RefreshCw aria-hidden strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="Delete" className="hover:bg-danger/10 hover:text-danger">
+            <Trash2 aria-hidden strokeWidth={1.75} />
+          </IconButton>
         </div>
       </Panel>
 
@@ -52,6 +67,12 @@ export default function UiKit(): JSX.Element {
           <Badge tone="success">success</Badge>
           <Badge tone="warning">warning</Badge>
           <Badge tone="danger">danger</Badge>
+          <Badge tone="success" dot>
+            live
+          </Badge>
+          <Badge tone="brand" dot>
+            in progress
+          </Badge>
         </div>
       </Panel>
 
@@ -115,8 +136,12 @@ export default function UiKit(): JSX.Element {
       {/* The long-wait indicator lives here too: it only appears mid-run inside the build and
           design panels, which makes it almost impossible to look at while working on it. */}
       <Panel title="Agent working (long waits)">
-        <div className="flex justify-center py-4">
+        <div className="flex items-center justify-around py-4">
           <AgentWorking label="Generating the app" />
+          <span className="flex items-center gap-3 rounded-xl border border-edge px-3 py-2">
+            <AgentWorking compact label="Writing the streak chart" />
+            <span className="text-[13px] font-medium text-fg">Writing the streak chart…</span>
+          </span>
         </div>
       </Panel>
 

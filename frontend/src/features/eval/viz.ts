@@ -17,12 +17,15 @@
  */
 
 export const VIZ = {
-  surface: '#0f172a',
+  // The two *series* colours are the validated pair above and stay fixed. The chart *chrome* —
+  // the ring behind each dot, gridlines, axis labels — follows the app theme instead: hard-coded
+  // slate drew dark rings on white and slate-blue gridlines on the warm greys.
+  surface: 'rgb(var(--ff-surface))',
   accent: '#6366f1', // post-repair / the single-series hue
   context: '#64748b', // first-pass / de-emphasis
-  grid: '#1e293b',
-  axis: '#334155',
-  muted: '#94a3b8',
+  grid: 'rgb(var(--ff-edge))',
+  axis: 'rgb(var(--ff-edge-strong))',
+  muted: 'rgb(var(--ff-fg-subtle))',
 } as const;
 
 /** Status colors are reserved and never reused for a series; always shipped with a label. */

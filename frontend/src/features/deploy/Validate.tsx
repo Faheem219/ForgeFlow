@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CircleCheck, CircleAlert, CircleX, CircleMinus, ExternalLink, Radar } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, EmptyState } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
@@ -18,6 +20,7 @@ import { Escalation } from '../testing/Escalation';
 import { listStages, submitIntent } from '../workspace/api';
 import { ResetStageButton } from '../workspace/StageReset';
 import { STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
+import { StageHeader } from '../workspace/StageHeader';
 import { getLatestValidation, getLiveRun } from './validateApi';
 
 const REASON_LABELS: Record<ValidationReason, string> = {
@@ -66,36 +69,58 @@ function CycleRow({ cycle }: { cycle: ValidationCycleDto }): JSX.Element {
   }
 
   return (
-    <li className="rounded-lg border border-edge p-2" data-testid={`cycle-${cycle.index}`}>
-      <div className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">Cycle {cycle.index}</div>
-      <div className="flex flex-wrap items-center gap-1.5">
+    <li className="group/cycle relative pb-3 pl-6 last:pb-0" data-testid={`cycle-${cycle.index}`}>
+      {/* A timeline: one node per cycle on a vertical rail, green where the cycle ended green. */}
+      <span
+        aria-hidden
+        className="absolute bottom-0 left-[7px] top-4 w-px bg-edge group-last/cycle:hidden"
+      />
+      <span
+        aria-hidden
+        className={cn(
+          'absolute left-0 top-1 h-[15px] w-[15px] rounded-full border-2 bg-surface',
+          cycle.green ? 'border-success' : 'border-danger/70',
+        )}
+      />
+      <div className="mb-1.5 text-xs font-medium text-fg-muted">Cycle {cycle.index}</div>
+      <div className="flex flex-wrap items-center gap-1">
         {steps.map((s) => (
           <Badge key={s.label} tone={s.tone}>
             {s.label}
           </Badge>
         ))}
       </div>
-      {cycle.note ? <p className="mt-1 text-xs text-fg-subtle">{cycle.note}</p> : null}
+      {cycle.note ? (
+        <p className="mt-1.5 text-xs leading-relaxed text-fg-subtle">{cycle.note}</p>
+      ) : null}
     </li>
   );
 }
 
+const RESULT_ICONS = {
+  passed: { icon: CircleCheck, tone: 'text-success' },
+  failed: { icon: CircleX, tone: 'text-danger' },
+  skipped: { icon: CircleMinus, tone: 'text-fg-faint' },
+} as const;
+
 function ResultRow({ result }: { result: TestResultDto }): JSX.Element {
   const failed = result.status === 'failed';
+  const { icon: Icon, tone } = RESULT_ICONS[result.status];
   return (
-    <li className="flex items-start gap-2 border-b border-edge/60 py-1.5 last:border-0">
-      <Badge tone={failed ? 'danger' : result.status === 'passed' ? 'success' : 'neutral'}>
-        {result.status}
-      </Badge>
+    <li className="flex items-start gap-2.5 border-b border-edge px-3 py-2 last:border-0">
+      <Icon aria-hidden className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', tone)} strokeWidth={2} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-fg">{result.name}</p>
+        <p className="truncate text-[13px] text-fg">{result.name}</p>
         {result.criterion_id ? (
-          <span className="font-mono text-[11px] text-fg-subtle">{result.criterion_id}</span>
+          <span className="font-mono text-2xs text-fg-faint">{result.criterion_id}</span>
         ) : null}
         {failed && result.failure?.message ? (
           <p className="mt-0.5 text-xs text-danger">{result.failure.message}</p>
         ) : null}
       </div>
+      <Badge tone={failed ? 'danger' : result.status === 'passed' ? 'success' : 'neutral'}>
+        {result.status}
+      </Badge>
     </li>
   );
 }
@@ -178,45 +203,48 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
   const validated = report?.outcome === 'validated';
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Live validation
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Live validation"
+        status={
           <span data-testid="validate-stage-status">
             <Badge tone={STATUS_TONES[stageStatus]}>{STATUS_LABELS[stageStatus]}</Badge>
           </span>
-        </span>
-        <div className="flex gap-2">
-          <ResetStageButton
-            projectId={projectId}
-            stage="validate"
-            status={stageStatus}
-            disabled={busy}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={intent.isPending}
-            data-testid="validate-skip"
-            onClick={() => intent.mutate({ stage: 'validate', action: 'skip' })}
-          >
-            Skip
-          </Button>
-          <Button
-            size="sm"
-            disabled={Boolean(disabledReason) || busy}
-            title={disabledReason ?? undefined}
-            data-testid="validate-run"
-            onClick={() => intent.mutate({ stage: 'validate', action: 'proceed' })}
-          >
-            {busy ? 'Validating…' : report ? 'Re-validate' : 'Validate'}
-          </Button>
-        </div>
-      </header>
+        }
+        actions={
+          <>
+            <ResetStageButton
+              projectId={projectId}
+              stage="validate"
+              status={stageStatus}
+              disabled={busy}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={intent.isPending}
+              data-testid="validate-skip"
+              onClick={() => intent.mutate({ stage: 'validate', action: 'skip' })}
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              disabled={Boolean(disabledReason) || busy}
+              title={disabledReason ?? undefined}
+              data-testid="validate-run"
+              onClick={() => intent.mutate({ stage: 'validate', action: 'proceed' })}
+            >
+              {busy ? null : <Radar aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />}
+              {busy ? 'Validating…' : report ? 'Re-validate' : 'Validate'}
+            </Button>
+          </>
+        }
+      />
 
       {disabledReason ? (
         <p
-          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-xs leading-relaxed text-warning"
           data-testid="validate-prereq-warning"
         >
           {disabledReason} Deploy the app, then come back to verify it actually works.
@@ -228,42 +256,68 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
         // nothing else on screen. The step label is kept as the caption so the mark says *which*
         // part of the run is going, not merely that something is.
         <div
-          className="flex items-center justify-center rounded-xl border border-edge bg-surface py-6"
+          className="relative flex items-center gap-3 overflow-hidden rounded-xl border border-edge bg-surface px-3 py-2"
           data-testid="validate-progress"
         >
+          <div aria-hidden className="absolute inset-x-0 top-0 h-px overflow-hidden">
+            <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-brand-text to-transparent motion-safe:animate-ff-sweep" />
+          </div>
           <AgentWorking
+            compact
             label={liveStep ? (STEP_LABELS[liveStep] ?? liveStep) : 'Validating the live URL'}
           />
+          <span className="text-[13px] font-medium text-fg">
+            {liveStep ? (STEP_LABELS[liveStep] ?? liveStep) : 'Validating the live URL'}…
+          </span>
         </div>
       ) : null}
 
       {/* The payoff: a verified deployment, and the link. */}
       {validated && report?.url ? (
         <section
-          className="rounded-xl border border-success/30 bg-success/10 p-4"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-edge bg-surface px-4 py-3.5"
           data-testid="validate-success"
         >
-          <div className="mb-1 flex items-center gap-2">
-            <Badge tone="success">Verified</Badge>
-            <span className="text-sm text-success">Your app is live and its tests pass.</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <CircleCheck aria-hidden className="h-5 w-5 shrink-0 text-success" strokeWidth={2} />
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-[13px] text-fg-muted">
+                <Badge tone="success">Verified</Badge>
+                Your app is live and its tests pass.
+              </p>
+              <a
+                href={report.url}
+                target="_blank"
+                rel="noreferrer"
+                data-testid="final-live-link"
+                className="mt-0.5 block truncate font-mono text-[15px] font-medium text-fg underline-offset-4 hover:underline"
+              >
+                {report.url}
+              </a>
+            </div>
           </div>
           <a
             href={report.url}
             target="_blank"
             rel="noreferrer"
-            data-testid="final-live-link"
-            className="block truncate text-lg font-medium text-success hover:underline"
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-edge-strong/80 bg-surface px-2.5 text-xs font-medium text-fg shadow-raise transition-colors hover:bg-surface-raised"
           >
-            {report.url}
+            Open app
+            <ExternalLink aria-hidden className="h-3 w-3" strokeWidth={2} />
           </a>
         </section>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
+      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-2">
         <div className="min-h-0 space-y-3 overflow-auto">
-          <section>
-            <h4 className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">
-              Live results {liveRun ? `(${liveRun.passed}/${liveRun.total} passing)` : ''}
+          <section className="overflow-hidden rounded-xl border border-edge bg-surface">
+            <h4 className="flex items-center justify-between border-b border-edge px-3 py-2 text-xs font-medium text-fg-muted">
+              <span>Live results</span>
+              {liveRun ? (
+                <span className="tabular-nums text-fg-subtle">
+                  {liveRun.passed}/{liveRun.total} passing
+                </span>
+              ) : null}
             </h4>
             {!liveRun || liveRun.results.length === 0 ? (
               <EmptyState
@@ -282,9 +336,9 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
 
         <div className="min-h-0 space-y-3 overflow-auto">
           {report && report.cycles.length > 0 ? (
-            <section>
-              <h4 className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">Timeline</h4>
-              <ul className="space-y-2" data-testid="validate-timeline">
+            <section className="rounded-xl border border-edge bg-surface p-3">
+              <h4 className="mb-3 text-xs font-medium text-fg-muted">Timeline</h4>
+              <ul data-testid="validate-timeline">
                 {report.cycles.map((c) => (
                   <CycleRow key={c.index} cycle={c} />
                 ))}
@@ -294,16 +348,28 @@ export function Validate({ projectId }: { projectId: string }): JSX.Element {
 
           {report && !validated ? (
             <section
-              className="space-y-2 rounded-xl border border-warning/30 bg-warning/10 p-3"
+              className="space-y-2 rounded-xl border border-warning/30 bg-surface p-3.5"
               data-testid="validate-escalation"
             >
-              <header className="flex items-center gap-2">
-                <Badge tone="warning">Needs you</Badge>
-                <span className="text-sm font-medium text-warning" data-testid="validate-reason">
-                  {report.reason ? REASON_LABELS[report.reason] : 'Validation did not pass'}
-                </span>
+              <header className="flex items-start gap-2.5">
+                <CircleAlert
+                  aria-hidden
+                  className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+                  strokeWidth={2}
+                />
+                <div className="min-w-0">
+                  <p className="text-2xs font-medium uppercase tracking-[0.06em] text-warning">
+                    Needs you
+                  </p>
+                  <p className="text-[13px] font-semibold text-fg" data-testid="validate-reason">
+                    {report.reason ? REASON_LABELS[report.reason] : 'Validation did not pass'}
+                  </p>
+                </div>
               </header>
-              <p className="text-sm text-fg-muted" data-testid="validate-summary">
+              <p
+                className="text-[13px] leading-relaxed text-fg-muted"
+                data-testid="validate-summary"
+              >
                 {report.summary}
               </p>
             </section>

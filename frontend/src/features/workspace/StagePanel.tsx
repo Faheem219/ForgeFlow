@@ -47,7 +47,7 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
     return (
       <Suspense
         fallback={
-          <div className="flex h-full items-center justify-center">
+          <div className="flex h-full items-center justify-center text-fg-faint">
             <Spinner />
           </div>
         }
@@ -91,7 +91,7 @@ export function StagePanel({ projectId, stage }: { projectId: string; stage: Sta
         </p>
 
         <div>
-          <h4 className="mb-2 text-xs uppercase tracking-wide text-fg-subtle">Artifacts</h4>
+          <h4 className="mb-2 text-xs font-medium text-fg-muted">Artifacts</h4>
           {artifacts.length === 0 ? (
             <EmptyState title="No artifacts yet" description="Produced outputs will appear here." />
           ) : (

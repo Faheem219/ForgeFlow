@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Badge, Button } from '../../components/ui';
+import { StageHeader } from '../workspace/StageHeader';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import type { DataDocument } from '../../lib/types';
@@ -134,38 +136,39 @@ export function DataBrowser({ projectId }: { projectId: string }): JSX.Element {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Data
-          {/* Scope, always visible — this is live application data. */}
-          {info ? (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Data"
+        status={
+          info ? (
+            // Scope, always visible — this is live application data.
             <span data-testid="data-scope" className="flex items-center gap-1.5">
               <Badge tone={info.mode === 'byo' ? 'warning' : 'neutral'}>
                 {info.mode === 'byo' ? 'your database' : 'project database'}
               </Badge>
-              <code className="font-mono text-[11px] text-fg-subtle">{info.db_name}</code>
+              <code className="font-mono text-2xs text-fg-subtle">{info.db_name}</code>
             </span>
-          ) : null}
-        </span>
-        <Button
-          size="sm"
-          disabled={!collection}
-          data-testid="doc-create"
-          onClick={() => {
-            setEditorError(null);
-            setEditing({ mode: 'create', doc: null });
-          }}
-        >
-          New document
-        </Button>
-      </header>
+          ) : null
+        }
+        actions={
+          <Button
+            size="sm"
+            disabled={!collection}
+            data-testid="doc-create"
+            onClick={() => {
+              setEditorError(null);
+              setEditing({ mode: 'create', doc: null });
+            }}
+          >
+            <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+            New document
+          </Button>
+        }
+      />
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <aside className="min-h-0 overflow-auto rounded-xl border border-edge bg-surface p-2">
-          <h4 className="mb-1 px-2 text-[11px] uppercase tracking-wide text-fg-subtle">
-            Collections
-          </h4>
+      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <aside className="min-h-0 overflow-auto rounded-xl border border-edge bg-surface p-1.5">
+          <h4 className="px-2 pb-1.5 pt-1.5 text-2xs font-medium text-fg-faint">Collections</h4>
           <CollectionsList
             collections={collections}
             selected={collection}

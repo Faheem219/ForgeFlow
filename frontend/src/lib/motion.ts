@@ -41,3 +41,37 @@ export const pageTransition = {
   exit: { opacity: 0, y: -4 },
   transition: { duration: 0.15, ease: EASE },
 } as const;
+
+export function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/**
+ * Gate for every entrance animation. False under vitest (jsdom has no layout, and tests must see
+ * final states, not mid-tween ones) and for users who ask the OS for less motion — content then
+ * simply renders in place, which is the correct reduced experience.
+ *
+ * Every animated surface asks this first; with it false, content renders in its final state.
+ */
+export function motionOK(): boolean {
+  return (
+    typeof window !== 'undefined' && import.meta.env.MODE !== 'test' && !prefersReducedMotion()
+  );
+}
+
+/**
+ * A one-shot opacity fade via the Web Animations API — no library, nothing left behind on the
+ * element afterwards. Opacity only: a transform on an ancestor would re-anchor every
+ * `position: fixed` descendant (the workspace's focus overlay) to that ancestor.
+ */
+export function fadeInElement(element: HTMLElement | null, duration = 180): void {
+  if (!element || !motionOK() || typeof element.animate !== 'function') return;
+  element.animate([{ opacity: 0 }, { opacity: 1 }], {
+    duration,
+    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+  });
+}

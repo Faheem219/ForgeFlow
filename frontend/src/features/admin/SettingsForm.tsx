@@ -44,8 +44,9 @@ function displayValue(setting: SettingView): string {
 }
 
 const FIELD =
-  'rounded-lg border border-edge-strong bg-surface-sunken px-2.5 py-1.5 text-sm text-fg ' +
-  'outline-none focus:border-brand disabled:opacity-50';
+  'rounded-lg border border-edge-strong bg-surface-sunken/40 px-2.5 py-1.5 text-sm text-fg ' +
+  'outline-none transition-[border-color,box-shadow] duration-150 hover:border-fg-faint/60 ' +
+  'focus:border-brand/70 focus:shadow-[0_0_0_3px_rgb(var(--ff-brand)/0.18)] disabled:opacity-50';
 
 function Editor({
   setting,
@@ -181,7 +182,7 @@ function SettingRow({
   return (
     <div
       className={`relative px-4 py-4 transition-colors lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 ${
-        dirty ? 'bg-brand/5' : 'hover:bg-surface-raised/40'
+        dirty ? 'bg-brand/[0.05]' : 'hover:bg-fg/[0.02]'
       }`}
       data-testid={`setting-${setting.key}`}
     >
@@ -206,7 +207,7 @@ function SettingRow({
           {showCategory ? <span className="text-xs text-fg-faint">in {showCategory}</span> : null}
         </div>
         <p className="mt-1 text-xs leading-relaxed text-fg-muted">{setting.description}</p>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-fg-faint">
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-fg-faint">
           <code className="font-mono text-fg-subtle">
             {setting.env_var ?? setting.key.toUpperCase()}
           </code>
@@ -383,7 +384,7 @@ export function SettingsForm({
 
       {dirty.length > 0 ? (
         <div
-          className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/40 bg-surface-overlay/95 px-3 py-2 backdrop-blur"
+          className="sticky bottom-2 flex animate-ff-pop flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-overlay px-3.5 py-2.5 shadow-pop"
           data-testid="bulk-bar"
         >
           <span className="text-sm text-fg-muted">

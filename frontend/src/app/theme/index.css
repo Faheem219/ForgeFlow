@@ -9,34 +9,157 @@
  */
 
 @layer base {
-  body {
-    @apply bg-surface-canvas font-sans text-fg antialiased;
-    /* Calmer variable-font rendering: contextual alternates + tabular-ready UI numerals. */
-    font-feature-settings:
-      'calt' 1,
-      'cv11' 1;
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Visible, consistent keyboard focus for a11y. */
+  body {
+    @apply bg-surface-canvas font-sans text-sm text-fg antialiased;
+    /* Inter's text and display cuts, picked per size. */
+    font-optical-sizing: auto;
+    /* Single-storey a (cv11) and open digits (cv01 4, cv03 6, cv04 9): calmer at 13px, and
+       numerals that cannot be mistaken in a token count or a cost. */
+    font-feature-settings:
+      'calt' 1,
+      'cv11' 1,
+      'cv01' 1,
+      'cv03' 1,
+      'cv04' 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+    text-wrap: balance;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp,
+  .font-mono {
+    /* The body's feature tags are Inter's — inherited into JetBrains Mono, the same tags pick
+       different glyph variants (and `calt` respaces `://`). Mono text gets its defaults back, minus
+       ligatures (`=>` → arrow), which mislead in logs and paths. */
+    font-feature-settings: normal;
+    font-variant-ligatures: none;
+  }
+
+  /* Visible, consistent keyboard focus — a soft halo, not a hard double ring. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-surface-canvas;
+    @apply outline-none;
+    box-shadow: 0 0 0 2px rgb(var(--ff-brand) / 0.6);
   }
 
   ::selection {
-    background-color: rgb(var(--ff-brand) / 0.3);
+    background-color: rgb(var(--ff-brand) / 0.32);
+  }
+
+  /* One select style everywhere: the OS arrow sat at a different inset in every browser and theme.
+     The chevron is a mid-grey that reads on both themes' field backgrounds. */
+  select:not([multiple]):not([size]) {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23908d98' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.875rem;
+    padding-right: 1.75rem !important;
+  }
+
+  ::placeholder {
+    color: rgb(var(--ff-fg-faint));
+    opacity: 1;
   }
 }
 
-/* Slim, theme-matched scrollbars. */
+/*
+ * Scrollbars: thin, and quiet until you reach for them. A permanent strong thumb in every rail,
+ * list and log is a lot of chrome for a screen that already has many scroll regions.
+ */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--ff-edge-strong)) transparent;
+  scrollbar-color: rgb(var(--ff-edge-strong) / 0.9) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(var(--ff-edge-strong));
+  background-color: rgb(var(--ff-edge-strong) / 0.7);
+  border: 3px solid transparent;
+  background-clip: content-box;
   border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--ff-fg-faint));
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * React Flow (the deploy topology) reads its chrome from `--xy-*` variables. Bound to the palette
+ * here so its edges, dots and labels are the app's greys, not the library's own.
+ */
+.ff-flow .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color-default: rgb(var(--ff-edge-strong) / 0.7);
+  --xy-edge-stroke-default: rgb(var(--ff-fg-faint));
+  --xy-edge-stroke-width-default: 1.25;
+  --xy-edge-stroke-selected-default: rgb(var(--ff-brand-text));
+  --xy-connectionline-stroke-default: rgb(var(--ff-fg-faint));
+  --xy-edge-label-background-color-default: rgb(var(--ff-surface));
+  --xy-edge-label-color-default: rgb(var(--ff-fg-subtle));
+  --xy-handle-background-color-default: rgb(var(--ff-fg-faint));
+  --xy-handle-border-color-default: rgb(var(--ff-surface));
+  --xy-node-boxshadow-selected-default: none;
+}
+.ff-flow .react-flow__edge-text {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+}
+.ff-flow .react-flow__node:focus-visible {
+  outline: none;
+}
+
+/*
+ * Scroll reveal (landing): an element is only hidden once script has confirmed it can reveal it
+ * again (`useReveal` sets `pending` when motion is allowed and IntersectionObserver exists), so
+ * without script, in tests, or under reduced motion everything simply renders in place.
+ */
+[data-reveal='pending'] {
+  opacity: 0;
+  transform: translateY(14px);
+}
+[data-reveal='shown'] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/* Tabular figures wherever numbers are compared down a column. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Reduced motion: framer-motion already honours it (MotionConfig) and GSAP checks `motionOK()`;
+ * this catches the CSS transitions in between. Loading spinners keep turning — they carry state,
+ * not decoration — and every decorative loop is written `motion-safe:` at its call site.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

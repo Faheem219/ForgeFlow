@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChartNoAxesColumn,
+  CornerDownLeft,
   FolderKanban,
   LayoutGrid,
   LogOut,
@@ -197,7 +198,7 @@ export function CommandPalette({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DURATION.fast }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-black/50"
             onClick={onClose}
             aria-hidden
           />
@@ -209,11 +210,11 @@ export function CommandPalette({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: -6 }}
             transition={{ duration: DURATION.base, ease: EASE }}
-            className="relative mx-auto mt-[12vh] w-full max-w-lg overflow-hidden rounded-2xl border border-edge-strong bg-surface-overlay shadow-2xl"
+            className="relative mx-auto mt-[14vh] w-[calc(100%-2rem)] max-w-xl overflow-hidden rounded-xl bg-surface-overlay shadow-pop"
             onKeyDown={onKeyDown}
           >
             <div className="flex items-center gap-2.5 border-b border-edge px-4">
-              <Search aria-hidden className="h-4 w-4 shrink-0 text-fg-subtle" />
+              <Search aria-hidden className="h-4 w-4 shrink-0 text-fg-faint" />
               <input
                 autoFocus
                 aria-label="Search commands and projects"
@@ -221,9 +222,8 @@ export function CommandPalette({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search projects, pages, actions…"
-                className="h-12 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-faint outline-none"
+                className="h-12 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-faint focus-visible:shadow-none"
               />
-              <Kbd>Esc</Kbd>
             </div>
 
             <div role="listbox" aria-label="Results" className="max-h-[46vh] overflow-y-auto p-1.5">
@@ -237,7 +237,7 @@ export function CommandPalette({
                   if (rows.length === 0) return null;
                   return (
                     <div key={section}>
-                      <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">
+                      <p className="px-2.5 pb-1 pt-2.5 text-2xs font-medium text-fg-faint">
                         {section}
                       </p>
                       {rows.map((cmd) => {
@@ -253,10 +253,8 @@ export function CommandPalette({
                             onClick={() => cmd.run()}
                             onPointerEnter={() => setSelected(index)}
                             className={cn(
-                              'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                              index === selected
-                                ? 'bg-brand/10 text-fg'
-                                : 'text-fg-muted hover:bg-surface-raised',
+                              'flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] transition-colors duration-75',
+                              index === selected ? 'bg-fg/[0.07] text-fg' : 'text-fg-muted',
                             )}
                           >
                             <cmd.icon
@@ -268,8 +266,17 @@ export function CommandPalette({
                               strokeWidth={1.75}
                             />
                             <span className="min-w-0 flex-1 truncate">{cmd.label}</span>
-                            {cmd.hint ? (
-                              <span className="shrink-0 text-xs text-fg-faint">{cmd.hint}</span>
+                            {/* The hint repeats on every project row, so it only shows where it
+                                applies — the highlighted row. The theme hint is state, always shown. */}
+                            {cmd.hint && (index === selected || cmd.id === 'action-theme') ? (
+                              <span className="shrink-0 text-2xs text-fg-faint">{cmd.hint}</span>
+                            ) : null}
+                            {index === selected ? (
+                              <CornerDownLeft
+                                aria-hidden
+                                className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
+                                strokeWidth={1.75}
+                              />
                             ) : null}
                           </button>
                         );
@@ -278,6 +285,21 @@ export function CommandPalette({
                   );
                 })
               )}
+            </div>
+            <div className="flex items-center gap-3 border-t border-edge px-3.5 py-2 text-2xs text-fg-faint">
+              <span className="flex items-center gap-1">
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd>
+                navigate
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>Enter</Kbd>
+                open
+              </span>
+              <span className="ml-auto flex items-center gap-1">
+                <Kbd>Esc</Kbd>
+                close
+              </span>
             </div>
           </motion.div>
         </div>

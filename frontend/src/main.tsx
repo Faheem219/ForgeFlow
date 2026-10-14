@@ -4,7 +4,9 @@ import { RouterProvider } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 
 // Self-hosted fonts (no CDN): Inter for UI, JetBrains Mono for code/terminal surfaces.
-import '@fontsource-variable/inter';
+// The optical-size build: small UI text gets Inter's text cut, headings its display cut —
+// one file, chosen per size by the browser (`font-optical-sizing: auto`).
+import '@fontsource-variable/inter/opsz.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 

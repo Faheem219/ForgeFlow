@@ -110,9 +110,33 @@ export function Pane({
 /**
  * A draggable seam. The visible line is thin, but the grab target is not — a 1px hit area is the
  * difference between "resizable" and "technically resizable".
+ *
+ * `gap` (default) sits in the gutter between two framed panes and shows a short grip on hover;
+ * `hairline` is the seam *inside* one frame (the IDE's tree/editor split), drawn as the border
+ * between them with the hit area extended either side of it.
  */
-export function PaneHandle({ direction }: { direction: 'horizontal' | 'vertical' }) {
+export function PaneHandle({
+  direction,
+  variant = 'gap',
+}: {
+  direction: 'horizontal' | 'vertical';
+  variant?: 'gap' | 'hairline';
+}) {
   const horizontal = direction === 'horizontal';
+  if (variant === 'hairline') {
+    return (
+      <Separator
+        aria-label="Resize panels"
+        className={cn(
+          'group relative shrink-0 bg-edge transition-colors duration-150 motion-reduce:transition-none',
+          'hover:bg-brand/60 active:bg-brand/80 data-[separator=active]:bg-brand/80',
+          horizontal
+            ? 'w-px cursor-col-resize before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-[""]'
+            : 'h-px cursor-row-resize before:absolute before:inset-x-0 before:-bottom-1.5 before:-top-1.5 before:content-[""]',
+        )}
+      />
+    );
+  }
   return (
     <Separator
       aria-label="Resize panels"
@@ -125,9 +149,10 @@ export function PaneHandle({ direction }: { direction: 'horizontal' | 'vertical'
       <span
         aria-hidden
         className={cn(
-          'rounded-full bg-edge transition-colors duration-150 motion-reduce:transition-none',
-          'group-hover:bg-accent group-active:bg-accent',
-          horizontal ? 'h-8 w-0.5' : 'h-0.5 w-8',
+          'rounded-full bg-transparent transition-colors duration-150 motion-reduce:transition-none',
+          // A short delay, so a pointer crossing the gutter on its way somewhere does not flash it.
+          'group-hover:bg-fg-faint group-hover:delay-100 group-active:bg-brand-text group-active:delay-0',
+          horizontal ? 'h-10 w-[3px]' : 'h-[3px] w-10',
         )}
       />
     </Separator>

@@ -23,6 +23,7 @@
 
 import { useId, useState } from 'react';
 
+import { useMeasuredWidth } from '../../lib/useNarrow';
 import { VIZ, pct, num } from './viz';
 
 interface Tip {
@@ -38,7 +39,7 @@ function Tooltip({ tip }: { tip: Tip | null }): JSX.Element | null {
       role="status"
       data-testid="viz-tooltip"
       style={{ left: tip.x, top: tip.y }}
-      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-edge-strong bg-surface-overlay/95 px-2 py-1.5 text-xs shadow-lg"
+      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-surface-overlay px-2 py-1.5 text-xs shadow-pop"
     >
       {tip.lines.map((line) => (
         <div key={line.label} className="flex items-center gap-1.5 whitespace-nowrap">
@@ -104,18 +105,22 @@ export function Dumbbell({
 }): JSX.Element {
   const [tip, setTip] = useState<Tip | null>(null);
   const labelWidth = 132;
-  const plotWidth = 320;
+  const [boxRef, measured] = useMeasuredWidth<HTMLDivElement>(labelWidth + 320 + 44);
+  // The plot takes whatever the container gives it beyond the label gutter and the end label.
+  const plotWidth = Math.max(160, measured - labelWidth - 44);
   const total = labelWidth + plotWidth + 44;
   const chartHeight = Math.max(1, data.length) * height + 24;
   const x = (v: number): number => labelWidth + v * plotWidth;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={boxRef}>
       <svg
         role="img"
         aria-label={`${beforeLabel} versus ${afterLabel} per spec`}
         viewBox={`0 0 ${total} ${chartHeight}`}
-        className="w-full"
+        width={total}
+        height={chartHeight}
+        className="block max-w-full"
         data-testid="dumbbell-chart"
       >
         {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
@@ -249,19 +254,22 @@ export function BarChart({
   const [tip, setTip] = useState<Tip | null>(null);
   const clipId = useId();
   const labelWidth = 132;
-  const plotWidth = 300;
-  const rowHeight = 20;
+  const [boxRef, measured] = useMeasuredWidth<HTMLDivElement>(labelWidth + 300 + 56);
+  const plotWidth = Math.max(140, measured - labelWidth - 56);
+  const rowHeight = 22;
   const total = labelWidth + plotWidth + 56;
   const max = Math.max(1, ...data.map((d) => d.value));
   const height = Math.max(1, data.length) * rowHeight + 8;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={boxRef}>
       <svg
         role="img"
         aria-label={`Values per spec${unit ? ` in ${unit}` : ''}`}
         viewBox={`0 0 ${total} ${height}`}
-        className="w-full"
+        width={total}
+        height={height}
+        className="block max-w-full"
         data-testid="bar-chart"
       >
         <defs>
@@ -271,7 +279,7 @@ export function BarChart({
         </defs>
         {data.map((d, i) => {
           // 2px surface gap between adjacent bars; bar thickness capped well under the band.
-          const barHeight = Math.min(14, rowHeight - 6);
+          const barHeight = Math.min(12, rowHeight - 8);
           const y = 4 + i * rowHeight + (rowHeight - barHeight) / 2;
           const width = Math.max(d.value > 0 ? 3 : 0, (d.value / max) * plotWidth);
           return (
@@ -382,16 +390,16 @@ export function Histogram({
             onMouseLeave={() => setTip(null)}
             onBlur={() => setTip(null)}
           >
-            <span className="text-[10px] tabular-nums text-fg-muted">{b.count || ''}</span>
+            <span className="text-2xs tabular-nums text-fg-muted">{b.count || ''}</span>
             <div
-              className="w-full rounded-t"
+              className="w-full max-w-[3rem] rounded-t-[4px] transition-opacity hover:opacity-80"
               style={{
                 height: `${(b.count / max) * 64}px`,
                 minHeight: b.count > 0 ? 3 : 0,
                 background: VIZ.accent,
               }}
             />
-            <span className="text-[10px] tabular-nums text-fg-subtle">{b.label}</span>
+            <span className="text-2xs tabular-nums text-fg-subtle">{b.label}</span>
           </div>
         ))}
       </div>
@@ -415,17 +423,17 @@ export function StatTile({
   tone?: 'good' | 'muted';
 }): JSX.Element {
   return (
-    <div className="rounded-xl border border-edge bg-surface px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</p>
+    <div className="min-w-0 rounded-xl border border-edge bg-surface px-4 py-3">
+      <p className="text-xs text-fg-subtle">{label}</p>
       <p
-        className={`${hero ? 'text-4xl' : 'text-xl'} font-semibold ${
+        className={`mt-1 ${hero ? 'text-3xl' : 'text-xl'} font-semibold tabular-nums tracking-tight ${
           tone === 'good' ? 'text-success' : 'text-fg'
         }`}
         data-testid={`stat-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
       >
         {value}
       </p>
-      {detail ? <p className="mt-0.5 text-[11px] text-fg-subtle">{detail}</p> : null}
+      {detail ? <p className="mt-0.5 truncate text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }

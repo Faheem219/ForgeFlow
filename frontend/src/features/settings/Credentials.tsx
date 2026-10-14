@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { KeyRound, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { Badge, Button, EmptyState, Panel, Skeleton, fieldClasses } from '../../components/ui';
+import { Badge, Button, EmptyState, Skeleton, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { formatDateIST } from '../../lib/datetime';
 import { DURATION, EASE } from '../../lib/motion';
@@ -66,9 +67,9 @@ export function Credentials(): JSX.Element {
   const busy = save.isPending || remove.isPending;
 
   return (
-    <Panel title="Provider credentials">
-      <div className="space-y-4" data-testid="credentials-panel">
-        <p className="text-sm text-fg-muted">
+    <div className="rounded-xl border border-edge bg-surface p-4">
+      <div className="space-y-5" data-testid="credentials-panel">
+        <p className="text-[13px] leading-relaxed text-fg-muted">
           Your own provider tokens. They are encrypted before storage and used only when ForgeFlow
           calls that provider on your behalf — they are never displayed again after saving.
         </p>
@@ -81,9 +82,9 @@ export function Credentials(): JSX.Element {
           }}
         >
           <label className="text-sm">
-            <span className="mb-1 block text-fg-muted">Provider</span>
+            <span className="mb-1.5 block text-xs font-medium text-fg-muted">Provider</span>
             <select
-              className={`${fieldClasses} w-40`}
+              className={cn(fieldClasses, 'w-40')}
               data-testid="credential-kind"
               value={kind}
               onChange={(e) => setKind(e.target.value as CredentialKind)}
@@ -96,12 +97,12 @@ export function Credentials(): JSX.Element {
             </select>
           </label>
 
-          <label className="min-w-[16rem] flex-1 text-sm">
-            <span className="mb-1 block text-fg-muted">Token</span>
+          <label className="min-w-[14rem] flex-1 text-sm">
+            <span className="mb-1.5 block text-xs font-medium text-fg-muted">Token</span>
             <input
               type="password"
               autoComplete="off"
-              className={fieldClasses}
+              className={cn(fieldClasses, 'font-mono placeholder:font-sans')}
               data-testid="credential-secret"
               value={secret}
               placeholder="Paste the token — it is never shown again"
@@ -120,7 +121,7 @@ export function Credentials(): JSX.Element {
         </form>
 
         <div>
-          <h4 className="mb-2 text-xs uppercase tracking-wide text-fg-subtle">Stored</h4>
+          <h4 className="mb-2 text-xs font-medium text-fg-muted">Stored</h4>
           {credentialsQuery.isLoading ? (
             // Ghosts with the same bones as real rows, so the resolve never jumps the layout.
             <div className="space-y-1" aria-hidden>
@@ -137,7 +138,7 @@ export function Credentials(): JSX.Element {
             </div>
           ) : credentials.length === 0 ? (
             <EmptyState
-              icon={<KeyRound aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+              icon={<KeyRound aria-hidden strokeWidth={1.5} />}
               title="No tokens stored"
               description="Add a provider token above to use your own account for deploys."
             />
@@ -153,12 +154,14 @@ export function Credentials(): JSX.Element {
                     exit={{ opacity: 0, x: -12 }}
                     transition={{ duration: DURATION.base, ease: EASE }}
                     data-testid={`credential-row-${c.kind}`}
-                    className="group flex items-center justify-between rounded-lg border border-edge px-3 py-2 text-sm transition-colors hover:border-edge-strong hover:bg-surface-raised/50"
+                    className="group flex items-center justify-between rounded-lg border border-edge px-3 py-2 text-[13px] transition-colors hover:bg-fg/[0.025]"
                   >
                     <span className="flex items-center gap-2.5 text-fg">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-text">
-                        <KeyRound aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </span>
+                      <KeyRound
+                        aria-hidden
+                        className="h-3.5 w-3.5 text-fg-faint"
+                        strokeWidth={1.75}
+                      />
                       <span className="font-medium">{KIND_LABELS[c.kind]}</span>
                       <Badge tone={c.scope === 'byo' ? 'brand' : 'neutral'}>{c.scope}</Badge>
                       {c.last4 ? (
@@ -166,16 +169,18 @@ export function Credentials(): JSX.Element {
                       ) : null}
                     </span>
                     <span className="flex items-center gap-3">
-                      <span className="text-xs text-fg-subtle">{formatDateIST(c.created_at)}</span>
+                      <span className="text-2xs tabular-nums text-fg-subtle">
+                        {formatDateIST(c.created_at)}
+                      </span>
                       <button
                         type="button"
                         disabled={busy}
                         aria-label={`Delete ${KIND_LABELS[c.kind]} token`}
                         data-testid={`credential-delete-${c.kind}`}
                         onClick={() => remove.mutate(c.kind)}
-                        className="rounded-md p-1.5 text-fg-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-50"
+                        className="rounded-md p-1.5 text-fg-faint transition-colors hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-50"
                       >
-                        <Trash2 aria-hidden className="h-4 w-4" strokeWidth={1.75} />
+                        <Trash2 aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
                       </button>
                     </span>
                   </motion.li>
@@ -185,7 +190,7 @@ export function Credentials(): JSX.Element {
           )}
         </div>
       </div>
-    </Panel>
+    </div>
   );
 }
 

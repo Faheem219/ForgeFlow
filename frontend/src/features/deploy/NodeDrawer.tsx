@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { Copy, ExternalLink, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { Badge, Button, EmptyState } from '../../components/ui';
+import { Badge, Button, EmptyState, IconButton } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { toast } from '../../lib/stores/toastStore';
 import { getDeployLogs, getProviderLogs } from './api';
@@ -76,26 +77,26 @@ export function NodeDrawer({
     <aside
       data-testid="deploy-node-drawer"
       aria-label={`${node.label} details`}
-      className="flex h-full min-h-0 w-full min-w-0 flex-col gap-3 overflow-auto rounded-xl border border-edge bg-surface p-4"
+      className="flex h-full min-h-0 w-full min-w-0 animate-ff-fade flex-col gap-4 overflow-auto rounded-xl border border-edge bg-surface p-4"
     >
       <header className="flex items-start justify-between gap-2">
-        <div>
-          <h4 className="text-sm font-medium text-fg">{node.label}</h4>
-          <p className="text-xs text-fg-subtle">{node.provider}</p>
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-fg">{node.label}</h4>
+          <p className="mt-0.5 flex items-center gap-2 text-xs text-fg-subtle">
+            {node.provider}
+            <Badge tone={NODE_STATUS_TONES[node.liveStatus]} dot>
+              {NODE_STATUS_LABELS[node.liveStatus]}
+            </Badge>
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge tone={NODE_STATUS_TONES[node.liveStatus]}>
-            {NODE_STATUS_LABELS[node.liveStatus]}
-          </Badge>
-          <Button size="sm" variant="secondary" onClick={onClose} data-testid="drawer-close">
-            Close
-          </Button>
-        </div>
+        <IconButton label="Close" tooltipAlign="end" onClick={onClose} data-testid="drawer-close">
+          <X aria-hidden strokeWidth={1.75} />
+        </IconButton>
       </header>
 
       {node.error ? (
         <p
-          className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
+          className="rounded-lg border border-danger/25 bg-danger/[0.08] px-3 py-2 text-xs leading-relaxed text-danger"
           data-testid="drawer-error"
         >
           {node.error}
@@ -108,24 +109,26 @@ export function NodeDrawer({
       ) : null}
 
       <section>
-        <h5 className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">URL</h5>
+        <h5 className="mb-1.5 text-2xs font-medium text-fg-faint">URL</h5>
         {node.liveUrl ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg bg-fg/[0.04] py-1 pl-2.5 pr-1">
             <a
               href={node.liveUrl}
               target="_blank"
               rel="noreferrer"
               data-testid="drawer-url"
-              className="truncate text-sm text-brand-text hover:underline"
+              className="flex min-w-0 flex-1 items-start gap-1.5 font-mono text-xs text-brand-text hover:underline"
             >
-              {node.liveUrl}
+              <span className="min-w-0 break-all">{node.liveUrl}</span>
+              <ExternalLink aria-hidden className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={2} />
             </a>
             <Button
-              size="sm"
-              variant="secondary"
+              size="xs"
+              variant="ghost"
               data-testid="drawer-copy-url"
               onClick={() => void copy(node.liveUrl as string)}
             >
+              <Copy aria-hidden className="h-3 w-3" strokeWidth={2} />
               Copy
             </Button>
           </div>
@@ -137,7 +140,7 @@ export function NodeDrawer({
       </section>
 
       <section>
-        <h5 className="mb-1 text-xs uppercase tracking-wide text-fg-subtle">Environment</h5>
+        <h5 className="mb-1.5 text-2xs font-medium text-fg-faint">Environment</h5>
         {node.envKeys.length === 0 ? (
           <p className="text-sm text-fg-subtle">Nothing wired in.</p>
         ) : (
@@ -145,26 +148,26 @@ export function NodeDrawer({
             {node.envKeys.map((key) => (
               <li
                 key={key}
-                className="flex items-center justify-between rounded-lg border border-edge px-2 py-1 text-xs"
+                className="flex items-center justify-between gap-2 rounded-md bg-fg/[0.035] px-2 py-1 text-xs"
               >
                 <code className="min-w-0 truncate text-fg-muted" title={key}>
                   {key}
                 </code>
-                <span className="text-fg-faint">set</span>
+                <span className="text-2xs text-success">set</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-1 text-[11px] text-fg-faint">
+        <p className="mt-1.5 text-2xs text-fg-faint">
           Values stay in the control plane and are never sent to the browser.
         </p>
       </section>
 
       <section className="min-h-0 min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <h5 className="text-xs uppercase tracking-wide text-fg-subtle">Logs</h5>
+          <h5 className="text-2xs font-medium text-fg-faint">Logs</h5>
           {canUseProvider ? (
-            <div className="flex rounded-md border border-edge p-0.5" role="group">
+            <div className="flex gap-0.5 rounded-md bg-fg/[0.05] p-0.5" role="group">
               {(
                 [
                   ['provider', node.provider || 'Provider'],
@@ -178,9 +181,9 @@ export function NodeDrawer({
                   data-testid={`drawer-log-source-${value}`}
                   onClick={() => setSource(value)}
                   className={cn(
-                    'rounded px-2 py-0.5 text-[11px] capitalize transition-colors',
+                    'rounded px-2 py-0.5 text-2xs font-medium capitalize transition-colors',
                     source === value
-                      ? 'bg-surface-raised text-fg'
+                      ? 'bg-surface text-fg shadow-raise'
                       : 'text-fg-subtle hover:text-fg-muted',
                   )}
                 >
@@ -196,7 +199,7 @@ export function NodeDrawer({
             alone. */}
         {showProvider && providerError ? (
           <p
-            className="mb-1 rounded-lg border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] text-warning"
+            className="mb-1.5 rounded-md bg-warning/[0.08] px-2 py-1 text-2xs leading-relaxed text-warning"
             data-testid="drawer-provider-log-error"
           >
             {providerError}
@@ -215,7 +218,7 @@ export function NodeDrawer({
         ) : (
           <pre
             data-testid="drawer-logs"
-            className="max-h-64 w-full min-w-0 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2 text-xs leading-relaxed text-fg-muted"
+            className="max-h-64 w-full min-w-0 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-edge bg-surface-sunken p-2.5 font-mono text-2xs leading-relaxed text-fg-muted"
           >
             {lines.join('\n')}
           </pre>
@@ -223,7 +226,7 @@ export function NodeDrawer({
       </section>
 
       <footer className="flex items-center justify-between gap-2 border-t border-edge pt-3">
-        <span className="text-[11px] text-fg-faint">
+        <span className="text-2xs leading-snug text-fg-faint">
           Redeploy re-runs the pipeline (backend, then frontend).
         </span>
         <Button

@@ -60,12 +60,12 @@ export class ErrorBoundary extends Component<Props, State> {
       >
         {/* A stated icon, not a decorative blob: the one screen where a user needs to read what
             happened is the worst place to spend attention on ornament. */}
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-danger/10 text-danger ring-1 ring-inset ring-danger/20">
-          <TriangleAlert aria-hidden className="h-5 w-5" strokeWidth={1.75} />
-        </span>
+        <TriangleAlert aria-hidden className="h-6 w-6 text-danger" strokeWidth={1.75} />
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-fg">{actionable.title}</h2>
-          <p className="max-w-md text-sm text-fg-muted">{actionable.description}</p>
+          <h2 className="text-base font-semibold text-fg">{actionable.title}</h2>
+          <p className="max-w-md text-[13px] leading-relaxed text-fg-muted">
+            {actionable.description}
+          </p>
           {actionable.hint ? (
             <p className="max-w-md text-xs text-fg-subtle">{actionable.hint}</p>
           ) : null}

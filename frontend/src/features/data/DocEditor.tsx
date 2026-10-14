@@ -82,7 +82,7 @@ export function DocEditor({
         spellCheck={false}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="w-full rounded-lg border border-edge-strong bg-surface-sunken p-2 font-mono text-xs text-fg outline-none focus:border-brand"
+        className="w-full rounded-lg border border-edge-strong bg-surface-sunken/60 p-2.5 font-mono text-xs leading-relaxed text-fg outline-none transition-[border-color,box-shadow] focus:border-brand/70 focus:shadow-[0_0_0_3px_rgb(var(--ff-brand)/0.18)]"
       />
       {jsonError ? (
         <p className="mt-2 text-xs text-danger" data-testid="editor-json-error">

@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { FileDown, FlaskConical } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { Badge, Button, EmptyState, Skeleton } from '../../components/ui';
+import { Badge, Button, EmptyState, Skeleton, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { compactCount } from '../cost/format';
-import { EASE_OUT, gsap, motionOK, useGSAP } from '../../lib/gsap';
 import { toast } from '../../lib/stores/toastStore';
 import type { EvalOutcome, EvalRecordDto, EvalSummary } from '../../lib/types';
 import { fetchReport, getEvalSummary, listEvalRuns } from './api';
@@ -54,7 +54,6 @@ function download(filename: string, text: string, mime: string): void {
 export function EvalDashboard(): JSX.Element {
   const [source, setSource] = useState<string | undefined>(undefined);
   const [exporting, setExporting] = useState<string | null>(null);
-  const scope = useRef<HTMLDivElement | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ['eval-summary', source],
@@ -65,22 +64,6 @@ export function EvalDashboard(): JSX.Element {
   const data = summaryQuery.data;
   const records = useMemo(() => data?.records ?? [], [data]);
   const summary: EvalSummary | undefined = data?.summary;
-
-  // Tiles and chart panels rise in once when the evidence resolves — same beat as the dashboard.
-  useGSAP(
-    () => {
-      if (!motionOK() || !summaryQuery.isSuccess) return;
-      gsap.from('[data-eval-section]', {
-        opacity: 0,
-        y: 16,
-        duration: 0.45,
-        ease: EASE_OUT,
-        stagger: 0.06,
-        clearProps: 'all',
-      });
-    },
-    { scope, dependencies: [summaryQuery.isSuccess] },
-  );
 
   async function exportReport(format: 'csv' | 'md'): Promise<void> {
     setExporting(format);
@@ -123,7 +106,7 @@ export function EvalDashboard(): JSX.Element {
   if (!data?.available || !summary) {
     return (
       <EmptyState
-        icon={<FlaskConical aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+        icon={<FlaskConical aria-hidden strokeWidth={1.5} />}
         title="No evaluation runs yet"
         description="Run the harness to produce evidence: uv run python -m app.eval.runner --spec all"
       />
@@ -138,11 +121,15 @@ export function EvalDashboard(): JSX.Element {
   }));
 
   return (
-    <div ref={scope} className="mx-auto max-w-7xl space-y-4" data-testid="eval-dashboard">
-      <header data-eval-section className="flex flex-wrap items-center justify-between gap-2">
+    <div className="mx-auto max-w-6xl space-y-4" data-testid="eval-dashboard">
+      <header
+        data-eval-section
+        style={{ animationDelay: '0ms' }}
+        className="motion-safe:animate-ff-rise-in flex flex-wrap items-center justify-between gap-2"
+      >
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-fg">Evaluation</h2>
-          <p className="mt-0.5 text-sm text-fg-muted">
+          <h1 className="text-[22px] font-semibold tracking-tight text-fg">Evaluation</h1>
+          <p className="mt-1 text-[13px] text-fg-subtle">
             {summary.specs} specs · {summary.scored} scored
             {data.source ? ` · ${data.source}` : ''}
           </p>
@@ -154,7 +141,7 @@ export function EvalDashboard(): JSX.Element {
               data-testid="eval-run-picker"
               value={data.source ?? ''}
               onChange={(e) => setSource(e.target.value || undefined)}
-              className="rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1.5 text-xs text-fg outline-none transition-colors focus:border-brand"
+              className={cn(fieldClasses, 'h-7 w-auto py-0 text-xs')}
             >
               {runsQuery.data?.map((run) => (
                 <option key={run.source} value={run.source}>
@@ -187,7 +174,11 @@ export function EvalDashboard(): JSX.Element {
       </header>
 
       {/* The one number this view leads with, then its supporting tiles. */}
-      <div data-eval-section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        data-eval-section
+        style={{ animationDelay: '50ms' }}
+        className="motion-safe:animate-ff-rise-in grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+      >
         <StatTile
           label="Repair delta"
           value={pct(summary.repair_delta.mean, true)}
@@ -212,9 +203,13 @@ export function EvalDashboard(): JSX.Element {
         />
       </div>
 
-      <section data-eval-section className="rounded-xl border border-edge bg-surface-overlay p-3">
+      <section
+        data-eval-section
+        style={{ animationDelay: '100ms' }}
+        className="motion-safe:animate-ff-rise-in rounded-xl border border-edge bg-surface p-4"
+      >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-xs font-medium text-fg-muted">First-pass → post-repair, per spec</h3>
+          <h3 className="text-[13px] font-medium text-fg">First-pass → post-repair, per spec</h3>
           <Legend
             items={[
               { label: 'First-pass', color: VIZ.context },
@@ -225,9 +220,13 @@ export function EvalDashboard(): JSX.Element {
         <Dumbbell data={dumbbell} beforeLabel="First-pass" afterLabel="Post-repair" />
       </section>
 
-      <div data-eval-section className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-edge bg-surface-overlay p-3">
-          <h3 className="mb-2 text-xs font-medium text-fg-muted">
+      <div
+        data-eval-section
+        style={{ animationDelay: '150ms' }}
+        className="motion-safe:animate-ff-rise-in grid gap-3 lg:grid-cols-2"
+      >
+        <section className="rounded-xl border border-edge bg-surface p-4">
+          <h3 className="mb-3 text-[13px] font-medium text-fg">
             Repair iterations per spec
             <span className="ml-2 font-normal text-fg-subtle">
               median {num(summary.repair_iterations.median)}
@@ -236,8 +235,8 @@ export function EvalDashboard(): JSX.Element {
           <Histogram buckets={iterationBuckets(records)} />
         </section>
 
-        <section className="rounded-xl border border-edge bg-surface-overlay p-3">
-          <h3 className="mb-2 text-xs font-medium text-fg-muted">
+        <section className="rounded-xl border border-edge bg-surface p-4">
+          <h3 className="mb-3 text-[13px] font-medium text-fg">
             Tokens per spec
             <span className="ml-2 font-normal text-fg-subtle">
               ₹{num(summary.inr_cost.mean)} mean
@@ -252,8 +251,12 @@ export function EvalDashboard(): JSX.Element {
       </div>
 
       {summary.screenshot_to_url_seconds.count > 0 ? (
-        <section data-eval-section className="rounded-xl border border-edge bg-surface-overlay p-3">
-          <h3 className="mb-2 text-xs font-medium text-fg-muted">
+        <section
+          data-eval-section
+          style={{ animationDelay: '200ms' }}
+          className="motion-safe:animate-ff-rise-in rounded-xl border border-edge bg-surface p-4"
+        >
+          <h3 className="mb-3 text-[13px] font-medium text-fg">
             Idea → live URL
             <span className="ml-2 font-normal text-fg-subtle">
               median {num(summary.screenshot_to_url_seconds.median)}s
@@ -274,13 +277,17 @@ export function EvalDashboard(): JSX.Element {
       ) : null}
 
       {/* The table view: every value the charts show, reachable without hovering. */}
-      <section data-eval-section className="rounded-xl border border-edge bg-surface">
-        <h3 className="border-b border-edge px-3 py-2 text-xs font-medium text-fg-muted">
+      <section
+        data-eval-section
+        style={{ animationDelay: '250ms' }}
+        className="motion-safe:animate-ff-rise-in rounded-xl border border-edge bg-surface"
+      >
+        <h3 className="border-b border-edge px-4 py-2.5 text-[13px] font-medium text-fg">
           Per spec
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full min-w-max text-left text-xs" data-testid="eval-table">
-            <thead className="text-fg-subtle">
+            <thead className="bg-fg/[0.025] text-fg-subtle">
               <tr>
                 {[
                   'Spec',
@@ -293,7 +300,7 @@ export function EvalDashboard(): JSX.Element {
                   'Regressions',
                   'Tokens',
                 ].map((h) => (
-                  <th key={h} className="px-3 py-1.5 font-medium">
+                  <th key={h} className="px-4 py-2 font-medium">
                     {h}
                   </th>
                 ))}
@@ -303,27 +310,25 @@ export function EvalDashboard(): JSX.Element {
               {records.map((r) => (
                 <tr
                   key={r.spec_id}
-                  className="border-t border-edge/60 transition-colors hover:bg-surface-raised/50"
+                  className="border-t border-edge transition-colors hover:bg-fg/[0.025]"
                   data-testid={`eval-row-${r.spec_id}`}
                 >
-                  <td className="px-3 py-1.5 font-mono text-fg">{r.spec_id}</td>
-                  <td className="px-3 py-1.5 text-fg-muted">{r.difficulty}</td>
-                  <td className="px-3 py-1.5">
+                  <td className="px-4 py-2 font-mono text-fg">{r.spec_id}</td>
+                  <td className="px-4 py-2 text-fg-muted">{r.difficulty}</td>
+                  <td className="px-4 py-2">
                     {/* Status never rides on color alone — the word is the label. */}
                     <Badge tone={OUTCOME_TONES[r.outcome]}>{r.outcome}</Badge>
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">
-                    {pct(r.first_pass.rate)}
-                  </td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">{pct(r.first_pass.rate)}</td>
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">
                     {pct(r.post_repair.rate)}
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">
                     {pct(r.repair_delta, true)}
                   </td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">{r.repair_iterations}</td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">{r.regressions}</td>
-                  <td className="px-3 py-1.5 tabular-nums text-fg-muted">
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">{r.repair_iterations}</td>
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">{r.regressions}</td>
+                  <td className="px-4 py-2 tabular-nums text-fg-muted">
                     {r.tokens.toLocaleString()}
                   </td>
                 </tr>

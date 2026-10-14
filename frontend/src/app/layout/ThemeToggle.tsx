@@ -34,7 +34,7 @@ export function ThemeToggle(): JSX.Element {
       aria-label={LABELS[mode]}
       title={LABELS[mode]}
       onClick={() => setMode(ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length])}
-      className="relative flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+      className="relative flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
     >
       <AnimatePresence mode="wait" initial={false}>
         <motion.span

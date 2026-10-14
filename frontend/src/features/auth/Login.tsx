@@ -36,7 +36,7 @@ export default function Login(): JSX.Element {
       footer={
         <>
           Need an account?{' '}
-          <Link className="font-medium text-brand-text hover:underline" to="/register">
+          <Link className="font-medium text-fg hover:underline" to="/register">
             Create one
           </Link>
         </>
@@ -63,12 +63,12 @@ export default function Login(): JSX.Element {
         {error ? (
           <p
             role="alert"
-            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+            className="rounded-lg border border-danger/25 bg-danger/[0.08] px-3 py-2 text-[13px] text-danger"
           >
             {error}
           </p>
         ) : null}
-        <Button type="submit" loading={submitting} className="w-full">
+        <Button type="submit" size="lg" loading={submitting} className="mt-2 w-full">
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>

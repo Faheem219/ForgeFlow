@@ -1,11 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Database, MessageSquareText, Rows3, SquareTerminal, Trash2 } from 'lucide-react';
+import {
+  ChevronRight,
+  Database,
+  LayoutPanelLeft,
+  MessageSquareText,
+  Rows3,
+  SquareTerminal,
+  Trash2,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ErrorBoundary } from '../../components/ErrorBoundary';
-import { Button, ConfirmDialog, EmptyState, Panel, Spinner } from '../../components/ui';
+import { ConfirmDialog, EmptyState, IconButton, Skeleton, Spinner } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { advanceCursor } from '../../lib/eventCursor';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
@@ -30,7 +39,10 @@ const DataBrowser = lazy(() => import('../data/DataBrowser'));
 // Spend is always relevant while work runs, so it sits alongside the stage navigator.
 const CostPanel = lazy(() => import('../cost/CostPanel'));
 
-/** A compact toolbar toggle: filled when the target is showing, quiet when hidden. */
+/**
+ * A view toggle in the project bar. Pressed reads as a quiet fill, not a brand-coloured button:
+ * four of these can be on at once, and four filled indigo buttons say nothing about which matters.
+ */
 function ToolToggle({
   label,
   icon: Icon,
@@ -45,17 +57,34 @@ function ToolToggle({
   testId?: string;
 }): JSX.Element {
   return (
-    <Button
-      size="sm"
-      variant={on ? 'primary' : 'secondary'}
+    <button
+      type="button"
       aria-pressed={on}
+      aria-label={label}
+      title={label}
       data-testid={testId}
       onClick={onClick}
+      className={cn(
+        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150',
+        on ? 'bg-fg/[0.08] text-fg' : 'text-fg-subtle hover:bg-fg/[0.04] hover:text-fg-muted',
+      )}
     >
-      <Icon aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
-      {label}
-    </Button>
+      <Icon
+        aria-hidden
+        className={cn('h-3.5 w-3.5', on ? 'text-brand-text' : 'text-current')}
+        strokeWidth={1.75}
+      />
+      {/* Icon-only below lg, where the bar has to share the row with a long project name. */}
+      <span aria-hidden className="hidden lg:inline">
+        {label}
+      </span>
+    </button>
   );
+}
+
+/** A rail section heading — small, sentence case, no box around it. */
+function RailHeading({ children }: { children: string }): JSX.Element {
+  return <h2 className="px-3 pb-1.5 pt-3 text-2xs font-medium text-fg-faint">{children}</h2>;
 }
 
 export default function Workspace(): JSX.Element {
@@ -190,9 +219,18 @@ export default function Workspace(): JSX.Element {
   }, [stagesQuery.data]);
 
   if (projectQuery.isLoading) {
+    // The workbench's own bones — bar, rail, centre, assistant — so the load never jumps layout.
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Spinner />
+      <div className="flex h-full flex-col gap-2" aria-hidden>
+        <div className="flex h-10 items-center gap-3 px-1">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="ml-auto h-7 w-72" />
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_18rem] gap-2">
+          <Skeleton className="h-full rounded-xl" />
+          <Skeleton className="h-full rounded-xl" />
+          <Skeleton className="h-full rounded-xl" />
+        </div>
       </div>
     );
   }
@@ -207,15 +245,24 @@ export default function Workspace(): JSX.Element {
   }
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-fg">{projectQuery.data.name}</h1>
-          <p className="text-sm text-fg-muted">
+    <div className="flex h-full flex-col gap-2">
+      <header className="flex h-10 shrink-0 items-center justify-between gap-3 pl-1.5">
+        <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+          <Link
+            to="/dashboard"
+            className="shrink-0 rounded px-1 text-fg-subtle transition-colors hover:text-fg"
+          >
+            Projects
+          </Link>
+          <ChevronRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+          <h1 className="truncate px-1 text-[13px] font-semibold text-fg">
+            {projectQuery.data.name}
+          </h1>
+          <p className="ml-2 hidden truncate text-xs text-fg-faint 2xl:block">
             Any stage is clickable — start anywhere, skip, or jump back.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-0.5">
           <ToolToggle
             label="Stages"
             icon={Rows3}
@@ -223,7 +270,6 @@ export default function Workspace(): JSX.Element {
             onClick={toggleStages}
             testId="toggle-stages"
           />
-          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
           <ToolToggle
             label="Data"
             icon={Database}
@@ -238,7 +284,6 @@ export default function Workspace(): JSX.Element {
             onClick={() => setTerminalOpen((open) => !open)}
             testId="toggle-terminal"
           />
-          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
           <ToolToggle
             label="Assistant"
             icon={MessageSquareText}
@@ -246,29 +291,26 @@ export default function Workspace(): JSX.Element {
             onClick={toggleAssistant}
             testId="toggle-assistant"
           />
-          <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
-          <Button
-            size="sm"
-            variant="ghost"
+          <span className="mx-1.5 h-4 w-px bg-edge" aria-hidden />
+          <IconButton
+            label="Reset layout"
             data-testid="workspace-reset-layout"
-            title="Restore the default panel sizes"
             onClick={() => {
               resetLayouts(projectId);
               setLayoutNonce((n) => n + 1);
             }}
           >
-            Reset layout
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
+            <LayoutPanelLeft aria-hidden strokeWidth={1.75} />
+          </IconButton>
+          <IconButton
+            label="Delete project"
+            tooltipAlign="end"
             data-testid="workspace-delete"
-            className="text-danger hover:bg-danger/10"
+            className="hover:bg-danger/10 hover:text-danger"
             onClick={() => setConfirmDelete(true)}
           >
-            <Trash2 aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Delete
-          </Button>
+            <Trash2 aria-hidden strokeWidth={1.75} />
+          </IconButton>
         </div>
       </header>
 
@@ -295,9 +337,11 @@ export default function Workspace(): JSX.Element {
           >
             {stagesOpen ? (
               <>
-                <Pane id="rail" defaultSize={18} minSize={12} maxSize={34}>
-                  <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto pr-1">
-                    <Panel title="Stages">
+                <Pane id="rail" defaultSize={17} minSize="188px" maxSize={34}>
+                  {/* One flat column with headed sections — not two cards stacked in a card. */}
+                  <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-xl border border-edge bg-surface">
+                    <RailHeading>Pipeline</RailHeading>
+                    <div className="px-1.5 pb-2">
                       <StageNavigator
                         statusByStage={statusByStage}
                         activeStage={activeStage}
@@ -305,26 +349,28 @@ export default function Workspace(): JSX.Element {
                         onAction={onStageAction}
                         busy={navAction.isPending || reset.isPending}
                       />
-                    </Panel>
-                    <Panel title="Cost">
+                    </div>
+                    <div className="mx-3 border-t border-edge" />
+                    <RailHeading>Cost</RailHeading>
+                    <div className="px-3 pb-3">
                       <Suspense
                         fallback={
-                          <div className="flex justify-center py-4">
+                          <div className="flex justify-center py-4 text-fg-faint">
                             <Spinner />
                           </div>
                         }
                       >
                         <CostPanel projectId={projectId} />
                       </Suspense>
-                    </Panel>
-                  </div>
+                    </div>
+                  </aside>
                 </Pane>
                 <PaneHandle direction="horizontal" />
               </>
             ) : null}
 
             <Pane id="main" minSize={30}>
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div className="min-h-0 flex-1 overflow-auto px-1">
                 {view === 'data' ? (
                   <Suspense
                     fallback={
@@ -347,7 +393,7 @@ export default function Workspace(): JSX.Element {
             {assistantOpen ? (
               <>
                 <PaneHandle direction="horizontal" />
-                <Pane id="assistant" defaultSize={24} minSize={16} maxSize={45}>
+                <Pane id="assistant" defaultSize={23} minSize="248px" maxSize={45}>
                   <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
                     <ChatPanel projectId={projectId} activeStage={activeStage} />
                   </section>
@@ -361,10 +407,12 @@ export default function Workspace(): JSX.Element {
           <>
             <PaneHandle direction="vertical" />
             <Pane id="terminal" defaultSize={28} minSize={10}>
-              <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-edge bg-surface">
+              {/* Fades in on open, and its frame lights while the terminal has the keyboard — the
+                  one pane where knowing where your keystrokes go matters most. */}
+              <section className="flex min-h-0 flex-1 animate-ff-fade flex-col overflow-hidden rounded-xl border border-edge bg-surface transition-colors duration-150 focus-within:border-brand/40">
                 <Suspense
                   fallback={
-                    <div className="flex h-full items-center justify-center">
+                    <div className="flex h-full items-center justify-center text-fg-faint">
                       <Spinner />
                     </div>
                   }
@@ -401,10 +449,10 @@ export default function Workspace(): JSX.Element {
           </>
         }
       >
-        <ul className="space-y-1 rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-xs text-fg-muted">
-          <li>· Sandbox container and its workspace volume</li>
-          <li>· The project&apos;s application database and all its data</li>
-          <li>· Conversation, designs, requirements, tests and deployments</li>
+        <ul className="list-disc space-y-1 rounded-lg bg-fg/[0.04] py-2.5 pl-7 pr-3 text-xs text-fg-muted marker:text-fg-faint">
+          <li>Sandbox container and its workspace volume</li>
+          <li>The project&apos;s application database and all its data</li>
+          <li>Conversation, designs, requirements, tests and deployments</li>
         </ul>
       </ConfirmDialog>
     </div>

@@ -47,12 +47,12 @@ export function Observability(): JSX.Element {
   return (
     <div className="space-y-4" data-testid="observability">
       <section className="space-y-2 rounded-xl border border-edge p-3">
-        <h4 className="text-xs uppercase tracking-wide text-fg-subtle">Global budget</h4>
+        <h4 className="text-xs font-medium text-fg-muted">Global budget</h4>
         <BudgetLine budget={cost.budget} />
       </section>
 
       <section className="rounded-xl border border-edge p-3">
-        <h4 className="mb-2 text-xs uppercase tracking-wide text-fg-subtle">Platform spend</h4>
+        <h4 className="mb-2 text-xs font-medium text-fg-muted">Platform spend</h4>
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-fg-subtle">Total ₹</dt>
