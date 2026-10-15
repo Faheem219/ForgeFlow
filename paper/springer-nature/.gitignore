@@ -1,0 +1,11 @@
+# LaTeX build intermediates (tools/build.sh regenerates them)
+*.aux
+*.log
+*.blg
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+# the review-copy .bbl is a build intermediate; forgeflow-springer.bbl ships in the zip
+forgeflow-springer-marked.bbl
+review/.fidelity-body.tex

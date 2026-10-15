@@ -1,0 +1,565 @@
+%% BioMed_Central_Bib_Style_v1.01
+
+\begin{thebibliography}{32}
+% BibTex style file: bmc-mathphys.bst (version 2.1), 2014-07-24
+\ifx \bisbn   \undefined \def \bisbn  #1{ISBN #1}\fi
+\ifx \binits  \undefined \def \binits#1{#1}\fi
+\ifx \bauthor  \undefined \def \bauthor#1{#1}\fi
+\ifx \batitle  \undefined \def \batitle#1{#1}\fi
+\ifx \bjtitle  \undefined \def \bjtitle#1{#1}\fi
+\ifx \bvolume  \undefined \def \bvolume#1{\textbf{#1}}\fi
+\ifx \byear  \undefined \def \byear#1{#1}\fi
+\ifx \bissue  \undefined \def \bissue#1{#1}\fi
+\ifx \bfpage  \undefined \def \bfpage#1{#1}\fi
+\ifx \blpage  \undefined \def \blpage #1{#1}\fi
+\ifx \burl  \undefined \def \burl#1{\textsf{#1}}\fi
+\ifx \doiurl  \undefined \def \doiurl#1{\url{https://doi.org/#1}}\fi
+\ifx \betal  \undefined \def \betal{\textit{et al.}}\fi
+\ifx \binstitute  \undefined \def \binstitute#1{#1}\fi
+\ifx \binstitutionaled  \undefined \def \binstitutionaled#1{#1}\fi
+\ifx \bctitle  \undefined \def \bctitle#1{#1}\fi
+\ifx \beditor  \undefined \def \beditor#1{#1}\fi
+\ifx \bpublisher  \undefined \def \bpublisher#1{#1}\fi
+\ifx \bbtitle  \undefined \def \bbtitle#1{#1}\fi
+\ifx \bedition  \undefined \def \bedition#1{#1}\fi
+\ifx \bseriesno  \undefined \def \bseriesno#1{#1}\fi
+\ifx \blocation  \undefined \def \blocation#1{#1}\fi
+\ifx \bsertitle  \undefined \def \bsertitle#1{#1}\fi
+\ifx \bsnm \undefined \def \bsnm#1{#1}\fi
+\ifx \bsuffix \undefined \def \bsuffix#1{#1}\fi
+\ifx \bparticle \undefined \def \bparticle#1{#1}\fi
+\ifx \barticle \undefined \def \barticle#1{#1}\fi
+\bibcommenthead
+\ifx \bconfdate \undefined \def \bconfdate #1{#1}\fi
+\ifx \botherref \undefined \def \botherref #1{#1}\fi
+\ifx \url \undefined \def \url#1{\textsf{#1}}\fi
+\ifx \bchapter \undefined \def \bchapter#1{#1}\fi
+\ifx \bbook \undefined \def \bbook#1{#1}\fi
+\ifx \bcomment \undefined \def \bcomment#1{#1}\fi
+\ifx \oauthor \undefined \def \oauthor#1{#1}\fi
+\ifx \citeauthoryear \undefined \def \citeauthoryear#1{#1}\fi
+\ifx \endbibitem  \undefined \def \endbibitem {}\fi
+\ifx \bconflocation  \undefined \def \bconflocation#1{#1}\fi
+\ifx \arxivurl  \undefined \def \arxivurl#1{\textsf{#1}}\fi
+\csname PreBibitemsHook\endcsname
+
+%%% 1
+\bibitem[\protect\citeauthoryear{Zhang et~al.}{2026}]{r01zhang}
+\begin{barticle}
+\bauthor{\bsnm{Zhang}, \binits{Q.}},
+\bauthor{\bsnm{Fang}, \binits{C.}},
+\bauthor{\bsnm{Xie}, \binits{Y.}},
+\bauthor{\bsnm{Zhang}, \binits{Y.}},
+\bauthor{\bsnm{Yu}, \binits{S.}},
+\bauthor{\bsnm{Sun}, \binits{W.}},
+\bauthor{\bsnm{Yang}, \binits{Y.}},
+\bauthor{\bsnm{Chen}, \binits{Z.}}:
+\batitle{A survey on large language models for software engineering}.
+\bjtitle{Sci. China Inf. Sci.}
+\bvolume{69}(\bissue{4}),
+\bfpage{141102}
+(\byear{2026})
+\doiurl{10.1007/s11432-025-4670-0}
+\end{barticle}
+\endbibitem
+
+%%% 2
+\bibitem[\protect\citeauthoryear{Ge et~al.}{2025}]{r02ge}
+\begin{botherref}
+\oauthor{\bsnm{Ge}, \binits{Y.}},
+\oauthor{\bsnm{Mei}, \binits{L.}},
+\oauthor{\bsnm{Duan}, \binits{Z.}},
+\oauthor{\bsnm{Li}, \binits{T.}},
+\oauthor{\bsnm{Zheng}, \binits{Y.}},
+\oauthor{\bsnm{Wang}, \binits{Y.}},
+\oauthor{\bsnm{Wang}, \binits{L.}},
+\oauthor{\bsnm{Yao}, \binits{J.}},
+\oauthor{\bsnm{Liu}, \binits{T.}},
+\oauthor{\bsnm{Cai}, \binits{Y.}},
+\oauthor{\bsnm{Bi}, \binits{B.}},
+\oauthor{\bsnm{Guo}, \binits{F.}},
+\oauthor{\bsnm{Guo}, \binits{J.}},
+\oauthor{\bsnm{Liu}, \binits{S.}},
+\oauthor{\bsnm{Cheng}, \binits{X.}}:
+A survey of vibe coding with large language models.
+arXiv preprint arXiv:2510.12399
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 3
+\bibitem[\protect\citeauthoryear{{Stack Overflow}}{2025}]{r03stackoverflow}
+\begin{botherref}
+\oauthor{\bsnm{{Stack Overflow}}}:
+{2025 Developer Survey}.
+Stack Overflow
+(2025).
+\url{https://survey.stackoverflow.co/2025/}
+Accessed Aug. 16, 2026
+\end{botherref}
+\endbibitem
+
+%%% 4
+\bibitem[\protect\citeauthoryear{Ghammam and Almukhtar}{2026}]{r04ghammam}
+\begin{bchapter}
+\bauthor{\bsnm{Ghammam}, \binits{A.}},
+\bauthor{\bsnm{Almukhtar}, \binits{M.}}:
+\bctitle{{AI} builds, we analyze: {An} empirical study of {AI}-generated build code quality}.
+In: \bbtitle{Proc. 23rd Int. Conf. Mining Softw. Repositories (MSR)},
+\bconflocation{Rio de Janeiro, Brazil},
+pp. \bfpage{727}--\blpage{731}
+(\byear{2026}).
+\doiurl{10.1145/3793302.3793563}
+\end{bchapter}
+\endbibitem
+
+%%% 5
+\bibitem[\protect\citeauthoryear{Shukla et~al.}{2025}]{r05shukla}
+\begin{bchapter}
+\bauthor{\bsnm{Shukla}, \binits{S.}},
+\bauthor{\bsnm{Joshi}, \binits{H.}},
+\bauthor{\bsnm{Syed}, \binits{R.}}:
+\bctitle{Security degradation in iterative {AI} code generation: {A} systematic analysis of the paradox}.
+In: \bbtitle{Proc. 2025 IEEE Int. Symp. Technol. Soc. (ISTAS)},
+\bconflocation{Santa Clara, CA, USA},
+pp. \bfpage{1}--\blpage{8}
+(\byear{2025}).
+\doiurl{10.1109/ISTAS65609.2025.11269659}
+\end{bchapter}
+\endbibitem
+
+%%% 6
+\bibitem[\protect\citeauthoryear{Zhang et~al.}{2025}]{r06zhang}
+\begin{botherref}
+\oauthor{\bsnm{Zhang}, \binits{T.}},
+\oauthor{\bsnm{Pan}, \binits{S.}},
+\oauthor{\bsnm{Zhang}, \binits{Z.}},
+\oauthor{\bsnm{Xing}, \binits{Z.}},
+\oauthor{\bsnm{Sun}, \binits{X.}}:
+Deployability-centric infrastructure-as-code generation: {An} {LLM}-based iterative framework.
+arXiv preprint arXiv:2506.05623
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 7
+\bibitem[\protect\citeauthoryear{Tang et~al.}{2026}]{r07tang}
+\begin{botherref}
+\oauthor{\bsnm{Tang}, \binits{N.}},
+\oauthor{\bsnm{Chen}, \binits{C.}},
+\oauthor{\bsnm{Xu}, \binits{G.}},
+\oauthor{\bsnm{Shi}, \binits{Y.}},
+\oauthor{\bsnm{Huang}, \binits{Y.}},
+\oauthor{\bsnm{McMillan}, \binits{C.}},
+\oauthor{\bsnm{Dong}, \binits{T.}},
+\oauthor{\bsnm{Li}, \binits{T.J.-J.}}:
+How coding agents fail their users: {A} large-scale analysis of developer-agent misalignment in 20,574 real-world sessions.
+arXiv preprint arXiv:2605.29442
+(2026)
+\end{botherref}
+\endbibitem
+
+%%% 8
+\bibitem[\protect\citeauthoryear{Huang et~al.}{2025}]{r08huang}
+\begin{botherref}
+\oauthor{\bsnm{Huang}, \binits{R.}},
+\oauthor{\bsnm{Reyna}, \binits{A.}},
+\oauthor{\bsnm{Lerner}, \binits{S.}},
+\oauthor{\bsnm{Xia}, \binits{H.}},
+\oauthor{\bsnm{Hempel}, \binits{B.}}:
+Professional software developers don't vibe, they control: {AI} agent use for coding in 2025.
+arXiv preprint arXiv:2512.14012
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 9
+\bibitem[\protect\citeauthoryear{Kiecker et~al.}{2026}]{r09kiecker}
+\begin{botherref}
+\oauthor{\bsnm{Kiecker}, \binits{T.}},
+\oauthor{\bsnm{Reichmann}, \binits{E.}},
+\oauthor{\bsnm{Kang}, \binits{H.}},
+\oauthor{\bsnm{An}, \binits{G.}},
+\oauthor{\bsnm{Grunske}, \binits{L.}}:
+Is three the magic number? {An} empirical evaluation of {LLM}-based repair loops.
+arXiv preprint arXiv:2607.05197
+(2026)
+\end{botherref}
+\endbibitem
+
+%%% 10
+\bibitem[\protect\citeauthoryear{Arimbur}{2026}]{r10arimbur}
+\begin{botherref}
+\oauthor{\bsnm{Arimbur}, \binits{J.J.}}:
+How many tries does it take? {Iterative} self-repair in {LLM} code generation across model scales and benchmarks.
+arXiv preprint arXiv:2604.10508
+(2026)
+\end{botherref}
+\endbibitem
+
+%%% 11
+\bibitem[\protect\citeauthoryear{Haroon et~al.}{2026}]{r11haroon}
+\begin{botherref}
+\oauthor{\bsnm{Haroon}, \binits{S.}},
+\oauthor{\bsnm{Khan}, \binits{M.T.}},
+\oauthor{\bsnm{Gulzar}, \binits{M.A.}}:
+Evaluating {LLM}-based test generation under software evolution.
+arXiv preprint arXiv:2603.23443
+(2026)
+\end{botherref}
+\endbibitem
+
+%%% 12
+\bibitem[\protect\citeauthoryear{Jiang et~al.}{2025}]{r12jiang}
+\begin{botherref}
+\oauthor{\bsnm{Jiang}, \binits{Z.}},
+\oauthor{\bsnm{Lo}, \binits{D.}},
+\oauthor{\bsnm{Liu}, \binits{Z.}}:
+Agentic software issue resolution with large language models: {A} survey.
+arXiv preprint arXiv:2512.22256
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 13
+\bibitem[\protect\citeauthoryear{Xia et~al.}{2025}]{r13xia}
+\begin{barticle}
+\bauthor{\bsnm{Xia}, \binits{C.S.}},
+\bauthor{\bsnm{Deng}, \binits{Y.}},
+\bauthor{\bsnm{Dunn}, \binits{S.}},
+\bauthor{\bsnm{Zhang}, \binits{L.}}:
+\batitle{Demystifying {LLM}-based software engineering agents}.
+\bjtitle{Proc. ACM Softw. Eng.}
+\bvolume{2}(\bissue{FSE}),
+\bfpage{801}--\blpage{824}
+(\byear{2025})
+\doiurl{10.1145/3715754}
+\end{barticle}
+\endbibitem
+
+%%% 14
+\bibitem[\protect\citeauthoryear{Bouzenia et~al.}{2025}]{r14bouzenia}
+\begin{bchapter}
+\bauthor{\bsnm{Bouzenia}, \binits{I.}},
+\bauthor{\bsnm{Devanbu}, \binits{P.T.}},
+\bauthor{\bsnm{Pradel}, \binits{M.}}:
+\bctitle{{RepairAgent}: {An} autonomous, {LLM}-based agent for program repair}.
+In: \bbtitle{Proc. IEEE/ACM 47th Int. Conf. Softw. Eng. (ICSE)},
+\bconflocation{Ottawa, ON, Canada},
+pp. \bfpage{2188}--\blpage{2200}
+(\byear{2025}).
+\doiurl{10.1109/ICSE55347.2025.00157}
+\end{bchapter}
+\endbibitem
+
+%%% 15
+\bibitem[\protect\citeauthoryear{Huang et~al.}{2025}]{r15huang}
+\begin{barticle}
+\bauthor{\bsnm{Huang}, \binits{K.}},
+\bauthor{\bsnm{Zhang}, \binits{J.}},
+\bauthor{\bsnm{Bao}, \binits{X.}},
+\bauthor{\bsnm{Wang}, \binits{X.}},
+\bauthor{\bsnm{Liu}, \binits{Y.}}:
+\batitle{Comprehensive fine-tuning large language models of code for automated program repair}.
+\bjtitle{IEEE Trans. Softw. Eng.}
+\bvolume{51}(\bissue{4}),
+\bfpage{904}--\blpage{928}
+(\byear{2025})
+\doiurl{10.1109/TSE.2025.3532759}
+\end{barticle}
+\endbibitem
+
+%%% 16
+\bibitem[\protect\citeauthoryear{Ou{\'e}draogo et~al.}{2026}]{r16ouedraogo}
+\begin{barticle}
+\bauthor{\bsnm{Ou{\'e}draogo}, \binits{W.C.}},
+\bauthor{\bsnm{Kabor{\'e}}, \binits{A.K.}},
+\bauthor{\bsnm{Li}, \binits{Y.}},
+\bauthor{\bsnm{Tian}, \binits{H.}},
+\bauthor{\bsnm{Koyuncu}, \binits{A.}},
+\bauthor{\bsnm{Klein}, \binits{J.}},
+\bauthor{\bsnm{Lo}, \binits{D.}},
+\bauthor{\bsnm{Bissyand{\'e}}, \binits{T.F.}}:
+\batitle{Prompt engineering in {LLMs} for automated unit test generation: {A} large-scale study}.
+\bjtitle{Empirical Softw. Eng.}
+\bvolume{31}(\bissue{4}),
+\bfpage{103}
+(\byear{2026})
+\doiurl{10.1007/s10664-026-10840-4}
+\end{barticle}
+\endbibitem
+
+%%% 17
+\bibitem[\protect\citeauthoryear{Shang et~al.}{2025}]{r17shang}
+\begin{barticle}
+\bauthor{\bsnm{Shang}, \binits{Y.}},
+\bauthor{\bsnm{Zhang}, \binits{Q.}},
+\bauthor{\bsnm{Fang}, \binits{C.}},
+\bauthor{\bsnm{Gu}, \binits{S.}},
+\bauthor{\bsnm{Zhou}, \binits{J.}},
+\bauthor{\bsnm{Chen}, \binits{Z.}}:
+\batitle{A large-scale empirical study on fine-tuning large language models for unit testing}.
+\bjtitle{Proc. ACM Softw. Eng.}
+\bvolume{2}(\bissue{ISSTA}),
+\bfpage{1678}--\blpage{1700}
+(\byear{2025})
+\doiurl{10.1145/3728951} .
+\bcomment{Art. no. ISSTA074}
+\end{barticle}
+\endbibitem
+
+%%% 18
+\bibitem[\protect\citeauthoryear{Alian et~al.}{2025}]{r18alian}
+\begin{bchapter}
+\bauthor{\bsnm{Alian}, \binits{P.}},
+\bauthor{\bsnm{Nashid}, \binits{N.}},
+\bauthor{\bsnm{Shahbandeh}, \binits{M.}},
+\bauthor{\bsnm{Shabani}, \binits{T.}},
+\bauthor{\bsnm{Mesbah}, \binits{A.}}:
+\bctitle{Feature-driven end-to-end test generation}.
+In: \bbtitle{Proc. IEEE/ACM 47th Int. Conf. Softw. Eng. (ICSE)},
+\bconflocation{Ottawa, ON, Canada},
+pp. \bfpage{450}--\blpage{462}
+(\byear{2025}).
+\doiurl{10.1109/ICSE55347.2025.00141}
+\end{bchapter}
+\endbibitem
+
+%%% 19
+\bibitem[\protect\citeauthoryear{Gu et~al.}{2025}]{r19gu}
+\begin{botherref}
+\oauthor{\bsnm{Gu}, \binits{S.}},
+\oauthor{\bsnm{Nashid}, \binits{N.}},
+\oauthor{\bsnm{Mesbah}, \binits{A.}}:
+{LLM} test generation via iterative hybrid program analysis.
+arXiv preprint arXiv:2503.13580
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 20
+\bibitem[\protect\citeauthoryear{Alturayeif et~al.}{2026}]{r20alturayeif}
+\begin{barticle}
+\bauthor{\bsnm{Alturayeif}, \binits{N.}},
+\bauthor{\bsnm{Ahmad}, \binits{I.}},
+\bauthor{\bsnm{Hassine}, \binits{J.}}:
+\batitle{{TraceLLM}: {Leveraging} large language models with prompt engineering for enhanced requirements traceability}.
+\bjtitle{Requirements Eng.}
+\bvolume{31}(\bissue{1}),
+\bfpage{6}
+(\byear{2026})
+\doiurl{10.1007/s00766-026-00460-1}
+\end{barticle}
+\endbibitem
+
+%%% 21
+\bibitem[\protect\citeauthoryear{Takerngsaksiri et~al.}{2025}]{r21takerngsaksiri}
+\begin{bchapter}
+\bauthor{\bsnm{Takerngsaksiri}, \binits{W.}},
+\bauthor{\bsnm{Pasuksmit}, \binits{J.}},
+\bauthor{\bsnm{Thongtanunam}, \binits{P.}},
+\bauthor{\bsnm{Tantithamthavorn}, \binits{C.}},
+\bauthor{\bsnm{Zhang}, \binits{R.}},
+\bauthor{\bsnm{Jiang}, \binits{F.}},
+\bauthor{\bsnm{Li}, \binits{J.}},
+\bauthor{\bsnm{Cook}, \binits{E.}},
+\bauthor{\bsnm{Chen}, \binits{K.}},
+\bauthor{\bsnm{Wu}, \binits{M.}}:
+\bctitle{Human-in-the-loop software development agents}.
+In: \bbtitle{Proc. IEEE/ACM 47th Int. Conf. Softw. Eng.: Softw. Eng. in Practice (ICSE-SEIP)},
+\bconflocation{Ottawa, ON, Canada},
+pp. \bfpage{342}--\blpage{352}
+(\byear{2025}).
+\doiurl{10.1109/ICSE-SEIP66354.2025.00036}
+\end{bchapter}
+\endbibitem
+
+%%% 22
+\bibitem[\protect\citeauthoryear{Pasuksmit et~al.}{2025}]{r22pasuksmit}
+\begin{bchapter}
+\bauthor{\bsnm{Pasuksmit}, \binits{J.}},
+\bauthor{\bsnm{Takerngsaksiri}, \binits{W.}},
+\bauthor{\bsnm{Thongtanunam}, \binits{P.}},
+\bauthor{\bsnm{Tantithamthavorn}, \binits{C.}},
+\bauthor{\bsnm{Zhang}, \binits{R.}},
+\bauthor{\bsnm{Wang}, \binits{S.}},
+\bauthor{\bsnm{Jiang}, \binits{F.}},
+\bauthor{\bsnm{Li}, \binits{J.}},
+\bauthor{\bsnm{Cook}, \binits{E.}},
+\bauthor{\bsnm{Chen}, \binits{K.}},
+\bauthor{\bsnm{Wu}, \binits{M.}}:
+\bctitle{Human-in-the-loop software development agents: {Challenges} and future directions}.
+In: \bbtitle{Proc. IEEE/ACM 22nd Int. Conf. Mining Softw. Repositories (MSR)},
+\bconflocation{Ottawa, ON, Canada},
+pp. \bfpage{756}--\blpage{757}
+(\byear{2025}).
+\doiurl{10.1109/MSR66628.2025.00112}
+\end{bchapter}
+\endbibitem
+
+%%% 23
+\bibitem[\protect\citeauthoryear{Si et~al.}{2025}]{r23si}
+\begin{bchapter}
+\bauthor{\bsnm{Si}, \binits{C.}},
+\bauthor{\bsnm{Zhang}, \binits{Y.}},
+\bauthor{\bsnm{Li}, \binits{R.}},
+\bauthor{\bsnm{Yang}, \binits{Z.}},
+\bauthor{\bsnm{Liu}, \binits{R.}},
+\bauthor{\bsnm{Yang}, \binits{D.}}:
+\bctitle{{Design2Code}: {Benchmarking} multimodal code generation for automated front-end engineering}.
+In: \bbtitle{Proc. 2025 Conf. Nations Americas Chapter Assoc. Comput. Linguist.: Human Lang. Technol. (NAACL)},
+\bconflocation{Albuquerque, NM, USA},
+pp. \bfpage{3956}--\blpage{3974}
+(\byear{2025}).
+\doiurl{10.18653/v1/2025.naacl-long.199}
+\end{bchapter}
+\endbibitem
+
+%%% 24
+\bibitem[\protect\citeauthoryear{Rabin et~al.}{2025}]{r24rabin}
+\begin{botherref}
+\oauthor{\bsnm{Rabin}, \binits{R.}},
+\oauthor{\bsnm{Hostetler}, \binits{J.}},
+\oauthor{\bsnm{McGregor}, \binits{S.}},
+\oauthor{\bsnm{Weir}, \binits{B.}},
+\oauthor{\bsnm{Judd}, \binits{J.}}:
+{SandboxEval}: {Towards} securing test environment for untrusted code.
+arXiv preprint arXiv:2504.00018
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 25
+\bibitem[\protect\citeauthoryear{Chen et~al.}{2021}]{r25chen}
+\begin{botherref}
+\oauthor{\bsnm{Chen}, \binits{M.}},
+\oauthor{\bsnm{Tworek}, \binits{J.}},
+\oauthor{\bsnm{Jun}, \binits{H.}},
+\oauthor{\bsnm{Yuan}, \binits{Q.}},
+\oauthor{\bsnm{{de Oliveira Pinto}}, \binits{H.P.}},
+\oauthor{\bsnm{Kaplan}, \binits{J.}}, et al.:
+Evaluating large language models trained on code.
+arXiv preprint arXiv:2107.03374
+(2021)
+\end{botherref}
+\endbibitem
+
+%%% 26
+\bibitem[\protect\citeauthoryear{Austin et~al.}{2021}]{r26austin}
+\begin{botherref}
+\oauthor{\bsnm{Austin}, \binits{J.}},
+\oauthor{\bsnm{Odena}, \binits{A.}},
+\oauthor{\bsnm{Nye}, \binits{M.}},
+\oauthor{\bsnm{Bosma}, \binits{M.}},
+\oauthor{\bsnm{Michalewski}, \binits{H.}},
+\oauthor{\bsnm{Dohan}, \binits{D.}},
+\oauthor{\bsnm{Jiang}, \binits{E.}},
+\oauthor{\bsnm{Cai}, \binits{C.}},
+\oauthor{\bsnm{Terry}, \binits{M.}},
+\oauthor{\bsnm{Le}, \binits{Q.}},
+\oauthor{\bsnm{Sutton}, \binits{C.}}:
+Program synthesis with large language models.
+arXiv preprint arXiv:2108.07732
+(2021)
+\end{botherref}
+\endbibitem
+
+%%% 27
+\bibitem[\protect\citeauthoryear{Cassano et~al.}{2023}]{r27cassano}
+\begin{barticle}
+\bauthor{\bsnm{Cassano}, \binits{F.}},
+\bauthor{\bsnm{Gouwar}, \binits{J.}},
+\bauthor{\bsnm{Nguyen}, \binits{D.}},
+\bauthor{\bsnm{Nguyen}, \binits{S.}},
+\bauthor{\bsnm{Phipps-Costin}, \binits{L.}},
+\bauthor{\bsnm{Pinckney}, \binits{D.}},
+\bauthor{\bsnm{Yee}, \binits{M.-H.}},
+\bauthor{\bsnm{Zi}, \binits{Y.}},
+\bauthor{\bsnm{Anderson}, \binits{C.J.}},
+\bauthor{\bsnm{Feldman}, \binits{M.Q.}},
+\bauthor{\bsnm{Guha}, \binits{A.}},
+\bauthor{\bsnm{Greenberg}, \binits{M.}},
+\bauthor{\bsnm{Jangda}, \binits{A.}}:
+\batitle{{MultiPL-E}: {A} scalable and polyglot approach to benchmarking neural code generation}.
+\bjtitle{IEEE Trans. Softw. Eng.}
+\bvolume{49}(\bissue{7}),
+\bfpage{3675}--\blpage{3691}
+(\byear{2023})
+\doiurl{10.1109/TSE.2023.3267446}
+\end{barticle}
+\endbibitem
+
+%%% 28
+\bibitem[\protect\citeauthoryear{Patil et~al.}{2025}]{r28patil}
+\begin{bchapter}
+\bauthor{\bsnm{Patil}, \binits{S.G.}},
+\bauthor{\bsnm{Mao}, \binits{H.}},
+\bauthor{\bsnm{Yan}, \binits{F.}},
+\bauthor{\bsnm{Ji}, \binits{C.C.-J.}},
+\bauthor{\bsnm{Suresh}, \binits{V.}},
+\bauthor{\bsnm{Stoica}, \binits{I.}},
+\bauthor{\bsnm{Gonzalez}, \binits{J.E.}}:
+\bctitle{The {Berkeley Function Calling Leaderboard (BFCL)}: {From} tool use to agentic evaluation of large language models}.
+In: \bbtitle{Proc. 42nd Int. Conf. Mach. Learn. (ICML)}.
+\bsertitle{PMLR},
+vol. \bseriesno{267}
+(\byear{2025})
+\end{bchapter}
+\endbibitem
+
+%%% 29
+\bibitem[\protect\citeauthoryear{Chen et~al.}{2024}]{r29chen}
+\begin{bchapter}
+\bauthor{\bsnm{Chen}, \binits{X.}},
+\bauthor{\bsnm{Lin}, \binits{M.}},
+\bauthor{\bsnm{Sch{\"a}rli}, \binits{N.}},
+\bauthor{\bsnm{Zhou}, \binits{D.}}:
+\bctitle{Teaching large language models to self-debug}.
+In: \bbtitle{Proc. 12th Int. Conf. Learn. Represent. (ICLR)},
+\bconflocation{Vienna, Austria}
+(\byear{2024})
+\end{bchapter}
+\endbibitem
+
+%%% 30
+\bibitem[\protect\citeauthoryear{Olausson et~al.}{2024}]{r30olausson}
+\begin{bchapter}
+\bauthor{\bsnm{Olausson}, \binits{T.X.}},
+\bauthor{\bsnm{Inala}, \binits{J.P.}},
+\bauthor{\bsnm{Wang}, \binits{C.}},
+\bauthor{\bsnm{Gao}, \binits{J.}},
+\bauthor{\bsnm{Solar-Lezama}, \binits{A.}}:
+\bctitle{Is self-repair a silver bullet for code generation?}
+In: \bbtitle{Proc. 12th Int. Conf. Learn. Represent. (ICLR)},
+\bconflocation{Vienna, Austria}
+(\byear{2024})
+\end{bchapter}
+\endbibitem
+
+%%% 31
+\bibitem[\protect\citeauthoryear{Wilson}{1927}]{r31wilson}
+\begin{barticle}
+\bauthor{\bsnm{Wilson}, \binits{E.B.}}:
+\batitle{Probable inference, the law of succession, and statistical inference}.
+\bjtitle{J. Amer. Statist. Assoc.}
+\bvolume{22}(\bissue{158}),
+\bfpage{209}--\blpage{212}
+(\byear{1927})
+\doiurl{10.1080/01621459.1927.10502953}
+\end{barticle}
+\endbibitem
+
+%%% 32
+\bibitem[\protect\citeauthoryear{McNemar}{1947}]{r32mcnemar}
+\begin{barticle}
+\bauthor{\bsnm{McNemar}, \binits{Q.}}:
+\batitle{Note on the sampling error of the difference between correlated proportions or percentages}.
+\bjtitle{Psychometrika}
+\bvolume{12}(\bissue{2}),
+\bfpage{153}--\blpage{157}
+(\byear{1947})
+\doiurl{10.1007/BF02295996}
+\end{barticle}
+\endbibitem
+
+\end{thebibliography}
