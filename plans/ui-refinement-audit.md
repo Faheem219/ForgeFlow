@@ -98,3 +98,46 @@ is **kept**, not redesigned._
 
 _Not in scope: changing the palette, typography, information architecture of stage panels, or
 any backend contract._
+
+---
+
+## Pass 2 — "quiet workbench" revamp (branch `ui/revamp-polish`, 2026-10-14)
+
+A presentation-only pass: no API, store, route, test id or test-visible string changed (all 518
+frontend tests unchanged and green). Measured against `main` with a Playwright harness that mocks
+the API and both WebSockets.
+
+### What was wrong
+- **The app never rendered in Inter.** Tailwind asked for `InterVariable`; Fontsource registers
+  `Inter Variable`. Every screen fell through to the OS system font.
+- **Ambient canvas behind every screen.** A per-frame particle loop (a radial gradient per particle)
+  plus a pointer-chasing glow ran behind the whole app, Monaco and xterm included. With the pointer
+  moving, main-thread time was roughly 2–4× what the same screens cost without it.
+- **The Build tab starved its own editor.** Run telemetry (a 150px animation, phases, files) and the
+  report stacked above the IDE; mid-build the editor got ~180px of height. The file tree was a fixed
+  224px inside an already narrow pane, and the preview toolbar wrapped and clipped.
+- Template tells: icon-tile stat cards, a coloured stripe down each toast, gradient-glow cursor
+  cards, an eyebrow label over a two-tone headline, magnetic buttons, a 3D-tilting hero card, giant
+  ghost numerals, emoji topology glyphs, uppercase micro-labels everywhere.
+- Bugs found on the way: eval charts stretched a fixed viewBox (axis text rendered ~2× size) and used
+  a hard-coded slate palette in both themes; the dashboard's GSAP `clearProps: 'all'` wiped the
+  distribution bars' React-set widths; tool-call lines broke mid-word.
+
+### Decisions
+- **Palette:** warm-neutral ("mauve") greys, canvas lifted off pure black, iris-indigo brand at lower
+  chroma (`palette.ts`). Colour is reserved for state and the one primary action per surface; view
+  toggles and secondary actions are neutral.
+- **Type:** Inter's optical-size build (`opsz.css`) with `font-optical-sizing: auto`; 13px UI text
+  (`text-sm`), an `text-2xs` micro size, sentence-case labels; mono text resets Inter's feature tags.
+- **Elevation:** theme-aware `shadow-pop` (menus, popovers, dialogs) and `shadow-raise` (controls);
+  no backdrop blur anywhere in the app.
+- **Motion:** state changes only — a sliding active highlight in the nav and stage rail, a 1px
+  indeterminate sweep on running work, a compact spinning mark in place of the full agent animation
+  inside status rows, CSS keyframes (`ff-fade`, `ff-pop`, `ff-rise`, `ff-sweep`, `ff-breathe`). Route
+  changes fade (opacity only — a transform would re-anchor the focus overlay's `position: fixed`).
+- **Workbench layout:** one compact project bar; the rail is a single flat column (pipeline + cost);
+  every stage uses `StageHeader`; the Build summary is capped at 42% of the panel so the editor and
+  preview always keep the rest; the IDE tree/editor seam is resizable and persisted; panes that are
+  dragged narrow adapt by measured width (`useNarrow`), not by viewport breakpoints.
+- **Bundle:** secondary routes are lazy; `lib/gsap.ts` registers only Flip, with ScrollTrigger and
+  SplitText moved to `lib/gsapScroll.ts` (landing only). Main chunk 260KB → 193KB gzip.

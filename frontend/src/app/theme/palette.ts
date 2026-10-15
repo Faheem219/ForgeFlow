@@ -61,57 +61,61 @@ export interface ThemePalette {
 }
 
 export const dark: ThemePalette = {
-  canvas: '#09090b',
-  surface: '#0f1014',
-  raised: '#16171d',
-  overlay: '#1a1b23',
-  sunken: '#050506',
+  // Warm-neutral ("mauve") greys rather than cool zinc: lower chroma reads calmer over long
+  // sessions, and the faint violet cast sits naturally beside the indigo brand. The canvas is
+  // lifted off pure black so panels, not the void around them, carry the contrast.
+  canvas: '#111113',
+  surface: '#18171b',
+  raised: '#211f24',
+  overlay: '#1d1c20',
+  sunken: '#0c0b0d',
 
-  fg: '#f4f4f6',
-  fgMuted: '#a6a7b0',
-  fgSubtle: '#82838e',
-  fgFaint: '#63646f',
+  fg: '#ecebef',
+  fgMuted: '#b4b1bb',
+  fgSubtle: '#908d98',
+  fgFaint: '#6e6b76',
   fgInverted: '#ffffff',
 
-  edge: '#26272f',
-  edgeStrong: '#34353f',
+  edge: '#312e35',
+  edgeStrong: '#3e3b44',
 
-  brand: '#5a5cf0',
-  brandHover: '#4f52ea',
-  brandText: '#a5b4fc',
-  accent: '#8b5cf6',
+  // Iris rather than electric indigo: still the brand hue, with less saturation to shout.
+  brand: '#5b5bd6',
+  brandHover: '#6966e0',
+  brandText: '#b1a9ff',
+  accent: '#8b72e0',
 
-  success: '#34d399',
-  warning: '#fbbf24',
-  danger: '#f87171',
-  info: '#60a5fa',
+  success: '#4cc38a',
+  warning: '#e5b450',
+  danger: '#f2817f',
+  info: '#6cb2f2',
 };
 
 export const light: ThemePalette = {
-  canvas: '#f7f7f8',
+  canvas: '#f8f7f9',
   surface: '#ffffff',
-  raised: '#f2f2f4',
+  raised: '#f2f0f4',
   overlay: '#ffffff',
-  sunken: '#eeeef1',
+  sunken: '#f4f2f6',
 
-  fg: '#17171c',
-  fgMuted: '#4c4c58',
-  fgSubtle: '#6e6e7a',
-  fgFaint: '#8f8f9b',
+  fg: '#1f1d24',
+  fgMuted: '#55525d',
+  fgSubtle: '#6b6874',
+  fgFaint: '#94919d',
   fgInverted: '#ffffff',
 
-  edge: '#dcdce2',
-  edgeStrong: '#c4c4cf',
+  edge: '#dddae3',
+  edgeStrong: '#cbc7d2',
 
-  brand: '#4f46e5',
-  brandHover: '#4338ca',
-  brandText: '#4338ca',
-  accent: '#7c3aed',
+  brand: '#5b5bd6',
+  brandHover: '#4f4fc9',
+  brandText: '#4c48c0',
+  accent: '#6e56cf',
 
-  success: '#047857',
-  warning: '#b45309',
-  danger: '#b91c1c',
-  info: '#2563eb',
+  success: '#1f7a52',
+  warning: '#9a5b00',
+  danger: '#c62a2f',
+  info: '#0b6bc0',
 };
 
 export const PALETTES = { dark, light } as const;

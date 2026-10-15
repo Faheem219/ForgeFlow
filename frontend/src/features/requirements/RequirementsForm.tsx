@@ -1,6 +1,8 @@
+import { Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { Button, Spinner } from '../../components/ui';
+import { Button, Spinner, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import type {
   CriterionKind,
   DraftedFeature,
@@ -167,8 +169,7 @@ function validate(features: DraftFeature[]): { errors: FormErrors; ok: boolean }
 const KINDS: CriterionKind[] = ['either', 'unit', 'e2e'];
 const KIND_HELP = 'unit = logic a unit test covers · e2e = a user-visible flow · either = unsure';
 
-const inputClass =
-  'w-full rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand';
+const inputClass = fieldClasses;
 
 // ------------------------------------------------------------------ component
 
@@ -288,12 +289,12 @@ export function RequirementsForm({
     <div className="space-y-4" data-testid="requirements-form">
       {onDraft ? (
         <section
-          className="space-y-2 rounded-xl border border-edge bg-surface-sunken/50 p-4"
+          className="space-y-2.5 rounded-xl border border-dashed border-edge-strong bg-fg/[0.015] p-4"
           data-testid="requirements-draft"
         >
           <div>
-            <h4 className="text-sm font-medium text-fg">Start from a description</h4>
-            <p className="text-xs text-fg-subtle">
+            <h4 className="text-sm font-semibold text-fg">Start from a description</h4>
+            <p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">
               Describe the whole app in plain language and we&apos;ll propose a first set of
               features. Everything it suggests is editable — nothing is saved until you press Save.
             </p>
@@ -317,19 +318,22 @@ export function RequirementsForm({
             onClick={() => void runDraft()}
           >
             {drafting ? (
-              <span className="flex items-center gap-1">
-                <Spinner /> Drafting…
+              <span className="flex items-center gap-1.5">
+                <Spinner size="sm" /> Drafting…
               </span>
             ) : (
-              'Generate draft (AI)'
+              <>
+                <Sparkles aria-hidden className="h-3.5 w-3.5 text-brand-text" strokeWidth={1.75} />
+                Generate draft (AI)
+              </>
             )}
           </Button>
         </section>
       ) : null}
 
-      <section className="space-y-1 rounded-xl border border-edge bg-surface p-4">
+      <section className="space-y-1.5 rounded-xl border border-edge bg-surface p-4">
         <label className="block text-sm">
-          <span className="font-medium text-fg">App name</span>
+          <span className="mb-1.5 block text-xs font-medium text-fg-muted">App name</span>
           <input
             className={inputClass}
             data-testid="app-name"
@@ -345,7 +349,7 @@ export function RequirementsForm({
       </section>
 
       {errors.form ? (
-        <p className="text-sm text-rose-400" role="alert" data-testid="form-error">
+        <p className="text-sm text-danger" role="alert" data-testid="form-error">
           {errors.form}
         </p>
       ) : null}
@@ -356,12 +360,14 @@ export function RequirementsForm({
           <section
             key={f.key}
             data-testid={`feature-${fi}`}
-            className="space-y-3 rounded-xl border border-edge bg-surface p-4"
+            className="space-y-4 rounded-xl border border-edge bg-surface p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-fg-muted">Feature name</span>
+                  <span className="mb-1.5 block text-xs font-medium text-fg-muted">
+                    Feature name
+                  </span>
                   <input
                     className={inputClass}
                     data-testid={`feature-name-${fi}`}
@@ -371,10 +377,7 @@ export function RequirementsForm({
                   />
                 </label>
                 {fe?.name ? (
-                  <p
-                    className="mt-1 text-xs text-rose-400"
-                    data-testid={`feature-name-error-${fi}`}
-                  >
+                  <p className="mt-1 text-xs text-danger" data-testid={`feature-name-error-${fi}`}>
                     {fe.name}
                   </p>
                 ) : null}
@@ -384,15 +387,17 @@ export function RequirementsForm({
                   size="sm"
                   variant="ghost"
                   data-testid={`remove-feature-${fi}`}
+                  className="mt-5 hover:text-danger"
                   onClick={() => setFeatures((prev) => prev.filter((x) => x.key !== f.key))}
                 >
+                  <Trash2 aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
                   Remove
                 </Button>
               ) : null}
             </div>
 
             <label className="block text-sm">
-              <span className="mb-1 block text-fg-muted">Description</span>
+              <span className="mb-1.5 block text-xs font-medium text-fg-muted">Description</span>
               <textarea
                 className={inputClass}
                 data-testid={`feature-desc-${fi}`}
@@ -420,9 +425,7 @@ export function RequirementsForm({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-fg-subtle">
-                  Acceptance criteria
-                </span>
+                <span className="text-xs font-medium text-fg-muted">Acceptance criteria</span>
                 {onSuggest ? (
                   <Button
                     size="sm"
@@ -432,18 +435,25 @@ export function RequirementsForm({
                     onClick={() => void runSuggest(f)}
                   >
                     {suggesting === f.key ? (
-                      <span className="flex items-center gap-1">
-                        <Spinner /> Suggesting…
+                      <span className="flex items-center gap-1.5">
+                        <Spinner size="sm" /> Suggesting…
                       </span>
                     ) : (
-                      'Suggest (AI)'
+                      <>
+                        <Sparkles
+                          aria-hidden
+                          className="h-3.5 w-3.5 text-brand-text"
+                          strokeWidth={1.75}
+                        />
+                        Suggest (AI)
+                      </>
                     )}
                   </Button>
                 ) : null}
               </div>
-              <p className="text-xs text-fg-subtle">{KIND_HELP}</p>
+              <p className="text-2xs text-fg-subtle">{KIND_HELP}</p>
               {fe?.criteria ? (
-                <p className="text-xs text-rose-400" data-testid={`criteria-error-${fi}`}>
+                <p className="text-xs text-danger" data-testid={`criteria-error-${fi}`}>
                   {fe.criteria}
                 </p>
               ) : null}
@@ -466,7 +476,7 @@ export function RequirementsForm({
                       }
                     />
                     <select
-                      className={`${inputClass} w-24`}
+                      className={cn(inputClass, 'w-24 shrink-0')}
                       data-testid={`criterion-kind-${fi}-${ci}`}
                       value={c.kind}
                       onChange={(e) =>
@@ -487,6 +497,8 @@ export function RequirementsForm({
                     <Button
                       size="sm"
                       variant="ghost"
+                      aria-label="Remove criterion"
+                      className="w-7 px-0 hover:text-danger"
                       data-testid={`remove-criterion-${fi}-${ci}`}
                       onClick={() =>
                         patch(f.key, (cur) => ({
@@ -495,12 +507,12 @@ export function RequirementsForm({
                         }))
                       }
                     >
-                      ✕
+                      <X aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
                     </Button>
                   </div>
                   {fe?.criterionText[c.key] ? (
                     <p
-                      className="text-xs text-rose-400"
+                      className="text-xs text-danger"
                       data-testid={`criterion-text-error-${fi}-${ci}`}
                     >
                       {fe.criterionText[c.key]}
@@ -516,7 +528,8 @@ export function RequirementsForm({
                   patch(f.key, (cur) => ({ ...cur, criteria: [...cur.criteria, criterion()] }))
                 }
               >
-                + Add criterion
+                <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+                Add criterion
               </Button>
             </div>
           </section>
@@ -529,7 +542,8 @@ export function RequirementsForm({
           data-testid="add-feature"
           onClick={() => setFeatures((prev) => [...prev, feature()])}
         >
-          + Add feature
+          <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+          Add feature
         </Button>
         <div className="flex gap-2">
           {onCancel ? (
@@ -544,7 +558,7 @@ export function RequirementsForm({
       </div>
 
       {errored && !errors.form ? (
-        <p className="text-right text-xs text-rose-400">Fix the highlighted fields above.</p>
+        <p className="text-right text-xs text-danger">Fix the highlighted fields above.</p>
       ) : null}
     </div>
   );
@@ -567,8 +581,8 @@ function EditableList({
 }): JSX.Element {
   return (
     <div className="space-y-1">
-      <span className="text-xs uppercase tracking-wide text-fg-subtle">{label}</span>
-      <p className="text-xs text-fg-subtle">{help}</p>
+      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <p className="text-2xs text-fg-subtle">{help}</p>
       {items.map((it, i) => (
         <div key={it.key} className="flex items-center gap-2">
           <input
@@ -582,10 +596,12 @@ function EditableList({
           <Button
             size="sm"
             variant="ghost"
+            aria-label={`Remove ${label.toLowerCase()} item`}
+            className="w-7 px-0 hover:text-danger"
             data-testid={`remove-${testid}-${i}`}
             onClick={() => onChange(items.filter((x) => x.key !== it.key))}
           >
-            ✕
+            <X aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
           </Button>
         </div>
       ))}
@@ -595,7 +611,8 @@ function EditableList({
         data-testid={`add-${testid}`}
         onClick={() => onChange([...items, item()])}
       >
-        + Add {label.toLowerCase()}
+        <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+        Add {label.toLowerCase()}
       </Button>
     </div>
   );

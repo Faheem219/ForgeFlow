@@ -86,10 +86,7 @@ export function FocusOverlay({ open, title, onClose, children }: FocusOverlayPro
       {/* Inert, stateless, and therefore safe to portal. */}
       {open
         ? createPortal(
-            <div
-              aria-hidden
-              className="fixed inset-0 z-40 bg-surface-sunken/95 backdrop-blur-sm"
-            />,
+            <div aria-hidden className="fixed inset-0 z-40 animate-ff-fade bg-surface-canvas/90" />,
             document.body,
           )
         : null}
@@ -101,22 +98,23 @@ export function FocusOverlay({ open, title, onClose, children }: FocusOverlayPro
         data-testid={open ? 'focus-overlay' : undefined}
         className={cn(
           'flex min-h-0 flex-1 flex-col',
-          open &&
-            'fixed inset-3 z-50 overflow-hidden rounded-xl border border-edge-strong bg-surface shadow-2xl',
+          open && 'fixed inset-3 z-50 overflow-hidden rounded-xl bg-surface shadow-pop',
         )}
       >
         {open ? (
-          <div className="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2">
-            <span className="text-sm font-medium text-fg">{title}</span>
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-edge px-3">
+            <span className="text-[13px] font-medium text-fg">{title}</span>
             <button
               type="button"
               onClick={onClose}
               data-testid="focus-close"
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-fg-muted hover:bg-surface-raised hover:text-fg"
+              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
             >
               <X aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
               Close
-              <kbd className="ml-1 rounded border border-edge px-1 text-[10px]">Esc</kbd>
+              <kbd className="ml-0.5 inline-flex h-[18px] items-center rounded border border-edge bg-surface-raised px-1 font-sans text-2xs text-fg-subtle">
+                Esc
+              </kbd>
             </button>
           </div>
         ) : null}
@@ -154,7 +152,7 @@ export function FocusButton({
       data-testid={testId}
       title={`${label} — full window`}
       aria-label={`${label} — full window`}
-      className="rounded p-1 text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg motion-reduce:transition-none"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-fg/[0.07] hover:text-fg motion-reduce:transition-none"
     >
       <svg
         aria-hidden

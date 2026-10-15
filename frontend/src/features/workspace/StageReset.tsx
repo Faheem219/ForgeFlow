@@ -35,10 +35,10 @@ export function ResetDeployDialog({
         </>
       }
     >
-      <ul className="space-y-1 rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-xs text-fg-muted">
-        <li>· Your app&apos;s database and its data are not touched</li>
-        <li>· Build and Test keep their status and their work</li>
-        <li>· You can deploy again straight away</li>
+      <ul className="list-disc space-y-1 rounded-lg bg-fg/[0.04] py-2.5 pl-7 pr-3 text-xs text-fg-muted marker:text-fg-faint">
+        <li>Your app&apos;s database and its data are not touched</li>
+        <li>Build and Test keep their status and their work</li>
+        <li>You can deploy again straight away</li>
       </ul>
     </ConfirmDialog>
   );
@@ -69,7 +69,7 @@ export function ResetStageButton({
     <>
       <Button
         size="sm"
-        variant="secondary"
+        variant="ghost"
         disabled={disabled || reset.isPending}
         title={resetHint(stage)}
         data-testid={`${stage}-reset`}

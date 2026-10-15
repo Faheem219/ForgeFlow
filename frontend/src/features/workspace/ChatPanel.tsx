@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, SendHorizontal } from 'lucide-react';
+import { ArrowUp, ChevronDown, MessageSquareText, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button, Kbd, Spinner } from '../../components/ui';
@@ -9,14 +9,19 @@ import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { toast } from '../../lib/stores/toastStore';
 import type { MessageDto, MessageRole, Stage } from '../../lib/types';
 import { deriveTaskStream } from '../../lib/useTaskStream';
+import { useNarrow } from '../../lib/useNarrow';
 import { listMessages, submitIntent } from './api';
 import { STAGE_LABELS } from './stageMeta';
 
+/*
+ * Only conversation gets a bubble. A tool call is a log line the agent left behind, so it reads as
+ * one — small, monospaced, unboxed — and a system note sits centred between turns, like a divider.
+ */
 const ROLE_STYLES: Record<MessageRole, string> = {
-  user: 'bg-brand/15 text-fg self-end rounded-2xl rounded-br-md',
-  assistant: 'bg-surface-raised text-fg self-start rounded-2xl rounded-bl-md',
-  system: 'bg-surface-raised text-fg-muted self-start italic rounded-2xl',
-  tool: 'bg-surface-raised text-success self-start font-mono text-xs rounded-2xl rounded-bl-md',
+  user: 'max-w-[88%] self-end rounded-2xl rounded-br-md bg-brand/[0.16] px-3.5 py-2 text-fg',
+  assistant: 'max-w-[92%] self-start rounded-2xl rounded-bl-md bg-fg/[0.045] px-3.5 py-2 text-fg',
+  system: 'max-w-full self-center px-2 text-center text-2xs italic text-fg-subtle',
+  tool: 'max-w-full self-start font-mono text-2xs text-fg-subtle',
 };
 
 interface ChatPanelProps {
@@ -26,6 +31,8 @@ interface ChatPanelProps {
 
 export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Element {
   const queryClient = useQueryClient();
+  // Below ~300px the shortcut hint cannot fit on one line; Enter-to-send is convention enough.
+  const [formRef, narrow] = useNarrow<HTMLFormElement>(300);
   const [draft, setDraft] = useState('');
   const [activityOpen, setActivityOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -118,48 +125,64 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
     // `min-h-0` all the way down is what lets the transcript scroll instead of growing the column
     // and shoving the composer out of view — the failure this layout previously had.
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-edge px-4 py-2 text-xs font-medium uppercase tracking-wide text-fg-subtle">
-        {STAGE_LABELS[activeStage]} conversation
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-edge px-3.5">
+        <MessageSquareText aria-hidden className="h-3.5 w-3.5 text-fg-subtle" strokeWidth={1.75} />
+        <span className="text-xs font-medium text-fg-muted">
+          {STAGE_LABELS[activeStage]} conversation
+        </span>
       </div>
 
       <div
         data-testid="chat-messages"
-        className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-4"
+        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto px-3.5 py-4"
       >
         {messages.length === 0 && !hasStream ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/10 text-brand-text ring-1 ring-inset ring-brand/20">
-              <SendHorizontal aria-hidden className="h-5 w-5" strokeWidth={1.5} />
-            </span>
-            <p className="max-w-[16rem] text-sm text-fg-subtle">
-              No messages yet. Say something to get started.
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+            <MessageSquareText aria-hidden className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-fg">No messages yet</p>
+            <p className="max-w-[15rem] text-xs leading-relaxed text-fg-subtle">
+              Say something to get started — whatever you ask for applies to{' '}
+              {STAGE_LABELS[activeStage]}.
             </p>
           </div>
         ) : (
-          messages.map((m) => (
-            <div
-              key={m.id}
-              className={cn(
-                'max-w-[85%] whitespace-pre-wrap break-words px-3.5 py-2 text-sm',
-                ROLE_STYLES[m.role],
-              )}
-            >
-              {m.content}
-            </div>
-          ))
+          messages.map((m) =>
+            m.role === 'tool' ? (
+              <div key={m.id} className={cn('flex items-start gap-1.5', ROLE_STYLES.tool)}>
+                <Wrench
+                  aria-hidden
+                  className="mt-0.5 h-3 w-3 shrink-0 text-fg-faint"
+                  strokeWidth={2}
+                />
+                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {m.content}
+                </span>
+              </div>
+            ) : (
+              <div
+                key={m.id}
+                className={cn(
+                  'whitespace-pre-wrap break-words text-[13px] leading-relaxed',
+                  ROLE_STYLES[m.role],
+                )}
+              >
+                {m.content}
+              </div>
+            ),
+          )
         )}
 
         {/* The agent's in-flight answer lives in the transcript (not a cramped strip below it), so
             a long build plan simply scrolls like any other message. */}
         {hasStream ? (
-          <div className="max-w-[85%] self-start rounded-2xl rounded-bl-md bg-surface-raised px-3.5 py-2">
-            <p className="mb-1 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-fg-subtle">
+          <div className="max-w-[92%] self-start rounded-2xl rounded-bl-md bg-fg/[0.045] px-3.5 py-2">
+            <p className="mb-1 flex items-center gap-1.5 text-2xs font-medium text-brand-text">
               <Spinner size="sm" />
-              streaming
+              Streaming
             </p>
             <p
               data-testid="chat-stream"
-              className="whitespace-pre-wrap break-words text-sm text-fg"
+              className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg"
             >
               {streamed}
             </p>
@@ -175,25 +198,28 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
             aria-expanded={activityOpen}
             data-testid="chat-activity-toggle"
             onClick={() => setActivityOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs font-medium uppercase tracking-wide text-fg-subtle transition-colors hover:bg-surface-raised"
+            className="flex h-8 w-full items-center gap-2 px-3.5 text-left text-2xs font-medium text-fg-subtle transition-colors hover:bg-fg/[0.03] hover:text-fg-muted"
           >
             Activity
-            <span className="rounded-full bg-surface-raised px-1.5 text-[10px] text-fg-muted">
+            <span className="rounded bg-fg/[0.07] px-1 tabular-nums text-fg-muted">
               {activity.length}
             </span>
-            <span className="ml-auto" aria-hidden>
-              {activityOpen ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'ml-auto h-3.5 w-3.5 transition-transform duration-200',
+                activityOpen ? 'rotate-180' : '',
               )}
-            </span>
+            />
           </button>
           {activityOpen ? (
-            <ul className="max-h-24 space-y-0.5 overflow-auto px-4 pb-2">
+            <ul className="max-h-28 space-y-0.5 overflow-auto px-3.5 pb-2">
               {activity.slice(-8).map((e) => (
-                <li key={`${e.project_id}-${e.seq}`} className="text-xs text-fg-subtle">
-                  <span className="text-fg-muted">{e.event}</span>
+                <li
+                  key={`${e.project_id}-${e.seq}`}
+                  className="truncate font-mono text-2xs text-fg-faint"
+                >
+                  <span className="text-fg-subtle">{e.event}</span>
                   {e.stage ? ` · ${e.stage}` : ''}
                 </li>
               ))}
@@ -202,8 +228,10 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
         </div>
       ) : null}
 
-      <form onSubmit={onSubmit} className="shrink-0 border-t border-edge p-3">
-        <div className="flex items-end gap-2">
+      <form ref={formRef} onSubmit={onSubmit} className="shrink-0 border-t border-edge p-2.5">
+        {/* One field: the send control lives inside the composer's frame, so the pair reads as a
+            single object and the focus ring wraps both. */}
+        <div className="flex items-end gap-1.5 rounded-xl border border-edge-strong bg-surface-sunken/50 p-1.5 transition-[border-color,box-shadow] duration-150 focus-within:border-brand/60 focus-within:shadow-[0_0_0_3px_rgb(var(--ff-brand)/0.15)]">
           <textarea
             ref={composerRef}
             aria-label="Message"
@@ -212,20 +240,31 @@ export function ChatPanel({ projectId, activeStage }: ChatPanelProps): JSX.Eleme
             onKeyDown={onComposerKeyDown}
             placeholder={`Refine ${STAGE_LABELS[activeStage]}…`}
             rows={2}
-            className="flex-1 resize-none rounded-xl border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg placeholder:text-fg-faint outline-none transition-colors focus:border-brand"
+            className="min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-1 text-[13px] leading-relaxed text-fg outline-none placeholder:text-fg-faint focus-visible:shadow-none"
           />
           <Button
             type="submit"
             aria-label="Send"
             loading={send.isPending}
             disabled={!draft.trim()}
-            className="h-9 w-9 shrink-0 px-0"
+            className="h-8 w-8 shrink-0 rounded-lg px-0"
           >
-            {send.isPending ? null : <SendHorizontal aria-hidden className="h-4 w-4" />}
+            {send.isPending ? null : <ArrowUp aria-hidden className="h-4 w-4" strokeWidth={2.25} />}
           </Button>
         </div>
-        <p className="mt-1.5 flex items-center gap-1 text-[11px] text-fg-faint">
-          <Kbd>Enter</Kbd> to send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> for a new line
+        <p
+          className={cn(
+            'mt-1.5 items-center gap-1 overflow-hidden whitespace-nowrap px-1 text-2xs text-fg-faint [&>*]:shrink-0',
+            narrow ? 'hidden' : 'flex',
+          )}
+        >
+          <Kbd>Enter</Kbd> send
+          <span aria-hidden className="mx-0.5">
+            ·
+          </span>
+          <Kbd>Shift</Kbd>
+          <span aria-hidden>+</span>
+          <Kbd>Enter</Kbd> new line
         </p>
       </form>
     </div>

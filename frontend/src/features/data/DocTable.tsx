@@ -1,4 +1,12 @@
-import { ChevronDown, ChevronUp, ChevronsUpDown, Inbox } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
+  Inbox,
+  Trash2,
+} from 'lucide-react';
 
 import { Button, EmptyState, Skeleton } from '../../components/ui';
 import type { DataDocument, DocumentPageDto } from '../../lib/types';
@@ -39,7 +47,7 @@ export function DocTable({
   if (!page || page.documents.length === 0) {
     return (
       <EmptyState
-        icon={<Inbox aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+        icon={<Inbox aria-hidden strokeWidth={1.5} />}
         title="No documents"
         description="Nothing matches here yet. Create one, or clear the filter."
       />
@@ -52,12 +60,12 @@ export function DocTable({
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-lg border border-edge">
         <table className="w-full min-w-max text-left text-xs" data-testid="doc-table">
-          <thead className="bg-surface text-fg-muted">
+          <thead className="sticky top-0 bg-fg/[0.03] text-fg-subtle">
             <tr>
               {columns.map((column) => {
                 const active = sort?.field === column;
                 return (
-                  <th key={column} className="px-2 py-1.5 font-medium">
+                  <th key={column} className="px-3 py-2 font-medium">
                     <button
                       type="button"
                       data-testid={`sort-${column}`}
@@ -81,24 +89,27 @@ export function DocTable({
                   </th>
                 );
               })}
-              <th className="px-2 py-1.5 text-right font-medium">Actions</th>
+              <th className="px-3 py-2 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {page.documents.map((doc) => (
               <tr
                 key={String(doc._id)}
-                className="border-t border-edge/60 hover:bg-surface"
+                className="group border-t border-edge transition-colors hover:bg-fg/[0.025]"
                 data-testid={`doc-row-${String(doc._id)}`}
               >
                 {columns.map((column) => (
-                  <td key={column} className="max-w-[16rem] truncate px-2 py-1.5 text-fg-muted">
+                  <td
+                    key={column}
+                    className="max-w-[16rem] truncate px-3 py-1.5 font-mono text-2xs text-fg-muted first:text-fg-subtle"
+                  >
                     {formatCell(doc[column])}
                   </td>
                 ))}
-                <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                <td className="whitespace-nowrap px-2 py-1 text-right">
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="ghost"
                     data-testid={`view-${String(doc._id)}`}
                     onClick={() => onView(doc)}
@@ -106,11 +117,13 @@ export function DocTable({
                     View
                   </Button>
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="ghost"
                     data-testid={`delete-${String(doc._id)}`}
+                    className="hover:bg-danger/10 hover:text-danger"
                     onClick={() => onDelete(doc)}
                   >
+                    <Trash2 aria-hidden className="h-3 w-3" strokeWidth={1.75} />
                     Delete
                   </Button>
                 </td>
@@ -121,11 +134,11 @@ export function DocTable({
       </div>
 
       <div className="flex items-center justify-between text-xs text-fg-subtle">
-        <span data-testid="doc-count">
+        <span data-testid="doc-count" className="tabular-nums">
           {page.total} {page.total === 1 ? 'document' : 'documents'} · page {page.page} of{' '}
           {page.pages}
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Button
             size="sm"
             variant="secondary"
@@ -133,6 +146,7 @@ export function DocTable({
             data-testid="page-prev"
             onClick={() => onPageChange(page.page - 1)}
           >
+            <ChevronLeft aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
             Previous
           </Button>
           <Button
@@ -143,6 +157,7 @@ export function DocTable({
             onClick={() => onPageChange(page.page + 1)}
           >
             Next
+            <ChevronRight aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
           </Button>
         </div>
       </div>

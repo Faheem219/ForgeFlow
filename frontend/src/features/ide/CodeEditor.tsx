@@ -26,16 +26,36 @@ export function CodeEditor({ path, value, readOnly, onChange }: CodeEditorProps)
       theme={MONACO_THEMES[resolved]}
       value={value}
       onChange={(next) => onChange(next ?? '')}
-      loading={<Spinner />}
+      loading={
+        <span className="text-fg-faint">
+          <Spinner />
+        </span>
+      }
+      // The webfont may land after Monaco first measures its glyphs; re-measuring once it has
+      // loaded keeps the cursor and selection aligned with the characters actually drawn.
+      onMount={(_editor, monaco) => {
+        void document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
+      }}
       options={{
         readOnly,
+        fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: 13,
+        lineHeight: 20,
+        fontLigatures: false,
+        padding: { top: 10, bottom: 10 },
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         automaticLayout: true,
         tabSize: 2,
         renderLineHighlight: 'line',
         smoothScrolling: true,
+        cursorBlinking: 'smooth',
+        cursorSmoothCaretAnimation: 'on',
+        overviewRulerBorder: false,
+        hideCursorInOverviewRuler: true,
+        guides: { indentation: true, bracketPairs: false },
+        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
+        stickyScroll: { enabled: false },
       }}
     />
   );

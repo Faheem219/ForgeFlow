@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, CircleCheck, CircleMinus, CircleX, FlaskConical, Play } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { Badge, Button, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Button, EmptyState, Spinner, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import type { TestResultDto, TestRunDto, TestRunSummaryDto, TestScope } from '../../lib/types';
@@ -14,6 +16,12 @@ const STATUS_TONES = {
 } as const;
 
 const SCOPES: TestScope[] = ['all', 'unit', 'e2e'];
+
+const STATUS_ICONS = {
+  passed: { icon: CircleCheck, tone: 'text-success' },
+  failed: { icon: CircleX, tone: 'text-danger' },
+  skipped: { icon: CircleMinus, tone: 'text-fg-faint' },
+} as const;
 
 /** Group results by their source file so a failure reads in the context of its suite. */
 function groupByFile(results: TestResultDto[]): Array<[string, TestResultDto[]]> {
@@ -30,10 +38,10 @@ function groupByFile(results: TestResultDto[]): Array<[string, TestResultDto[]]>
 function FailureDetail({ result }: { result: TestResultDto }): JSX.Element | null {
   if (!result.failure) return null;
   return (
-    <div className="mt-1 space-y-1 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs">
+    <div className="mb-1.5 ml-7 mt-1 space-y-1.5 rounded-lg border border-danger/20 bg-danger/[0.06] p-2.5 text-xs">
       <p className="font-medium text-danger">{result.failure.message}</p>
       {result.failure.stack ? (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-fg-muted">
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunken/60 p-2 font-mono text-2xs leading-relaxed text-fg-muted">
           {result.failure.stack}
         </pre>
       ) : null}
@@ -103,7 +111,8 @@ export function ResultsPanel({
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-fg">
+          <FlaskConical aria-hidden className="h-3.5 w-3.5 text-fg-subtle" strokeWidth={1.75} />
           Tests
           {latest ? (
             <span data-testid="test-summary">
@@ -120,7 +129,7 @@ export function ResultsPanel({
             value={scope}
             onChange={(e) => setScope(e.target.value as TestScope)}
             disabled={execute.isPending}
-            className="rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
+            className={cn(fieldClasses, 'h-7 w-auto py-0 text-xs')}
           >
             {SCOPES.map((s) => (
               <option key={s} value={s}>
@@ -135,14 +144,16 @@ export function ResultsPanel({
             onChange={(e) => setFilter(e.target.value)}
             placeholder="filter…"
             disabled={execute.isPending}
-            className="w-28 rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
+            className={cn(fieldClasses, 'h-7 w-28 py-0 text-xs')}
           />
           <Button
             size="sm"
+            variant="secondary"
             disabled={execute.isPending}
             data-testid="run-tests"
             onClick={() => execute.mutate()}
           >
+            {execute.isPending ? null : <Play aria-hidden className="h-3 w-3" strokeWidth={2} />}
             {execute.isPending ? 'Running…' : 'Run tests'}
           </Button>
         </div>
@@ -150,34 +161,57 @@ export function ResultsPanel({
 
       {execute.isPending ? (
         <div className="flex items-center gap-2 text-xs text-fg-muted" data-testid="tests-running">
-          <Spinner /> Running the suites in the sandbox…
+          <span className="text-brand-text">
+            <Spinner size="sm" />
+          </span>
+          Running the suites in the sandbox…
         </div>
       ) : null}
 
       {!latest ? (
         <EmptyState title="No test runs yet" description="Run the suites to see results here." />
       ) : (
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto" data-testid="test-results">
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto" data-testid="test-results">
           {grouped.map(([file, results]) => (
-            <section key={file} className="rounded-xl border border-edge p-2">
-              <h4 className="mb-1 font-mono text-xs text-fg-subtle">{file}</h4>
-              <ul className="space-y-1">
+            <section key={file}>
+              <h4 className="mb-1 truncate px-1 font-mono text-2xs text-fg-faint" title={file}>
+                {file}
+              </h4>
+              <ul className="overflow-hidden rounded-lg border border-edge">
                 {results.map((result) => {
                   const id = `${file}::${result.name}`;
                   const open = expanded === id;
+                  const { icon: StatusIcon, tone } = STATUS_ICONS[result.status];
                   return (
-                    <li key={id}>
+                    <li key={id} className="border-b border-edge last:border-b-0">
                       <button
                         type="button"
                         data-testid={`test-${result.status}`}
+                        aria-expanded={result.failure ? open : undefined}
                         onClick={() => setExpanded(open ? null : id)}
-                        className="flex w-full items-start justify-between gap-2 rounded-lg px-2 py-1 text-left text-sm hover:bg-surface-raised"
+                        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-fg/[0.03]"
                       >
-                        <span className="text-fg">{result.name}</span>
-                        <span className="flex shrink-0 items-center gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <StatusIcon
+                            aria-hidden
+                            className={cn('h-3.5 w-3.5 shrink-0', tone)}
+                            strokeWidth={2}
+                          />
+                          <span className="truncate text-fg">{result.name}</span>
+                          {result.failure ? (
+                            <ChevronRight
+                              aria-hidden
+                              className={cn(
+                                'h-3 w-3 shrink-0 text-fg-faint transition-transform duration-150',
+                                open && 'rotate-90',
+                              )}
+                            />
+                          ) : null}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
                           {result.criterion_id ? (
                             <span
-                              className="font-mono text-[11px] text-fg-subtle"
+                              className="font-mono text-2xs text-fg-faint"
                               title="Acceptance criterion"
                             >
                               {result.criterion_id}
@@ -209,7 +243,7 @@ export function ResultsPanel({
           {showStdout ? (
             <pre
               data-testid="test-stdout"
-              className="max-h-48 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2 font-mono text-[11px] text-fg-muted"
+              className="max-h-48 overflow-auto rounded-lg border border-edge bg-surface-sunken p-2.5 font-mono text-2xs leading-relaxed text-fg-muted"
             >
               {stdoutQuery.isFetching ? 'Loading…' : (stdoutQuery.data?.stdout ?? '(no output)')}
             </pre>

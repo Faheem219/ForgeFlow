@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MousePointerClick, Rocket } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, Modal } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
@@ -19,6 +21,7 @@ import { listCredentials } from '../settings/api';
 import { listStages, submitIntent } from '../workspace/api';
 import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES, prereqUnmet } from '../workspace/stageMeta';
+import { StageHeader } from '../workspace/StageHeader';
 import { NodeDrawer } from './NodeDrawer';
 import { Topology } from './Topology';
 import { deleteDeployment, getDeployConfig, getLatestDeployment } from './api';
@@ -226,91 +229,102 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
   const hasDeployed = Boolean(deployment) && deployment?.status !== 'deleted';
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Deploy
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Deploy"
+        status={
           <span data-testid="deploy-stage-status">
             <Badge tone={STATUS_TONES[stageStatus]}>{STATUS_LABELS[stageStatus]}</Badge>
           </span>
-          {overall ? (
+        }
+        meta={
+          overall ? (
             <span data-testid="deploy-overall-status">
-              <Badge tone={OVERALL_TONES[overall]}>{overall}</Badge>
+              <Badge tone={OVERALL_TONES[overall]} dot>
+                {overall}
+              </Badge>
             </span>
-          ) : null}
-        </span>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-edge-strong p-0.5" role="group">
-            {MODES.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                title={m.hint}
-                data-testid={`deploy-mode-${m.value}`}
-                aria-pressed={mode === m.value}
-                onClick={() => setMode(m.value)}
-                className={`rounded-md px-2.5 py-1 text-xs transition ${
-                  mode === m.value ? 'bg-brand text-white' : 'text-fg-muted hover:bg-surface-raised'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          {/* Unlike Delete, a reset leaves no trace in this panel: Deploy and Validate read as never
-              run, so the next deploy is shown fresh. */}
-          <ResetStageButton
-            projectId={projectId}
-            stage="deploy"
-            status={stageStatus}
-            disabled={busy || remove.isPending}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={intent.isPending}
-            data-testid="deploy-skip"
-            onClick={() => intent.mutate({ stage: 'deploy', action: 'skip' })}
-          >
-            Skip
-          </Button>
-          {hasDeployed ? (
+          ) : null
+        }
+        actions={
+          <>
+            <div className="flex items-center gap-0.5 rounded-lg bg-fg/[0.05] p-0.5" role="group">
+              {MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  title={m.hint}
+                  data-testid={`deploy-mode-${m.value}`}
+                  aria-pressed={mode === m.value}
+                  onClick={() => setMode(m.value)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                    mode === m.value
+                      ? 'bg-surface text-fg shadow-raise'
+                      : 'text-fg-subtle hover:text-fg-muted',
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <span className="mx-0.5 h-4 w-px bg-edge" aria-hidden />
+            {/* Unlike Delete, a reset leaves no trace in this panel: Deploy and Validate read as
+                never run, so the next deploy is shown fresh. */}
+            <ResetStageButton
+              projectId={projectId}
+              stage="deploy"
+              status={stageStatus}
+              disabled={busy || remove.isPending}
+            />
             <Button
               size="sm"
-              variant="secondary"
-              disabled={busy || remove.isPending}
-              data-testid="deploy-delete"
-              title="Take the deployment down at the provider. Your data is not touched."
-              onClick={() => setConfirmDelete(true)}
+              variant="ghost"
+              disabled={intent.isPending}
+              data-testid="deploy-skip"
+              onClick={() => intent.mutate({ stage: 'deploy', action: 'skip' })}
             >
-              Delete
+              Skip
             </Button>
-          ) : null}
-          <Button
-            size="sm"
-            disabled={Boolean(deployDisabledReason) || busy}
-            title={deployDisabledReason ?? undefined}
-            data-testid="deploy-run"
-            onClick={runDeploy}
-          >
-            {busy ? 'Deploying…' : hasDeployed ? 'Redeploy' : 'Deploy'}
-          </Button>
-        </div>
-      </header>
+            {hasDeployed ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || remove.isPending}
+                data-testid="deploy-delete"
+                className="text-danger/90 hover:bg-danger/10 hover:text-danger"
+                title="Take the deployment down at the provider. Your data is not touched."
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              disabled={Boolean(deployDisabledReason) || busy}
+              title={deployDisabledReason ?? undefined}
+              data-testid="deploy-run"
+              onClick={runDeploy}
+            >
+              {busy ? null : <Rocket aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />}
+              {busy ? 'Deploying…' : hasDeployed ? 'Redeploy' : 'Deploy'}
+            </Button>
+          </>
+        }
+      />
 
       {/* BYO needs the user's own credentials, and the server can only tell them so *after* they
           press Deploy and a pipeline has started. This says it before. */}
       {isByo && readiness ? (
         <section
-          className="shrink-0 rounded-xl border border-edge bg-surface px-3 py-2"
+          className="shrink-0 rounded-xl border border-edge bg-surface px-3 py-2.5"
           data-testid="byo-readiness"
         >
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-fg-muted">
               Deploying into your own accounts
             </span>
-            <a href="/settings" className="text-[11px] text-brand-text hover:underline">
+            <a href="/settings" className="text-2xs font-medium text-brand-text hover:underline">
               Manage in Settings
             </a>
           </div>
@@ -335,7 +349,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
             ))}
           </ul>
           {readiness.rows.some((r) => !r.required && !r.present) ? (
-            <p className="mt-1.5 text-[11px] text-fg-faint">
+            <p className="mt-2 text-2xs text-fg-faint">
               Without your own MongoDB URI the app uses ForgeFlow&apos;s per-project database.
             </p>
           ) : null}
@@ -344,7 +358,7 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
 
       {deployDisabledReason ? (
         <p
-          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          className="rounded-lg border border-warning/25 bg-warning/[0.08] px-3 py-2 text-xs leading-relaxed text-warning"
           data-testid="deploy-prereq-warning"
         >
           {deployDisabledReason} It is the one ordering ForgeFlow enforces — everything else is
@@ -356,10 +370,15 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           "is it still working?" for the whole run, whatever else you are looking at. */}
       {busy ? (
         <section
-          className="flex shrink-0 justify-center rounded-xl border border-edge bg-surface py-5"
+          className="relative flex shrink-0 items-center gap-3 overflow-hidden rounded-xl border border-edge bg-surface px-3 py-2"
           data-testid="deploy-progress"
         >
-          <AgentWorking label="Deploying" />
+          <div aria-hidden className="absolute inset-x-0 top-0 h-px overflow-hidden">
+            <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-brand-text to-transparent motion-safe:animate-ff-sweep" />
+          </div>
+          <AgentWorking compact label="Deploying" />
+          <span className="text-[13px] font-medium text-fg">Deploying…</span>
+          <span className="text-xs text-fg-subtle">backend, then frontend</span>
         </section>
       ) : null}
 
@@ -378,9 +397,9 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
             ) : null}
           </p>
           <p>
-            <span className="text-fg">Your data is not touched.</span> The project database and
-            everything in it survive — this removes the hosting only, and you can deploy again at
-            any time.
+            <span className="font-medium text-fg">Your data is not touched.</span> The project
+            database and everything in it survive — this removes the hosting only, and you can
+            deploy again at any time.
           </p>
           <div className="flex justify-end gap-2 pt-1">
             <Button
@@ -411,13 +430,26 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
           the logs it was replaced by were themselves clipped at the panel edge. Capping both
           tracks at zero minimum makes the fractions authoritative and moves the overflow inside
           the log box, which is the one element equipped to scroll it. */}
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="min-h-0 min-w-0 overflow-hidden rounded-xl border border-edge bg-surface">
+      {/* The canvas takes the full width until a node is opened; the drawer then claims a third.
+          (The graph refits itself to whatever width it is given.) */}
+      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div
+          className={cn(
+            'relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-edge bg-surface',
+            selectedView ? null : 'lg:col-span-2',
+          )}
+        >
           <Topology snapshot={snapshot} state={live} onSelect={setSelected} />
+          {selectedView ? null : (
+            <p className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-overlay px-3 py-1 text-2xs text-fg-subtle shadow-pop">
+              <MousePointerClick aria-hidden className="h-3 w-3" strokeWidth={1.75} />
+              Select a component to see its URL, wiring and logs.
+            </p>
+          )}
         </div>
 
-        <div className="min-h-0 min-w-0">
-          {selectedView ? (
+        {selectedView ? (
+          <div className="min-h-0 min-w-0">
             <NodeDrawer
               projectId={projectId}
               node={selectedView}
@@ -426,12 +458,8 @@ export function DeployPanel({ projectId }: { projectId: string }): JSX.Element {
               redeployDisabledReason={deployDisabledReason}
               redeploying={busy}
             />
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-edge p-4 text-center text-xs text-fg-subtle">
-              Select a component to see its URL, wiring and logs.
-            </div>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

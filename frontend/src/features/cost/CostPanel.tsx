@@ -24,8 +24,8 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
 
   return (
     <div data-testid={`budget-${label.toLowerCase()}`}>
-      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-        <span className="text-fg-muted">{label}</span>
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-xs">
+        <span className="text-fg-subtle">{label}</span>
         <span className="tabular-nums text-fg-muted">
           {inr(budget.spent_inr)}
           {uncapped ? (
@@ -36,7 +36,7 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
         </span>
       </div>
       {uncapped ? null : (
-        <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+        <div className="h-1 overflow-hidden rounded-full bg-fg/[0.07]">
           {/* Width transitions so a refresh reads as the bar moving, not a redraw. */}
           <div
             className={`h-full rounded-full transition-[width] duration-500 ease-out ${
@@ -47,7 +47,7 @@ function BudgetBar({ label, budget }: { label: string; budget: BudgetDto }): JSX
         </div>
       )}
       {budget.halted || budget.warning ? (
-        <p className="mt-1 flex items-center gap-1.5 text-[11px]">
+        <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-2xs">
           <Badge tone={tone}>{budget.halted ? 'Halted' : 'Approaching cap'}</Badge>
           <span className="text-fg-muted">
             {budget.halted
@@ -98,16 +98,14 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
   if (costQuery.isLoading) {
     // Same bones as the resolved layout, so the numbers land without a jump.
     return (
-      <div className="space-y-3" aria-hidden>
-        <div className="grid grid-cols-3 gap-2">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="space-y-1.5 rounded-lg border border-edge bg-surface px-2 py-2">
-              <Skeleton className="h-2.5 w-12" />
-              <Skeleton className="h-5 w-16" />
-            </div>
-          ))}
-        </div>
-        <Skeleton className="h-16 w-full rounded-lg" />
+      <div className="space-y-2.5" aria-hidden>
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="flex items-center justify-between">
+            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-3.5 w-16" />
+          </div>
+        ))}
+        <Skeleton className="h-10 w-full rounded-lg" />
       </div>
     );
   }
@@ -128,63 +126,62 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
 
   return (
     <div className="space-y-3" data-testid="cost-panel">
-      {/* `min-w-0` on each tile is what keeps this grid inside its pane: a grid track's automatic
-          minimum is its content's width, so one long number pushes the other two tiles out rather
-          than being clipped by its own box. */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Spend</p>
-          <p
-            className="truncate text-lg font-semibold tabular-nums text-fg"
+      {/* Label/value rows rather than three tiles: the rail is narrow and resizable, and side-by-side
+          tiles truncated every figure to "₹…" at its default width. A row never does. */}
+      <dl className="space-y-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-xs text-fg-subtle">Spend</dt>
+          <dd
+            className="truncate text-[13px] font-semibold tabular-nums text-fg"
             data-testid="cost-total"
             title={inr(cost.inr)}
           >
             {inr(cost.inr)}
-          </p>
+          </dd>
         </div>
-        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Tokens</p>
-          <p
-            className="truncate text-lg font-semibold tabular-nums text-fg"
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-xs text-fg-subtle">Tokens</dt>
+          <dd
+            className="truncate text-[13px] tabular-nums text-fg-muted"
             data-testid="cost-tokens"
             title={exactCount(cost.tokens)}
           >
             {compactCount(cost.tokens)}
-          </p>
+          </dd>
         </div>
-        <div className="min-w-0 rounded-lg border border-edge bg-surface px-2 py-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-fg-subtle">Runs</p>
-          <p
-            className="truncate text-lg font-semibold tabular-nums text-fg"
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-xs text-fg-subtle">Runs</dt>
+          <dd
+            className="truncate text-[13px] tabular-nums text-fg-muted"
             data-testid="cost-runs"
             title={exactCount(cost.runs, 'runs')}
           >
             {compactCount(cost.runs)}
-          </p>
+          </dd>
         </div>
-      </div>
+      </dl>
 
-      <div className="space-y-2 rounded-lg border border-edge bg-surface p-2">
+      <div className="space-y-3 rounded-lg bg-fg/[0.03] p-2.5">
         <BudgetBar label="Project" budget={cost.project} />
         <BudgetBar label="Global" budget={cost.global_budget} />
       </div>
 
       {kinds.length > 0 ? (
         <section>
-          <h4 className="mb-1 text-[11px] uppercase tracking-wide text-fg-subtle">By work</h4>
+          <h4 className="mb-1.5 text-2xs font-medium text-fg-faint">By work</h4>
           <ul className="space-y-1" data-testid="cost-by-kind">
             {kinds.map(([kind, stats]) => (
-              <li
-                key={kind}
-                className="flex items-center justify-between gap-2 text-xs"
-                data-testid={`kind-${kind}`}
-              >
-                <span className="min-w-0 flex-1 truncate font-mono text-fg-muted">{kind}</span>
-                <span
-                  className="whitespace-nowrap tabular-nums text-fg-muted"
-                  title={exactCount(stats.tokens)}
-                >
-                  {inr(stats.inr)} · {compactCount(stats.tokens)} tok · {stats.runs}×
+              // Two lines: the work kind gets the full width (it truncated to "codeg…" sharing a
+              // line with three figures at rail width), the figures sit beneath it.
+              <li key={kind} className="text-2xs" data-testid={`kind-${kind}`}>
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate font-mono text-fg-muted" title={kind}>
+                    {kind}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-fg-muted">{inr(stats.inr)}</span>
+                </span>
+                <span className="block tabular-nums text-fg-faint" title={exactCount(stats.tokens)}>
+                  {compactCount(stats.tokens)} tok · {stats.runs}×
                 </span>
               </li>
             ))}
@@ -193,15 +190,15 @@ export function CostPanel({ projectId }: { projectId: string }): JSX.Element {
       ) : null}
 
       <section>
-        <h4 className="mb-1 text-[11px] uppercase tracking-wide text-fg-subtle">Runs</h4>
+        <h4 className="mb-1.5 text-2xs font-medium text-fg-faint">Recent runs</h4>
         {runs.length === 0 ? (
-          <p className="text-xs text-fg-subtle">No runs yet.</p>
+          <p className="text-2xs text-fg-faint">No runs yet.</p>
         ) : (
           <ul className="space-y-1" data-testid="run-explorer">
             {runs.map((run) => (
               <li
                 key={run.id}
-                className="flex items-center justify-between gap-2 rounded border border-edge/60 px-2 py-1 text-xs transition-colors hover:border-edge-strong hover:bg-surface-raised/50"
+                className="-mx-1.5 flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-2xs transition-colors hover:bg-fg/[0.04]"
                 data-testid={`run-${run.id}`}
               >
                 <span className="min-w-0 flex-1 truncate">

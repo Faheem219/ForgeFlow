@@ -4,9 +4,20 @@ import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
 /** Keyboard-key chip, for shortcut hints (`⌘K`, `Esc`). */
-export function Kbd({ children }: { children: ReactNode }): JSX.Element {
+export function Kbd({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}): JSX.Element {
   return (
-    <kbd className="inline-flex min-w-[1.4rem] items-center justify-center rounded border border-edge-strong bg-surface-raised px-1.5 py-0.5 font-sans text-[11px] font-medium text-fg-subtle shadow-[inset_0_-1px_0_rgb(var(--ff-edge-strong))]">
+    <kbd
+      className={cn(
+        'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-edge bg-surface-raised px-1 font-sans text-2xs font-medium leading-none text-fg-subtle',
+        className,
+      )}
+    >
       {children}
     </kbd>
   );
@@ -17,36 +28,49 @@ export function Skeleton({ className }: { className?: string }): JSX.Element {
   return (
     <span
       aria-hidden
-      className={cn('block animate-pulse rounded-md bg-surface-raised', className)}
+      className={cn('block rounded-md bg-fg/[0.06] motion-safe:animate-pulse', className)}
     />
   );
 }
 
 /**
- * Minimal hover/focus tooltip. CSS-driven (group-hover/group-focus) rather than a positioning
- * library — content is short labels, and the trigger wraps its child inline.
+ * Minimal hover/focus tooltip. CSS-driven rather than a positioning library — content is short
+ * labels, and the trigger wraps its child inline. It waits a beat before showing on hover (a toolbar
+ * that flashes labels as the pointer crosses it is noise) but shows at once for keyboard focus.
+ *
+ * The group is *named* (`group/tip`): an unnamed `group` would also fire whenever any ancestor
+ * that happens to be a `group` is hovered — a whole stage row lighting up every tooltip inside it.
  */
 export function Tooltip({
   label,
   side = 'top',
+  align = 'center',
   children,
+  className,
 }: {
   label: string;
-  side?: 'top' | 'bottom';
+  side?: 'top' | 'bottom' | 'right';
+  align?: 'start' | 'center' | 'end';
   children: ReactNode;
+  className?: string;
 }): JSX.Element {
   const id = useId();
   return (
-    <span className="group relative inline-flex" aria-describedby={id}>
+    <span className={cn('group/tip relative inline-flex', className)} aria-describedby={id}>
       {children}
       <span
         id={id}
         role="tooltip"
         className={cn(
-          'pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-md',
-          'border border-edge bg-surface-overlay px-2 py-1 text-xs text-fg shadow-lg',
-          'opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-within:opacity-100',
-          side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+          'pointer-events-none absolute z-50 whitespace-nowrap rounded-md bg-surface-overlay px-2 py-1 text-xs text-fg shadow-pop',
+          'opacity-0 transition-opacity duration-100',
+          'group-hover/tip:opacity-100 group-hover/tip:delay-500 group-focus-within/tip:opacity-100 group-focus-within/tip:delay-0',
+          side === 'top' && 'bottom-full mb-1.5',
+          side === 'bottom' && 'top-full mt-1.5',
+          side === 'right' && 'left-full top-1/2 ml-2 -translate-y-1/2',
+          side !== 'right' && align === 'center' && 'left-1/2 -translate-x-1/2',
+          side !== 'right' && align === 'start' && 'left-0',
+          side !== 'right' && align === 'end' && 'right-0',
         )}
       >
         {label}
@@ -76,7 +100,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="inline-flex items-center gap-0.5 rounded-lg border border-edge bg-surface-sunken p-0.5"
+      className="inline-flex items-center gap-0.5 rounded-lg bg-fg/[0.05] p-0.5"
     >
       {options.map((option) => (
         <button
@@ -88,7 +112,7 @@ export function Segmented<T extends string>({
           className={cn(
             'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
             option.value === value
-              ? 'bg-surface text-fg shadow-sm'
+              ? 'bg-surface text-fg shadow-raise'
               : 'text-fg-subtle hover:text-fg-muted',
           )}
         >
@@ -112,11 +136,11 @@ export function Stat({
   tone?: 'default' | 'success' | 'danger';
 }): JSX.Element {
   return (
-    <div className="rounded-xl border border-edge bg-surface px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-fg-faint">{label}</p>
+    <div className="min-w-0 rounded-xl border border-edge bg-surface px-3.5 py-3">
+      <p className="text-xs text-fg-subtle">{label}</p>
       <p
         className={cn(
-          'text-xl font-semibold tabular-nums',
+          'mt-1 truncate text-xl font-semibold tabular-nums tracking-tight',
           tone === 'success' && 'text-success',
           tone === 'danger' && 'text-danger',
           tone === 'default' && 'text-fg',
@@ -125,7 +149,7 @@ export function Stat({
       >
         {value}
       </p>
-      {detail ? <p className="mt-0.5 text-[11px] text-fg-faint">{detail}</p> : null}
+      {detail ? <p className="mt-0.5 truncate text-2xs text-fg-subtle">{detail}</p> : null}
     </div>
   );
 }

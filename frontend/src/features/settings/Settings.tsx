@@ -1,86 +1,85 @@
-import { ArrowRight, Mail, ShieldCheck } from 'lucide-react';
-import { useRef } from 'react';
+import { ArrowRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Panel } from '../../components/ui';
-import { EASE_OUT, gsap, motionOK, useGSAP } from '../../lib/gsap';
+import { Badge } from '../../components/ui';
 import { useAuthStore } from '../../lib/stores/authStore';
 import Credentials from './Credentials';
 
+/**
+ * One settings section: what it is and why, on the left; the controls on the right. The reading
+ * order a settings page actually needs — the explanation before the inputs, not buried under them.
+ */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: ReactNode;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <section className="grid gap-x-10 gap-y-4 border-t border-edge py-8 first:border-t-0 first:pt-2 md:grid-cols-[15rem_minmax(0,1fr)]">
+      <div>
+        <h2 className="text-sm font-semibold text-fg">{title}</h2>
+        <div className="mt-1 text-[13px] leading-relaxed text-fg-subtle">{description}</div>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
 export default function Settings(): JSX.Element {
   const user = useAuthStore((s) => s.user);
-  const scope = useRef<HTMLDivElement | null>(null);
-
-  // Sections rise in once on entry — same beat as the dashboard, so page changes feel related.
-  useGSAP(
-    () => {
-      if (!motionOK()) return;
-      gsap.from('[data-settings-section]', {
-        opacity: 0,
-        y: 16,
-        duration: 0.45,
-        ease: EASE_OUT,
-        stagger: 0.08,
-        clearProps: 'all',
-      });
-    },
-    { scope },
-  );
 
   return (
-    <div ref={scope} className="mx-auto max-w-4xl space-y-6">
-      <div data-settings-section>
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Settings</h1>
-        <p className="mt-0.5 text-sm text-fg-muted">
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-6">
+        <h1 className="text-[22px] font-semibold tracking-tight text-fg">Settings</h1>
+        <p className="mt-1 text-[13px] text-fg-subtle">
           Your own provider tokens and account. Platform-wide configuration lives in Admin.
         </p>
       </div>
 
-      <div data-settings-section>
+      <Section
+        title="Provider credentials"
+        description="Bring your own Vercel, Render, MongoDB, Stitch or Figma account instead of the platform's."
+      >
         <Credentials />
-      </div>
+      </Section>
 
-      <div data-settings-section>
-        <Panel title="Account">
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center gap-3 rounded-xl border border-edge bg-surface-sunken/50 px-3 py-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-text">
-                <Mail aria-hidden className="h-4 w-4" strokeWidth={1.75} />
-              </span>
-              <span className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-wide text-fg-faint">Signed in as</dt>
-                <dd className="truncate text-sm font-medium text-fg">{user?.email ?? '—'}</dd>
-              </span>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-edge bg-surface-sunken/50 px-3 py-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-text">
-                <ShieldCheck aria-hidden className="h-4 w-4" strokeWidth={1.75} />
-              </span>
-              <span className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-wide text-fg-faint">Role</dt>
-                <dd className="text-sm font-medium capitalize text-fg">{user?.role ?? '—'}</dd>
-              </span>
-            </div>
-          </dl>
-          {user?.role === 'admin' ? (
-            <div className="mt-4 border-t border-edge pt-3">
-              <Link
-                to="/admin"
-                className="group inline-flex items-center gap-1.5 text-sm text-brand-text underline-offset-2 hover:underline"
-              >
-                Open the platform settings
-                <ArrowRight
-                  aria-hidden
-                  className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5"
-                />
-              </Link>
-              <span className="ml-1.5 text-sm text-fg-muted">
-                to configure models, providers, budgets and limits.
-              </span>
-            </div>
-          ) : null}
-        </Panel>
-      </div>
+      <Section title="Account" description="Who you are signed in as, and what you can change.">
+        <dl className="divide-y divide-edge overflow-hidden rounded-xl border border-edge bg-surface">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <dt className="text-[13px] text-fg-subtle">Signed in as</dt>
+            <dd className="truncate text-[13px] font-medium text-fg">{user?.email ?? '—'}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <dt className="text-[13px] text-fg-subtle">Role</dt>
+            <dd>
+              <Badge tone={user?.role === 'admin' ? 'brand' : 'neutral'}>
+                <span className="capitalize">{user?.role ?? '—'}</span>
+              </Badge>
+            </dd>
+          </div>
+        </dl>
+        {user?.role === 'admin' ? (
+          <p className="mt-3 text-[13px] text-fg-subtle">
+            <Link
+              to="/admin"
+              className="group inline-flex items-center gap-1 font-medium text-fg underline-offset-2 hover:underline"
+            >
+              Open the platform settings
+              <ArrowRight
+                aria-hidden
+                className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5"
+              />
+            </Link>{' '}
+            to configure models, providers, budgets and limits.
+          </p>
+        ) : null}
+      </Section>
     </div>
   );
 }

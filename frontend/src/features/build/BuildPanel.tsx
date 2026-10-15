@@ -1,10 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  FileCheck2,
+  Hammer,
+  History,
+  MoreHorizontal,
+  PanelRight,
+  X,
+} from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentWorking } from '../../components/AgentWorking';
 import { Badge, Button, Spinner } from '../../components/ui';
+import { fileIcon } from '../ide/fileIcons';
 import { cn } from '../../lib/cn';
+import { useNarrow } from '../../lib/useNarrow';
 import { ApiError } from '../../lib/apiClient';
 import { advanceCursor } from '../../lib/eventCursor';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
@@ -99,14 +111,33 @@ const STOP_REASON_LABELS: Record<string, string> = {
   failed: 'the build failed part-way',
 };
 
-const PHASE_GLYPH: Record<string, string> = { done: '✓', failed: '✗', pending: '·' };
+/**
+ * A phase's state as a glyph. Still, on purpose: the run strip already has one moving mark, and a
+ * spinner per running phase on top of it made a build feel frantic. A finished phase's check pops in
+ * once — the one moment in the list that deserves a beat.
+ */
+function PhaseGlyph({ status }: { status: string }): JSX.Element {
+  if (status === 'running') {
+    return <span className="h-2.5 w-2.5 rounded-full border-2 border-brand-text" />;
+  }
+  if (status === 'done') {
+    return (
+      <Check className="h-3.5 w-3.5 text-success motion-safe:animate-ff-pop" strokeWidth={2.25} />
+    );
+  }
+  if (status === 'failed') return <X className="h-3.5 w-3.5 text-danger" strokeWidth={2.25} />;
+  return <Circle className="h-2 w-2 text-fg-faint" strokeWidth={3} />;
+}
 
-const PHASE_TONE: Record<string, string> = {
-  done: 'text-success',
-  failed: 'text-danger',
-  running: 'text-brand',
-  pending: 'text-fg-subtle',
-};
+/** A heading inside the run strip — small, quiet, with an optional count. */
+function StripHeading({ children, count }: { children: string; count?: string }): JSX.Element {
+  return (
+    <p className="mb-1 flex items-center gap-1.5 text-2xs font-medium text-fg-faint">
+      {children}
+      {count ? <span className="tabular-nums text-fg-faint/80">{count}</span> : null}
+    </p>
+  );
+}
 
 /**
  * Build stage: the streamed IDE + preview are the hero (full width), with a compact, collapsible
@@ -123,6 +154,26 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
   const [reportOpen, setReportOpen] = useState(false);
   const [runKey, setRunKey] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The last run's phases and files, folded away while idle (always shown during a run).
+  const [runDetailsOpen, setRunDetailsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // The overflow menu dismisses like a real menu: click anywhere else, or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: PointerEvent): void {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const stagesQuery = useQuery({
     queryKey: ['stages', projectId],
@@ -322,43 +373,65 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
     busy,
   ]);
 
+  const donePhases = phaseRows.filter((p) => p.status === 'done').length;
+  const stepIndex = BUILD_STEPS.indexOf(latestStep as (typeof BUILD_STEPS)[number]);
+  // Phases and files sit side by side only when the pane can give each a readable width.
+  const [summaryRef, narrowSummary] = useNarrow<HTMLDivElement>(640);
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Build
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {/* The left group truncates rather than wrapping the actions onto a second row: `flex-1`'s
+          zero basis means only the actions' own width can force a wrap, and `ml-auto` keeps them
+          right-aligned if it ever does. */}
+      <header className="flex min-h-[2.25rem] flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          <h2 className="shrink-0 text-[13px] font-semibold text-fg">Build</h2>
           <span data-testid="build-status">
-            <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
+            <Badge tone={STATUS_TONES[status]} dot={status === 'in_progress'}>
+              {STATUS_LABELS[status]}
+            </Badge>
           </span>
           {busy ? (
             <span
-              className="flex items-center gap-1 text-xs text-fg-muted"
+              className="flex min-w-0 items-center gap-1.5 text-xs text-fg-muted"
               data-testid="build-progress"
             >
-              <Spinner />
-              {activityLabel ? `${activityLabel}…` : 'Generating…'}
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-text" />
+              <span className="truncate">
+                {activityLabel ? `${activityLabel}…` : 'Generating…'}
+              </span>
             </span>
           ) : null}
           {scopeLabel ? (
             <span
-              className="text-xs text-fg-muted"
+              className="min-w-0 truncate text-xs text-fg-subtle"
               data-testid="build-scope"
               title={report?.scope_reason || undefined}
             >
               {scopeLabel}
             </span>
           ) : null}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
             onClick={() => setShowPreview((open) => !open)}
             aria-pressed={showPreview}
             data-testid="toggle-preview"
+            className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150 ${
+              showPreview
+                ? 'bg-fg/[0.08] text-fg'
+                : 'text-fg-subtle hover:bg-fg/[0.04] hover:text-fg-muted'
+            }`}
           >
+            <PanelRight
+              aria-hidden
+              className={`h-3.5 w-3.5 ${showPreview ? 'text-brand-text' : ''}`}
+              strokeWidth={1.75}
+            />
             {showPreview ? 'Hide preview' : 'Preview'}
-          </Button>
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-edge" aria-hidden />
           {/* Approving is the human half of the completion gate: the automated one is strict, and
               when it holds a build the user can see is fine, this is what unblocks deploy without
               paying for another run. Hidden once the stage is already complete. */}
@@ -393,7 +466,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
           ) : (
             <Button
               size="sm"
-              variant="secondary"
+              variant="ghost"
               disabled={busy}
               data-testid="build-skip"
               onClick={() => intent.mutate({ stage: 'build', action: 'skip' })}
@@ -401,284 +474,394 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               Skip
             </Button>
           )}
-          <Button
-            size="sm"
-            disabled={busy}
-            data-testid="build-proceed"
-            onClick={() => intent.mutate({ stage: 'build', action: 'proceed' })}
-          >
-            {hasBuild ? 'Rebuild' : 'Build'}
-          </Button>
-          {hasBuild ? (
-            <div className="relative">
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={busy}
-                aria-label="More build options"
-                aria-expanded={menuOpen}
-                data-testid="build-menu"
-                onClick={() => setMenuOpen((v) => !v)}
-              >
-                <MoreHorizontal aria-hidden className="h-4 w-4" strokeWidth={1.75} />
-              </Button>
-              {menuOpen ? (
-                <div
-                  role="menu"
-                  className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-edge-strong bg-surface-overlay p-1 shadow-xl"
+          <div className="flex items-center" ref={menuRef}>
+            <Button
+              size="sm"
+              disabled={busy}
+              data-testid="build-proceed"
+              className={hasBuild ? 'rounded-r-none' : undefined}
+              onClick={() => intent.mutate({ stage: 'build', action: 'proceed' })}
+            >
+              <Hammer aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
+              {hasBuild ? 'Rebuild' : 'Build'}
+            </Button>
+            {hasBuild ? (
+              <div className="relative">
+                {/* A split button: the build variants hang off the primary action they modify. */}
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  aria-label="More build options"
+                  aria-expanded={menuOpen}
+                  aria-haspopup="menu"
+                  data-testid="build-menu"
+                  className="rounded-l-none border-l border-l-fg-inverted/20 px-1.5"
+                  onClick={() => setMenuOpen((v) => !v)}
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    data-testid="build-fresh"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      intent.mutate({
-                        stage: 'build',
-                        action: 'proceed',
-                        payload: { fresh: true },
-                      });
-                    }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised"
+                  <MoreHorizontal aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+                </Button>
+                {menuOpen ? (
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-30 mt-1.5 w-64 origin-top-right animate-ff-pop rounded-lg bg-surface-overlay p-1 shadow-pop"
                   >
-                    Rebuild from scratch
-                    <span className="mt-0.5 block text-[11px] text-fg-subtle">
-                      Ignore existing feature code and regenerate it.
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    data-testid="build-force-plan"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      intent.mutate({
-                        stage: 'build',
-                        action: 'proceed',
-                        payload: { scope: 'large' },
-                      });
-                    }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-sm text-fg hover:bg-surface-raised"
-                  >
-                    Force a planned build
-                    <span className="mt-0.5 block text-[11px] text-fg-subtle">
-                      Plan the work in phases even if the change looks small.
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-testid="build-fresh"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        intent.mutate({
+                          stage: 'build',
+                          action: 'proceed',
+                          payload: { fresh: true },
+                        });
+                      }}
+                      className="block w-full rounded-md px-2.5 py-2 text-left text-[13px] text-fg transition-colors hover:bg-surface-raised"
+                    >
+                      Rebuild from scratch
+                      <span className="mt-0.5 block text-2xs leading-snug text-fg-subtle">
+                        Ignore existing feature code and regenerate it.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-testid="build-force-plan"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        intent.mutate({
+                          stage: 'build',
+                          action: 'proceed',
+                          payload: { scope: 'large' },
+                        });
+                      }}
+                      className="block w-full rounded-md px-2.5 py-2 text-left text-[13px] text-fg transition-colors hover:bg-surface-raised"
+                    >
+                      Force a planned build
+                      <span className="mt-0.5 block text-2xs leading-snug text-fg-subtle">
+                        Plan the work in phases even if the change looks small.
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
-      {/* Live run telemetry. The plan step writes no files, so without this the panel looks frozen
-          for a long time and then dumps a dozen tabs at once. */}
-      {busy || liveFiles.length > 0 ? (
-        <section
-          className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
-          data-testid="build-activity"
-        >
-          {/*
-            Shown for the WHOLE run, not just until the first file lands.
-
-            It previously collapsed once output appeared, on the reasoning that the file list is
-            more informative. That was wrong: files streaming in do not tell you whether the agent
-            is still working or has stopped, so the indicator disappearing mid-run reads as "done"
-            when it is not. It stays until the run's terminal event clears `busy`.
-          */}
-          {busy ? (
-            <div className="flex justify-center border-b border-edge py-6">
-              <AgentWorking label={activityLabel || 'Starting the build'} />
-            </div>
-          ) : null}
-
-          <div className="flex items-center gap-2 px-4 py-2">
-            {busy ? <Spinner size="sm" /> : null}
-            <span className="text-xs font-medium text-fg-muted" data-testid="build-activity-label">
-              {busy ? `${activityLabel || 'Starting the build'}…` : 'Last run'}
-            </span>
-            {busy && activityTarget ? (
-              <span className="truncate font-mono text-[11px] text-fg-subtle">
-                {activityTarget}
-              </span>
-            ) : null}
-            <span className="text-xs text-fg-subtle" data-testid="build-file-count">
-              {liveFiles.length} file{liveFiles.length === 1 ? '' : 's'} written
-            </span>
-            {busy ? (
-              <span className="ml-auto flex items-center gap-1">
-                {BUILD_STEPS.map((s) => (
-                  <span
-                    key={s}
-                    title={STEP_LABELS[s]}
-                    className={`h-1.5 w-6 rounded-full ${
-                      s === latestStep ? 'bg-brand' : 'bg-surface-raised'
-                    }`}
-                  />
-                ))}
-              </span>
-            ) : null}
-          </div>
-          {/* The phase rail. Rendered only when there are phases, so a pre-phase-56 report leaves
-              this section exactly as it was. Height-capped like the file list below, so it can
-              never steal editor width. */}
-          {phaseRows.length > 0 ? (
-            <ul
-              className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
-              data-testid="build-phase-list"
-            >
-              {phaseRows.map((phase, i) => (
-                <li
-                  key={phase.id}
-                  className={cn(
-                    'flex items-center gap-2 text-[11px]',
-                    // The first phase of a change sits under a hairline, below the history it kept.
-                    i > 0 && phaseRows[i - 1].earlier && !phase.earlier
-                      ? 'mt-1 border-t border-dashed border-edge pt-1'
-                      : '',
-                    phase.earlier ? 'opacity-60' : '',
-                  )}
-                  title={phase.earlier ? 'From an earlier build — kept, not re-run' : undefined}
-                  data-testid="build-phase-row"
-                  data-status={phase.status}
-                  data-earlier={phase.earlier ? 'true' : undefined}
-                >
-                  <span
-                    className={cn('w-3 shrink-0 text-center', PHASE_TONE[phase.status])}
-                    aria-hidden
-                  >
-                    {phase.status === 'running' ? (
-                      <Spinner size="sm" />
-                    ) : (
-                      (PHASE_GLYPH[phase.status] ?? '·')
-                    )}
-                  </span>
-                  <span className="truncate text-fg-muted">{phase.title}</span>
-                  {phase.kind ? <Badge tone="neutral">{phase.kind}</Badge> : null}
-                  {/* phase-64: a phase's evidence, on screen. "0 files · wrote nothing after 2
-                      attempt(s)" is the line that was invisible when every phase read `done`. */}
-                  {phase.fileCount !== undefined ? (
-                    <span
-                      className={cn(
-                        'ml-auto shrink-0 truncate text-[10px]',
-                        phase.fileCount === 0 ? 'text-danger' : 'text-fg-subtle',
-                      )}
-                      data-testid="build-phase-evidence"
-                    >
-                      {phase.fileCount} file{phase.fileCount === 1 ? '' : 's'}
-                      {phase.note ? ` · ${phase.note}` : ''}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {liveFiles.length > 0 ? (
-            <ul
-              className="max-h-24 space-y-0.5 overflow-auto border-t border-edge px-4 py-2"
-              data-testid="build-file-list"
-            >
-              {liveFiles.map((path) => (
-                <li key={path} className="flex items-center gap-2 font-mono text-[11px]">
-                  <span className="text-success" aria-hidden>
-                    +
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void openGeneratedFile(projectId, path)}
-                    className="truncate text-fg-muted hover:text-fg hover:underline"
-                  >
-                    {path}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-      ) : null}
-
-      {/* Compact, collapsible build report — a horizontal strip, so it never steals editor width. */}
-      {report ? (
-        <section
-          className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
-          data-testid="build-report"
-        >
-          <button
-            type="button"
-            aria-expanded={reportOpen}
-            data-testid="build-report-toggle"
-            onClick={() => setReportOpen((v) => !v)}
-            className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-surface-raised"
+      {/*
+        The run summary — live telemetry, then the report — is capped to a share of the panel and
+        scrolls inside it. It used to stack at full height above the editor, so a phased build in
+        flight left the IDE and preview a strip at the bottom of the screen: the summary may grow,
+        but never at the editor's expense.
+      */}
+      <div ref={summaryRef} className="flex max-h-[42%] shrink-0 flex-col gap-2 overflow-y-auto">
+        {/* Live run telemetry. The plan step writes no files, so without this the panel looks
+            frozen for a long time and then dumps a dozen tabs at once. */}
+        {busy || liveFiles.length > 0 ? (
+          <section
+            className="relative shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
+            data-testid="build-activity"
           >
-            <span className="text-xs uppercase tracking-wide text-fg-subtle">Report</span>
-            <span data-testid="build-boot-status">
-              <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'}>{report.boot_status}</Badge>
-            </span>
-            {report.tests_passed !== null ? (
-              <Badge tone={report.tests_passed ? 'success' : 'danger'}>
-                tests {report.tests_passed ? 'passed' : 'failed'}
-              </Badge>
+            {/*
+              Shown for the WHOLE run, not just until the first file lands.
+
+              It previously collapsed once output appeared, on the reasoning that the file list is
+              more informative. That was wrong: files streaming in do not tell you whether the agent
+              is still working or has stopped, so the indicator disappearing mid-run reads as "done"
+              when it is not. It stays until the run's terminal event clears `busy`.
+            */}
+            {busy ? (
+              <div aria-hidden className="absolute inset-x-0 top-0 h-px overflow-hidden">
+                <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-brand-text to-transparent motion-safe:animate-ff-sweep" />
+              </div>
             ) : null}
-            <span className="truncate text-xs text-fg-muted">
-              {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'}{' '}
-              changed
-              {report.commit ? (
-                <span className="ml-2 font-mono text-fg-subtle">{report.commit.slice(0, 8)}</span>
+
+            <div className={cn('flex items-center gap-3 px-3', busy ? 'py-2' : 'h-9')}>
+              {busy ? (
+                <AgentWorking compact label={activityLabel || 'Starting the build'} />
+              ) : (
+                <History
+                  aria-hidden
+                  className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
+                  strokeWidth={1.75}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    'truncate font-medium',
+                    busy ? 'text-[13px] text-fg' : 'text-xs text-fg-muted',
+                  )}
+                  data-testid="build-activity-label"
+                >
+                  {busy ? `${activityLabel || 'Starting the build'}…` : 'Last run'}
+                </p>
+                {busy && activityTarget ? (
+                  <p className="truncate font-mono text-2xs text-fg-subtle">{activityTarget}</p>
+                ) : null}
+              </div>
+              <span
+                className="shrink-0 text-xs tabular-nums text-fg-subtle"
+                data-testid="build-file-count"
+              >
+                {liveFiles.length} file{liveFiles.length === 1 ? '' : 's'} written
+              </span>
+              {busy && stepIndex >= 0 ? (
+                // Filled up to the step in flight, so the bar reads as progress, not as a pointer.
+                <span className="hidden shrink-0 items-center gap-1 sm:flex" aria-hidden>
+                  {BUILD_STEPS.map((s, i) => (
+                    <span
+                      key={s}
+                      title={STEP_LABELS[s]}
+                      className={`h-1 w-5 rounded-full transition-colors duration-300 ${
+                        i < stepIndex
+                          ? 'bg-brand-text/50'
+                          : i === stepIndex
+                            ? 'bg-brand-text'
+                            : 'bg-fg/[0.1]'
+                      }`}
+                    />
+                  ))}
+                </span>
               ) : null}
-            </span>
-            <span className="ml-auto text-fg-subtle" aria-hidden>
-              <ChevronRight
+              {!busy && (phaseRows.length > 0 || liveFiles.length > 0) ? (
+                <button
+                  type="button"
+                  aria-expanded={runDetailsOpen}
+                  aria-label={runDetailsOpen ? 'Hide run details' : 'Show run details'}
+                  title={runDetailsOpen ? 'Hide run details' : 'Show run details'}
+                  onClick={() => setRunDetailsOpen((v) => !v)}
+                  className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-fg/[0.06] hover:text-fg"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      'h-4 w-4 transition-transform duration-200',
+                      runDetailsOpen && 'rotate-180',
+                    )}
+                    strokeWidth={1.75}
+                  />
+                </button>
+              ) : null}
+            </div>
+
+            {phaseRows.length > 0 || liveFiles.length > 0 ? (
+              <div
                 className={cn(
-                  'h-4 w-4 transition-transform duration-150',
-                  reportOpen && 'rotate-90',
+                  'grid border-t border-edge',
+                  // Folded while idle: still mounted (nothing about the run is lost), one click away.
+                  !busy && !runDetailsOpen && 'hidden',
+                  phaseRows.length > 0 && liveFiles.length > 0
+                    ? narrowSummary
+                      ? 'divide-y divide-edge'
+                      : 'grid-cols-2 divide-x divide-edge'
+                    : '',
                 )}
+              >
+                {/* The phase rail. Rendered only when there are phases, so a pre-phase-56 report
+                    leaves this section exactly as it was. Height-capped like the file list, so it
+                    can never steal editor height. */}
+                {phaseRows.length > 0 ? (
+                  <div className="min-w-0 px-3 pb-2 pt-2">
+                    <StripHeading count={`${donePhases}/${phaseRows.length}`}>Phases</StripHeading>
+                    <ul
+                      className="max-h-28 space-y-px overflow-auto"
+                      data-testid="build-phase-list"
+                    >
+                      {phaseRows.map((phase, i) => (
+                        <li
+                          key={phase.id}
+                          className={cn(
+                            'flex h-6 items-center gap-2 text-xs',
+                            // The first phase of a change sits under a hairline, below the history
+                            // it kept.
+                            i > 0 && phaseRows[i - 1].earlier && !phase.earlier
+                              ? 'mt-1 border-t border-dashed border-edge pt-1'
+                              : '',
+                            phase.earlier ? 'opacity-55' : '',
+                          )}
+                          title={
+                            phase.earlier ? 'From an earlier build — kept, not re-run' : undefined
+                          }
+                          data-testid="build-phase-row"
+                          data-status={phase.status}
+                          data-earlier={phase.earlier ? 'true' : undefined}
+                        >
+                          <span className="flex w-3.5 shrink-0 justify-center" aria-hidden>
+                            <PhaseGlyph status={phase.status} />
+                          </span>
+                          <span
+                            className={cn(
+                              'truncate',
+                              phase.status === 'running' ? 'text-fg' : 'text-fg-muted',
+                            )}
+                          >
+                            {phase.title}
+                          </span>
+                          {phase.kind ? <Badge tone="neutral">{phase.kind}</Badge> : null}
+                          {/* phase-64: a phase's evidence, on screen. "0 files · wrote nothing after
+                              2 attempt(s)" is the line that was invisible when every phase read
+                              `done`. */}
+                          {phase.fileCount !== undefined ? (
+                            <span
+                              className={cn(
+                                'ml-auto shrink-0 truncate text-2xs tabular-nums',
+                                phase.fileCount === 0 ? 'text-danger' : 'text-fg-faint',
+                              )}
+                              data-testid="build-phase-evidence"
+                            >
+                              {phase.fileCount} file{phase.fileCount === 1 ? '' : 's'}
+                              {phase.note ? ` · ${phase.note}` : ''}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {liveFiles.length > 0 ? (
+                  <div className="min-w-0 px-3 pb-2 pt-2">
+                    <StripHeading>Files written</StripHeading>
+                    <ul className="max-h-28 space-y-px overflow-auto" data-testid="build-file-list">
+                      {liveFiles.map((path) => {
+                        const { icon: Glyph, tone } = fileIcon(path);
+                        return (
+                          <li
+                            key={path}
+                            className={cn(
+                              '-mx-1.5 flex h-6 min-w-0 items-center gap-1.5 rounded px-1.5',
+                              // A file that lands mid-run glows once, so the eye catches the new
+                              // arrival in a list that is otherwise only growing.
+                              busy && 'motion-safe:animate-ff-flash',
+                            )}
+                          >
+                            <span className="font-mono text-2xs text-success" aria-hidden>
+                              +
+                            </span>
+                            <Glyph
+                              aria-hidden
+                              className={cn('h-3 w-3 shrink-0', tone)}
+                              strokeWidth={1.75}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void openGeneratedFile(projectId, path)}
+                              title={`Open ${path}`}
+                              className="truncate font-mono text-2xs text-fg-muted transition-colors hover:text-fg hover:underline"
+                            >
+                              {path}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* Compact, collapsible build report — a horizontal strip, so it never steals editor width. */}
+        {report ? (
+          <section
+            className="shrink-0 overflow-hidden rounded-xl border border-edge bg-surface"
+            data-testid="build-report"
+          >
+            <button
+              type="button"
+              aria-expanded={reportOpen}
+              data-testid="build-report-toggle"
+              onClick={() => setReportOpen((v) => !v)}
+              className="flex h-9 w-full items-center gap-2 px-3 text-left transition-colors hover:bg-fg/[0.025]"
+            >
+              <FileCheck2
+                aria-hidden
+                className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
                 strokeWidth={1.75}
               />
+              <span className="text-xs font-medium text-fg-muted">Report</span>
+              <span data-testid="build-boot-status">
+                <Badge tone={BOOT_TONES[report.boot_status] ?? 'neutral'} dot>
+                  {report.boot_status}
+                </Badge>
+              </span>
+              {report.tests_passed !== null ? (
+                <Badge tone={report.tests_passed ? 'success' : 'danger'}>
+                  tests {report.tests_passed ? 'passed' : 'failed'}
+                </Badge>
+              ) : null}
+              <span className="truncate text-xs text-fg-subtle">
+                {report.files_changed.length} file{report.files_changed.length === 1 ? '' : 's'}{' '}
+                changed
+                {report.commit ? (
+                  <span className="ml-2 font-mono text-2xs text-fg-faint">
+                    {report.commit.slice(0, 8)}
+                  </span>
+                ) : null}
+              </span>
+              <span className="ml-auto text-fg-faint" aria-hidden>
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 transition-transform duration-200',
+                    reportOpen && 'rotate-180',
+                  )}
+                  strokeWidth={1.75}
+                />
+              </span>
+            </button>
+            {reportOpen ? (
+              <div className="space-y-2.5 border-t border-edge px-3 py-3 text-[13px] leading-relaxed">
+                {report.summary ? <p className="text-fg-muted">{report.summary}</p> : null}
+                {/* Why the build stopped short, in the report's own words (phase-55's vocabulary,
+                    plus phase-56's `phases_incomplete`). Absent on pre-rework reports. */}
+                {report.outcome && report.outcome !== 'complete' && report.stop_reason ? (
+                  <p
+                    className="rounded-md bg-warning/[0.08] px-2.5 py-1.5 text-xs text-warning"
+                    data-testid="build-stop-reason"
+                  >
+                    Stopped: {STOP_REASON_LABELS[report.stop_reason] ?? report.stop_reason}
+                  </p>
+                ) : null}
+                {report.features_built.length > 0 ? (
+                  <p className="text-fg-muted">
+                    <span className="text-fg-subtle">Features:</span>{' '}
+                    {report.features_built.join(', ')}
+                  </p>
+                ) : null}
+                {report.follow_ups.length > 0 ? (
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning marker:text-warning/60">
+                    {report.follow_ups.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {report.notes.length > 0 ? (
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-fg-subtle marker:text-fg-faint">
+                    {report.notes.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : (
+          <p
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-edge-strong px-3 py-2.5 text-xs text-fg-subtle"
+            data-testid="build-empty"
+          >
+            <Hammer aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-faint" strokeWidth={1.75} />
+            <span>
+              No build yet — press <span className="font-medium text-fg-muted">Build</span> to
+              generate the app onto the skeleton, then refine it from the Assistant.
             </span>
-          </button>
-          {reportOpen ? (
-            <div className="space-y-2 border-t border-edge px-4 py-3 text-sm">
-              {report.summary ? <p className="text-fg-muted">{report.summary}</p> : null}
-              {/* Why the build stopped short, in the report's own words (phase-55's vocabulary,
-                  plus phase-56's `phases_incomplete`). Absent on pre-rework reports. */}
-              {report.outcome && report.outcome !== 'complete' && report.stop_reason ? (
-                <p className="text-xs text-warning" data-testid="build-stop-reason">
-                  Stopped: {STOP_REASON_LABELS[report.stop_reason] ?? report.stop_reason}
-                </p>
-              ) : null}
-              {report.features_built.length > 0 ? (
-                <p className="text-fg-muted">
-                  <span className="text-fg-subtle">Features:</span>{' '}
-                  {report.features_built.join(', ')}
-                </p>
-              ) : null}
-              {report.follow_ups.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning">
-                  {report.follow_ups.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {report.notes.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-xs text-fg-subtle">
-                  {report.notes.map((n) => (
-                    <li key={n}>{n}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : (
-        <p
-          className="shrink-0 rounded-xl border border-dashed border-edge px-4 py-2 text-xs text-fg-subtle"
-          data-testid="build-empty"
-        >
-          No build yet — press <span className="font-medium text-fg-muted">Build</span> to generate
-          the app onto the skeleton, then refine it from the Assistant.
-        </p>
-      )}
+          </p>
+        )}
+      </div>
 
       {/*
         Live generation (IDE stream) and the preview, side by side and DRAGGABLE (phase-61). This
@@ -701,7 +884,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
             onClose={() => setFocused(null)}
           >
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <div className="absolute right-1 top-1 z-10">
+              <div className="absolute right-1.5 top-1.5 z-10">
                 <FocusButton
                   label="Files & editor"
                   testId="focus-ide"
@@ -710,7 +893,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
               </div>
               <Suspense
                 fallback={
-                  <div className="flex h-full items-center justify-center">
+                  <div className="flex h-full items-center justify-center rounded-xl border border-edge bg-surface text-fg-faint">
                     <Spinner />
                   </div>
                 }
@@ -723,14 +906,14 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
         {showPreview ? (
           <>
             <PaneHandle direction="horizontal" />
-            <Pane id="preview" defaultSize={45} minSize={20}>
+            <Pane id="preview" defaultSize={42} minSize={20}>
               <FocusOverlay
                 open={focused === 'preview'}
                 title="Preview"
                 onClose={() => setFocused(null)}
               >
                 <div className="relative flex min-h-0 flex-1 flex-col">
-                  <div className="absolute right-1 top-1 z-10">
+                  <div className="absolute right-1.5 top-2 z-10">
                     <FocusButton
                       label="Preview"
                       testId="focus-preview"
@@ -739,7 +922,7 @@ export function BuildPanel({ projectId }: { projectId: string }): JSX.Element {
                   </div>
                   <Suspense
                     fallback={
-                      <div className="flex h-full items-center justify-center">
+                      <div className="flex h-full items-center justify-center rounded-xl border border-edge bg-surface text-fg-faint">
                         <Spinner />
                       </div>
                     }

@@ -1,6 +1,6 @@
 import { Database } from 'lucide-react';
 
-import { Badge, EmptyState, Skeleton } from '../../components/ui';
+import { EmptyState, Skeleton } from '../../components/ui';
 import type { CollectionDto } from '../../lib/types';
 
 /**
@@ -34,7 +34,7 @@ export function CollectionsList({
   if (collections.length === 0) {
     return (
       <EmptyState
-        icon={<Database aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+        icon={<Database aria-hidden strokeWidth={1.5} />}
         title="No collections yet"
         description="Your app's collections appear here once it writes its first document."
       />
@@ -42,7 +42,7 @@ export function CollectionsList({
   }
 
   return (
-    <ul className="space-y-1" data-testid="collections-list">
+    <ul className="space-y-px" data-testid="collections-list">
       {collections.map((collection) => {
         const active = collection.name === selected;
         return (
@@ -52,12 +52,12 @@ export function CollectionsList({
               data-testid={`collection-${collection.name}`}
               aria-current={active ? 'true' : undefined}
               onClick={() => onSelect(collection.name)}
-              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition ${
-                active ? 'bg-brand/15 text-brand-text' : 'text-fg-muted hover:bg-surface-raised'
+              className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm transition-colors ${
+                active ? 'bg-fg/[0.07] text-fg' : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg'
               }`}
             >
               <span className="truncate font-mono text-xs">{collection.name}</span>
-              <Badge tone={active ? 'brand' : 'neutral'}>{collection.count}</Badge>
+              <span className="text-2xs tabular-nums text-fg-subtle">{collection.count}</span>
             </button>
           </li>
         );

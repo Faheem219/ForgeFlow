@@ -12,13 +12,12 @@ import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
-import { AmbientBackground } from '../../components/AmbientBackground';
 import { BrandMark } from '../../components/BrandMark';
-import { Button, Kbd } from '../../components/ui';
+import { IconButton, Kbd, Tooltip } from '../../components/ui';
 import { CommandPalette } from '../CommandPalette';
 import { cn } from '../../lib/cn';
-import { EASE_OUT, gsap, motionOK, useGSAP } from '../../lib/gsap';
-import { EASE } from '../../lib/motion';
+import { EASE, fadeInElement } from '../../lib/motion';
+import { useMediaQuery } from '../../lib/useNarrow';
 import { useAuthStore } from '../../lib/stores/authStore';
 import { useRealtimeStore } from '../../lib/stores/realtimeStore';
 import { useUiStore } from '../../lib/stores/uiStore';
@@ -31,7 +30,7 @@ const rtLabel: Record<string, string> = {
 };
 const rtDot: Record<string, string> = {
   open: 'bg-success',
-  connecting: 'bg-warning animate-pulse',
+  connecting: 'bg-warning motion-safe:animate-ff-breathe',
   closed: 'bg-fg-faint',
 };
 
@@ -50,8 +49,14 @@ const nav: NavItem[] = [
   { to: '/admin', label: 'Admin', end: false, icon: ShieldCheck, adminOnly: true },
 ];
 
+/** ⌘ on Apple keyboards, Ctrl elsewhere — the hint should name the key the user will press. */
+const MOD_KEY =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform ?? '')
+    ? '⌘'
+    : 'Ctrl';
+
 export function AppShell(): JSX.Element {
-  const collapsed = useUiStore((s) => s.sidebarCollapsed);
+  const storedCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
@@ -60,6 +65,19 @@ export function AppShell(): JSX.Element {
   const location = useLocation();
   const mainRef = useRef<HTMLDivElement | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // The project workspace is a workbench: it wants the window edge-to-edge, not a page margin.
+  const workbench = location.pathname.startsWith('/projects/');
+
+  // On a phone the expanded sidebar would take over half the screen, so there it rests as the icon
+  // rail and expands *over* the content on demand. The workspace does the same at every width: it
+  // is three resizable columns of tools, and the app nav is not what you are there to use — every
+  // pixel it gives back goes to the editor. The stored preference still governs the other pages.
+  const phone = useMediaQuery('(max-width: 767px)');
+  const railMode = phone || workbench;
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const overlay = railMode && overlayOpen;
+  const collapsed = railMode ? !overlayOpen : storedCollapsed;
 
   // ⌘K / Ctrl+K opens the palette anywhere in the app — except inside Monaco, which owns chords.
   useEffect(() => {
@@ -74,94 +92,125 @@ export function AppShell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Each route change re-enters the content with a short rise — the shell itself never moves.
-  useGSAP(
-    () => {
-      if (!motionOK() || !mainRef.current) return;
-      gsap.fromTo(
-        mainRef.current,
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.35, ease: EASE_OUT, clearProps: 'transform' },
-      );
-    },
-    { dependencies: [location.pathname] },
-  );
+  // Each route change fades the content in — the shell itself never moves.
+  useEffect(() => {
+    fadeInElement(mainRef.current);
+    setOverlayOpen(false);
+  }, [location.pathname]);
+
+  // The phone overlay closes like any other overlay: Escape, or leaving phone width.
+  useEffect(() => {
+    if (!overlay) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOverlayOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [overlay]);
+  useEffect(() => {
+    if (!railMode) setOverlayOpen(false);
+  }, [railMode]);
 
   function logout(): void {
     clear();
     navigate('/login');
   }
 
+  const initial = (user?.email ?? '?').charAt(0).toUpperCase();
+
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-canvas">
+    <div className="relative flex h-screen overflow-hidden bg-surface-canvas">
+      {/* Holds the rail's place in the row while the phone overlay floats above the content. */}
+      {railMode ? <div aria-hidden className="w-14 shrink-0" /> : null}
+      {overlay ? (
+        <div
+          aria-hidden
+          className="absolute inset-0 z-30 animate-ff-fade bg-black/40"
+          onClick={() => setOverlayOpen(false)}
+        />
+      ) : null}
       <aside
         className={cn(
-          'relative flex shrink-0 flex-col border-r border-edge bg-surface transition-all duration-200',
-          collapsed ? 'w-16' : 'w-56',
+          'flex shrink-0 flex-col border-r border-edge bg-surface-canvas transition-[width] duration-200 ease-out',
+          railMode ? 'absolute inset-y-0 left-0 z-40' : 'relative',
+          overlay && 'shadow-pop',
+          collapsed ? 'w-14' : 'w-52',
         )}
       >
         <div
           className={cn(
-            'relative flex h-14 shrink-0 items-center gap-2.5',
+            'flex h-12 shrink-0 items-center gap-2.5',
             collapsed ? 'justify-center px-0' : 'px-4',
           )}
         >
-          <BrandMark size={28} />
+          <BrandMark size={22} />
           {!collapsed ? (
-            <span className="font-semibold tracking-tight text-fg">ForgeFlow</span>
+            <span className="text-[13px] font-semibold tracking-tight text-fg">ForgeFlow</span>
           ) : null}
         </div>
 
-        <nav className="relative flex-1 space-y-0.5 px-2 py-2">
+        <nav className="flex-1 space-y-px px-2 py-2" aria-label="Main">
           {!collapsed ? (
-            <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">
-              Workspace
-            </p>
+            <p className="px-2.5 pb-1.5 pt-1 text-2xs font-medium text-fg-faint">Workspace</p>
           ) : null}
           {nav
             .filter((item) => !item.adminOnly || user?.role === 'admin')
-            .map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={item.label}
-                className={({ isActive }) =>
-                  cn(
-                    'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                    collapsed && 'justify-center',
-                    isActive
-                      ? 'font-medium text-brand-text'
-                      : 'text-fg-muted hover:bg-surface-raised hover:text-fg',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive ? (
-                      // One shared pill slides between items rather than blinking in per link.
-                      <motion.span
-                        layoutId="sidebar-active-pill"
+            .map((item) => {
+              const link = (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  title={collapsed ? undefined : item.label}
+                  aria-label={collapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      'relative flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-150',
+                      collapsed && 'justify-center px-0',
+                      isActive ? 'text-fg' : 'text-fg-subtle hover:bg-fg/[0.04] hover:text-fg',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive ? (
+                        // One shared fill slides between items rather than blinking in per link.
+                        <motion.span
+                          layoutId="sidebar-active-pill"
+                          aria-hidden
+                          className="absolute inset-0 rounded-md bg-fg/[0.07]"
+                          transition={{ duration: 0.22, ease: EASE }}
+                        />
+                      ) : null}
+                      <item.icon
                         aria-hidden
-                        className="absolute inset-0 rounded-lg bg-brand/10 ring-1 ring-inset ring-brand/20"
-                        transition={{ duration: 0.25, ease: EASE }}
+                        className={cn(
+                          'relative h-4 w-4 shrink-0',
+                          isActive ? 'text-brand-text' : 'text-current',
+                        )}
+                        strokeWidth={1.75}
                       />
-                    ) : null}
-                    <item.icon
-                      aria-hidden
-                      className="relative h-[18px] w-[18px] shrink-0"
-                      strokeWidth={1.75}
-                    />
-                    {!collapsed ? <span className="relative truncate">{item.label}</span> : null}
-                  </>
-                )}
-              </NavLink>
-            ))}
+                      {!collapsed ? <span className="relative truncate">{item.label}</span> : null}
+                    </>
+                  )}
+                </NavLink>
+              );
+              return collapsed ? (
+                <Tooltip key={item.to} label={item.label} side="right" className="flex w-full">
+                  {link}
+                </Tooltip>
+              ) : (
+                link
+              );
+            })}
         </nav>
 
         {/* Build version — lets a user confirm an update actually took effect (phase-49). */}
         <div
-          className="shrink-0 px-4 py-2 text-xs text-fg-faint"
+          className={cn(
+            'shrink-0 py-3 font-mono text-2xs text-fg-faint',
+            collapsed ? 'text-center' : 'px-4',
+          )}
           title={`ForgeFlow v${__APP_VERSION__}`}
           data-testid="app-version"
         >
@@ -169,35 +218,35 @@ export function AppShell(): JSX.Element {
         </div>
       </aside>
 
-      {/* The ambient layer lives on the non-scrolling column, not inside `main`: anchored to the
-          scroll container it would slide away on a long page, taking the pointer glow with it. */}
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AmbientBackground intensity="subtle" />
-
-        <header className="relative flex h-14 shrink-0 items-center justify-between gap-4 border-b border-edge px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              aria-label="Toggle sidebar"
-              onClick={toggleSidebar}
-              className="rounded-lg p-2 text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
+        <header className="relative flex h-12 shrink-0 items-center justify-between gap-4 border-b border-edge px-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <IconButton
+              label="Toggle sidebar"
+              size="md"
+              tooltipAlign="start"
+              aria-expanded={railMode ? overlayOpen : !storedCollapsed}
+              onClick={() => (railMode ? setOverlayOpen((v) => !v) : toggleSidebar())}
             >
-              <PanelLeft aria-hidden className="h-[18px] w-[18px]" strokeWidth={1.75} />
-            </button>
+              <PanelLeft aria-hidden strokeWidth={1.75} />
+            </IconButton>
             <button
               type="button"
               data-testid="command-trigger"
               onClick={() => setPaletteOpen(true)}
-              className="hidden h-8 w-56 items-center gap-2 rounded-lg border border-edge bg-surface-raised/60 px-2.5 text-xs text-fg-subtle transition-colors hover:border-edge-strong hover:text-fg-muted md:flex"
+              className="hidden h-8 w-64 items-center gap-2 rounded-lg border border-edge bg-fg/[0.025] px-2.5 text-[13px] text-fg-faint transition-colors hover:border-edge-strong hover:text-fg-subtle md:flex"
             >
               <Search aria-hidden className="h-3.5 w-3.5 shrink-0" />
               <span className="flex-1 truncate text-left">Search or jump to…</span>
-              <Kbd>Ctrl K</Kbd>
+              <span className="flex items-center gap-0.5">
+                <Kbd>{MOD_KEY}</Kbd>
+                <Kbd>K</Kbd>
+              </span>
             </button>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-1.5 text-sm">
             <span
-              className="flex items-center gap-1.5 rounded-full border border-edge px-2.5 py-1 text-xs text-fg-muted"
+              className="mr-1 flex items-center gap-1.5 whitespace-nowrap px-1.5 text-xs text-fg-subtle"
               title="Realtime connection"
               data-testid="rt-status"
             >
@@ -205,25 +254,41 @@ export function AppShell(): JSX.Element {
               {rtLabel[rtStatus]}
             </span>
             <ThemeToggle />
-            <span className="hidden items-center gap-2 sm:flex">
+            <span className="mx-1 hidden h-5 w-px bg-edge sm:block" aria-hidden />
+            <span className="hidden items-center gap-2 pl-1 sm:flex">
               <span
                 aria-hidden
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs font-semibold text-fg-inverted"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/20 text-2xs font-semibold text-brand-text"
               >
-                {(user?.email ?? '?').charAt(0).toUpperCase()}
+                {initial}
               </span>
-              <span data-testid="current-user" className="max-w-[14rem] truncate text-fg-muted">
+              <span
+                data-testid="current-user"
+                className="max-w-[14rem] truncate text-[13px] text-fg-muted"
+              >
                 {user?.email}
               </span>
             </span>
-            <Button size="sm" variant="secondary" onClick={logout}>
-              <LogOut aria-hidden className="h-3.5 w-3.5" />
-              Log out
-            </Button>
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Log out"
+              title="Log out"
+              className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-fg-subtle transition-colors hover:bg-surface-raised hover:text-fg"
+            >
+              <LogOut aria-hidden className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span className="hidden sm:inline">Log out</span>
+            </button>
           </div>
         </header>
 
-        <main data-app-scroll className="relative min-h-0 flex-1 overflow-auto p-6">
+        <main
+          data-app-scroll
+          className={cn(
+            'relative min-h-0 flex-1 overflow-auto',
+            workbench ? 'p-2' : 'p-4 sm:p-6 lg:p-8',
+          )}
+        >
           <div ref={mainRef} className="h-full">
             <Outlet />
           </div>

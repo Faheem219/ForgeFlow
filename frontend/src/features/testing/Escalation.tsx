@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CircleAlert } from 'lucide-react';
 import { useState } from 'react';
 
-import { Badge, Button } from '../../components/ui';
+import { Button, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/apiClient';
 import { toast } from '../../lib/stores/toastStore';
 import { useWorkspaceStore } from '../../lib/stores/workspaceStore';
@@ -61,23 +63,26 @@ export function Escalation({
 
   return (
     <section
-      className="space-y-3 rounded-xl border border-warning/30 bg-warning/10 p-3"
+      className="space-y-3 rounded-xl border border-warning/30 bg-surface p-3.5"
       data-testid="repair-escalation"
     >
-      <header className="flex items-center gap-2">
-        <Badge tone="warning">Needs you</Badge>
-        <span className="text-sm font-medium text-warning" data-testid="escalation-reason">
-          {REASON_LABELS[escalation.reason] ?? escalation.reason}
-        </span>
+      <header className="flex items-start gap-2.5">
+        <CircleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+        <div className="min-w-0">
+          <p className="text-2xs font-medium uppercase tracking-[0.06em] text-warning">Needs you</p>
+          <p className="text-[13px] font-semibold text-fg" data-testid="escalation-reason">
+            {REASON_LABELS[escalation.reason] ?? escalation.reason}
+          </p>
+        </div>
       </header>
 
-      <p className="text-sm text-fg-muted" data-testid="escalation-summary">
+      <p className="text-[13px] leading-relaxed text-fg-muted" data-testid="escalation-summary">
         {escalation.summary}
       </p>
 
       {escalation.failing_tests.length > 0 ? (
         <div className="space-y-1">
-          <h4 className="text-xs uppercase tracking-wide text-fg-subtle">Still failing</h4>
+          <h4 className="text-2xs font-medium text-fg-faint">Still failing</h4>
           <ul className="space-y-1" data-testid="escalation-failing">
             {escalation.failing_tests.map((t) => (
               <li key={`${t.file}::${t.name}`} className="text-xs text-fg-muted">
@@ -96,7 +101,7 @@ export function Escalation({
 
       {escalation.diffs_tried.length > 0 ? (
         <div className="space-y-1">
-          <h4 className="text-xs uppercase tracking-wide text-fg-subtle">
+          <h4 className="text-2xs font-medium text-fg-faint">
             Already tried ({escalation.diffs_tried.length})
           </h4>
           <ul className="space-y-0.5" data-testid="escalation-diffs">
@@ -116,7 +121,7 @@ export function Escalation({
           if (guidance.trim()) resume.mutate();
         }}
       >
-        <label className="block text-xs uppercase tracking-wide text-fg-subtle" htmlFor="guidance">
+        <label className="block text-xs font-medium text-fg-muted" htmlFor="guidance">
           Your guidance
         </label>
         <textarea
@@ -128,7 +133,7 @@ export function Escalation({
           onChange={(e) => setGuidance(e.target.value)}
           placeholder={escalation.resume.hint}
           disabled={resume.isPending}
-          className="w-full rounded-lg border border-edge-strong bg-surface-sunken px-3 py-2 text-sm text-fg outline-none focus:border-brand disabled:opacity-50"
+          className={cn(fieldClasses, 'resize-y leading-relaxed')}
         />
         <Button
           type="submit"

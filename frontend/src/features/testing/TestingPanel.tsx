@@ -11,6 +11,7 @@ import type { IntentRequest, TestRunSummaryDto } from '../../lib/types';
 import { listStages, submitIntent } from '../workspace/api';
 import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { StageHeader } from '../workspace/StageHeader';
 import { Escalation } from './Escalation';
 import { RepairView } from './RepairView';
 import { ResultsPanel } from './ResultsPanel';
@@ -86,63 +87,73 @@ export function TestingPanel({ projectId }: { projectId: string }): JSX.Element 
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Test &amp; repair
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Test & repair"
+        status={
           <span data-testid="test-stage-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
-          {task.busy ? (
-            <span className="text-xs font-normal text-fg-muted">
+        }
+        meta={
+          task.busy ? (
+            <span className="text-xs text-fg-muted">
               {task.step ? `${task.step}…` : 'running…'}
             </span>
-          ) : null}
-        </span>
-        <div className="flex gap-2">
-          <ResetStageButton
-            projectId={projectId}
-            stage="test"
-            status={status}
-            disabled={intent.isPending || task.busy}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={intent.isPending}
-            data-testid="test-skip"
-            onClick={() => intent.mutate({ stage: 'test', action: 'skip' })}
-          >
-            Skip
-          </Button>
-          <Button
-            size="sm"
-            disabled={intent.isPending}
-            data-testid="test-proceed"
-            onClick={() => intent.mutate({ stage: 'test', action: 'proceed' })}
-          >
-            Proceed
-          </Button>
-        </div>
-      </header>
+          ) : null
+        }
+        actions={
+          <>
+            <ResetStageButton
+              projectId={projectId}
+              stage="test"
+              status={status}
+              disabled={intent.isPending || task.busy}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={intent.isPending}
+              data-testid="test-skip"
+              onClick={() => intent.mutate({ stage: 'test', action: 'skip' })}
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              disabled={intent.isPending}
+              data-testid="test-proceed"
+              onClick={() => intent.mutate({ stage: 'test', action: 'proceed' })}
+            >
+              Proceed
+            </Button>
+          </>
+        }
+      />
 
       {/* Persistent for the whole run: a repair loop keeps iterating long after the first results
           land, so the indicator sits above the columns rather than replacing either of them. */}
       {task.busy ? (
         <section
-          className="flex shrink-0 justify-center rounded-xl border border-edge bg-surface py-5"
+          className="relative flex shrink-0 items-center gap-3 overflow-hidden rounded-xl border border-edge bg-surface px-3 py-2"
           data-testid="test-progress"
         >
-          <AgentWorking label={task.step ? task.step : 'Generating and running tests'} />
+          <div aria-hidden className="absolute inset-x-0 top-0 h-px overflow-hidden">
+            <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-brand-text to-transparent motion-safe:animate-ff-sweep" />
+          </div>
+          <AgentWorking compact label={task.step ? task.step : 'Generating and running tests'} />
+          <span className="truncate text-[13px] font-medium text-fg">
+            {task.step ? task.step : 'Generating and running tests'}…
+          </span>
         </section>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
-        <div className="min-h-0 overflow-auto">
+      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-2">
+        <div className="max-h-full min-h-0 self-start overflow-auto rounded-xl border border-edge bg-surface p-3">
           <ResultsPanel projectId={projectId} run={latestRun} onRunChange={setRun} />
         </div>
 
-        <div className="min-h-0 space-y-3 overflow-auto">
+        <div className="min-h-0 space-y-2 overflow-auto">
           <RepairView
             projectId={projectId}
             report={report}

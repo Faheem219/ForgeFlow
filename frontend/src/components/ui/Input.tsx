@@ -15,7 +15,7 @@ export function Input({ label, hint, className, id, ...props }: InputProps): JSX
   }
   return (
     <label className="block text-sm" htmlFor={id}>
-      <span className="mb-1.5 block text-[13px] font-medium text-fg-muted">{label}</span>
+      <span className="mb-1.5 block text-xs font-medium text-fg-muted">{label}</span>
       {field}
       {hint ? <span className="mt-1.5 block text-xs text-fg-subtle">{hint}</span> : null}
     </label>

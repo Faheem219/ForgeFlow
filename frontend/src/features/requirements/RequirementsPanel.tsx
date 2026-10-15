@@ -11,6 +11,7 @@ import type { IntentAction, RequirementSpecInput, StageStatus } from '../../lib/
 import { listStages, submitIntent } from '../workspace/api';
 import { ResetStageButton } from '../workspace/StageReset';
 import { nextStage, STATUS_LABELS, STATUS_TONES } from '../workspace/stageMeta';
+import { StageHeader } from '../workspace/StageHeader';
 import {
   draftRequirements,
   getRequirements,
@@ -136,42 +137,44 @@ export function RequirementsPanel({ projectId }: { projectId: string }): JSX.Ele
   const busy = task.busy;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-medium text-fg">
-          Requirements
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <StageHeader
+        title="Requirements"
+        status={
           <span data-testid="requirements-status">
             <Badge tone={STATUS_TONES[status]}>{STATUS_LABELS[status]}</Badge>
           </span>
-        </span>
-        <div className="flex gap-2">
-          <ResetStageButton
-            projectId={projectId}
-            stage="requirements"
-            status={status}
-            disabled={busy}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            data-testid="requirements-skip"
-            onClick={() => intent.mutate('skip')}
-          >
-            Skip
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy}
-            data-testid="requirements-proceed"
-            onClick={() => intent.mutate('proceed')}
-          >
-            Proceed
-          </Button>
-        </div>
-      </header>
+        }
+        actions={
+          <>
+            <ResetStageButton
+              projectId={projectId}
+              stage="requirements"
+              status={status}
+              disabled={busy}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              data-testid="requirements-skip"
+              onClick={() => intent.mutate('skip')}
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy}
+              data-testid="requirements-proceed"
+              onClick={() => intent.mutate('proceed')}
+            >
+              Proceed
+            </Button>
+          </>
+        }
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto pb-2">
         {busy ? (
           <div className="flex h-full items-center justify-center">
             <AgentWorking label={task.step ? `${task.step}` : 'Drafting the requirements'} />

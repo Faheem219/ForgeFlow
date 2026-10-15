@@ -3,7 +3,8 @@ import { Search, ServerOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Badge, EmptyState, Skeleton } from '../../components/ui';
+import { Badge, EmptyState, Skeleton, fieldClasses } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { listConfig } from './api';
 import { AuditView } from './AuditView';
 import { Observability } from './Observability';
@@ -81,13 +82,11 @@ export function AdminDashboard(): JSX.Element {
   const showsCatalog = searching || CONFIG_SECTIONS.includes(active);
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] gap-6">
-      <nav className="w-56 shrink-0 space-y-4 overflow-y-auto pr-1" aria-label="Admin sections">
+    <div className="flex h-full gap-8">
+      <nav className="w-52 shrink-0 space-y-5 overflow-y-auto pr-1" aria-label="Admin sections">
         {ADMIN_GROUPS.map((group) => (
           <div key={group}>
-            <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              {group}
-            </p>
+            <p className="mb-1 px-2.5 text-2xs font-medium text-fg-faint">{group}</p>
             {ADMIN_SECTIONS.filter((s) => s.group === group).map((s) => (
               <button
                 key={s.id}
@@ -95,17 +94,17 @@ export function AdminDashboard(): JSX.Element {
                 data-testid={`admin-nav-${s.id}`}
                 aria-current={s.id === active}
                 onClick={() => navigate(`/admin/${s.id}`)}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors ${
                   s.id === active
-                    ? 'bg-brand/15 font-medium text-brand-text'
-                    : 'text-fg-muted hover:bg-surface-raised hover:text-fg'
+                    ? 'bg-fg/[0.07] font-medium text-fg'
+                    : 'text-fg-subtle hover:bg-fg/[0.04] hover:text-fg'
                 }`}
               >
                 <span className="truncate">{s.label}</span>
                 {overridesBySection[s.id] ? (
                   <span
                     title={`${overridesBySection[s.id]} setting(s) overridden here`}
-                    className="rounded-full bg-brand/25 px-1.5 text-[10px] text-brand-text"
+                    className="rounded bg-brand/20 px-1.5 text-2xs tabular-nums text-brand-text"
                   >
                     {overridesBySection[s.id]}
                   </span>
@@ -122,7 +121,7 @@ export function AdminDashboard(): JSX.Element {
         <div className="max-w-4xl">
           <header className="mb-4">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-fg">
+              <h1 className="text-[22px] font-semibold tracking-tight text-fg">
                 {searching ? 'Search results' : meta?.label}
               </h1>
               {totalOverrides > 0 ? (
@@ -131,12 +130,12 @@ export function AdminDashboard(): JSX.Element {
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-1 max-w-3xl text-sm text-fg-subtle">
+            <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-fg-subtle">
               {searching
                 ? `${visible.length} setting${visible.length === 1 ? '' : 's'} match “${query.trim()}”.`
                 : meta?.blurb}
             </p>
-            <p className="mt-1 text-xs text-fg-faint">
+            <p className="mt-1.5 text-xs text-fg-faint">
               Precedence is{' '}
               <span className="font-mono text-fg-subtle">admin &gt; env &gt; default</span>. Changes
               apply immediately unless a key is marked <em>restart required</em>.
@@ -156,7 +155,7 @@ export function AdminDashboard(): JSX.Element {
                   data-testid="config-search"
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search all settings (name, env var, description)…"
-                  className="w-80 rounded-lg border border-edge-strong bg-surface-sunken py-1.5 pl-9 pr-3 text-sm text-fg outline-none transition-colors focus:border-brand focus:ring-1 focus:ring-brand"
+                  className={cn(fieldClasses, 'w-80 max-w-full pl-9')}
                 />
               </span>
               <label className="flex items-center gap-2 text-xs text-fg-muted">
@@ -190,7 +189,7 @@ export function AdminDashboard(): JSX.Element {
             </div>
           ) : configQuery.isError ? (
             <EmptyState
-              icon={<ServerOff aria-hidden className="h-6 w-6" strokeWidth={1.5} />}
+              icon={<ServerOff aria-hidden strokeWidth={1.5} />}
               title="Could not load settings"
               description="The config API is unavailable or you are not an admin."
             />

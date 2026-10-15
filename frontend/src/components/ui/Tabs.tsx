@@ -24,7 +24,7 @@ export function Tabs({ items, initialId }: { items: TabItem[]; initialId?: strin
             role="tab"
             aria-selected={tab.id === active}
             onClick={() => setActive(tab.id)}
-            className={`relative px-3 py-2 text-sm transition-colors ${
+            className={`relative px-3 py-2 text-sm font-medium transition-colors ${
               tab.id === active ? 'text-fg' : 'text-fg-subtle hover:text-fg-muted'
             }`}
           >
@@ -32,7 +32,7 @@ export function Tabs({ items, initialId }: { items: TabItem[]; initialId?: strin
             {tab.id === active ? (
               <motion.span
                 layoutId={`tab-underline-${groupId}`}
-                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-brand"
+                className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-fg"
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               />
             ) : null}

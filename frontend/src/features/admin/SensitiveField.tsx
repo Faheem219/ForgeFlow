@@ -86,13 +86,13 @@ export function SensitiveField({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder="enter new value"
-        className="w-48 rounded-lg border border-edge-strong bg-surface-sunken px-2 py-1 text-sm text-fg"
+        className="w-48 rounded-lg border border-edge-strong bg-surface-sunken/40 px-2.5 py-1 font-mono text-xs text-fg outline-none transition-[border-color,box-shadow] placeholder:font-sans focus:border-brand/70 focus:shadow-[0_0_0_3px_rgb(var(--ff-brand)/0.18)]"
       />
       <button
         type="submit"
         data-testid="sensitive-save"
         disabled={!draft}
-        className="rounded bg-brand px-2 py-1 text-xs text-white disabled:opacity-50"
+        className="h-7 rounded-md bg-brand px-2.5 text-xs font-medium text-fg-inverted transition-colors hover:bg-brand-hover disabled:opacity-45"
       >
         Save
       </button>
@@ -102,7 +102,7 @@ export function SensitiveField({
           setDraft('');
           setEditing(false);
         }}
-        className="rounded px-2 py-1 text-xs text-fg-muted hover:bg-surface-raised"
+        className="h-7 rounded-md px-2.5 text-xs text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
       >
         Cancel
       </button>
