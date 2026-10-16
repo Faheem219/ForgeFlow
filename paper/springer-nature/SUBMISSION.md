@@ -12,7 +12,7 @@ For the submitting author (Dr. Payal Kadam, corresponding author).
 | `forgeflow-references.bib`, `forgeflow-springer.bbl`, `sn-mathphys-num.bst` | References: the BibTeX source, the pre-built bibliography and the Springer numbered style |
 | `sn-jnl.cls` | The Springer Nature class file (template v3.1, December 2024) |
 | `fig1.png` – `fig6.png`, `fig7.pdf` | Figures 1–7 |
-| `forgeflow-springer.pdf` | The compiled manuscript, for reference (26 pages) |
+| `forgeflow-springer.pdf` | The compiled manuscript, for reference (27 pages) |
 
 - **Snapp** (most Springer journals): upload the zip as it is.
 - **Editorial Manager**: upload the files individually. Item-type names vary by journal; typically use "Manuscript" for the .tex, "Figure" for each figure, and "LaTeX supplementary file" for the .bib, .bbl, .bst and .cls.
@@ -39,8 +39,9 @@ The unzipped package was compiled from scratch with no other files present: 0 er
 - **Red strike-through:** text removed for the format.
 - **Orange:** a factual correction made against the implementation.
 - **Orange strike-through:** text removed as a factual correction.
+- **Green:** the authors' own rewrite of a passage flagged by the Turnitin AI-writing report (16 Oct 2026). Orange marks inside green text are corrections to that rewrite (factual errors, reversed meanings and broken sentences only).
 
-All other text is the draft word for word. `review/CHANGES.md` lists every change with its reason and evidence, and `review/REVIEW_REPORT.md` records the guideline check.
+All other text is the draft word for word. `review/CHANGES.md` lists every change (section 4 covers the 16 Oct rewrites) with its reason and evidence, and `review/REVIEW_REPORT.md` records the guideline check.
 
 ## Rebuilding after edits
 
@@ -58,4 +59,10 @@ After changing any wording, also run:
 python3 tools/fidelity_check.py
 ```
 
-It confirms that every deviation from the draft is still marked.
+It confirms that every deviation from the draft is still marked. Also run:
+
+```sh
+python3 tools/rewrite_check.py
+```
+
+It confirms that the authors' 16 Oct rewrites (`review/authors-rewrites-2026-10-16.docx`) are reproduced word for word, apart from the marked corrections.

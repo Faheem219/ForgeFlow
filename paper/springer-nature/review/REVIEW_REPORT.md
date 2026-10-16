@@ -181,3 +181,17 @@ All three are logged in `review/CHANGES.md`. After them: build passes, fidelity 
 - **D3 residual (F06):** the sentence now reads "…the diff can be exercised only at Level 2, and the import-graph walk at neither level", matching `eval/runner.py:195` (base analyser: diff, no import walk) and `testing/repair_router.py:107` (the only caller of the widening analyser).
 - **Figure cross-references (F09):** "(Fig. 3)" → "(Fig. 4)" inside Figs. 2, 3, 5 and 6 by a single-glyph replacement (`tools/fix_fig_refs.py`); re-exporting from the stale `.drawio` sources was tested and rejected because it changes the approved layout.
 - **Re-run after both changes:** build 26 pp / 0 undefined / 0 overfull (both PDFs); fidelity 0 unmarked differences; `guideline_checks.py` 0 FAIL, 1 WARN (the postcode, as before); ASCII grep empty; `pdffonts`: 19 Type 1 + the TrueType face inside `fig7.pdf`, no Type 3; `tools/package.sh` standalone compile of the unzipped package OK (26 pp).
+
+## Authors' rewrite round (16 Oct 2026)
+
+After the Turnitin AI-writing report (26 % flagged), the authors rewrote the 11 large flagged passages (`review/authors-rewrites-2026-10-16.docx`). These now replace the old text in 19 `\rw` blocks. The authors chose to correct only the factual errors, reversed meanings and broken sentences in the rewrites; every correction is marked (CHANGES §4, W01–W11).
+
+Re-run after the round:
+- Build: 27 pp, 0 undefined, 0 overfull (both PDFs).
+- `fidelity_check.py`: 0 unmarked differences against the 4 Oct draft outside the rewritten passages.
+- `rewrite_check.py`: 1 574 = 1 574 tokens, 0 unmarked differences from the authors' docx.
+- `guideline_checks.py`: 0 FAIL, 1 WARN (the postcode, as before).
+- `.bbl` byte-identical (reference numbering unchanged); ASCII grep empty; no markup in the clean `.tex`.
+- 83 % of the authors' rewrite words are kept in place.
+
+The text was not re-submitted to Turnitin. Re-check it before submission if an AI-writing score is required.

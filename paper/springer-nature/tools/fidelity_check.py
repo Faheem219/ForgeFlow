@@ -32,7 +32,7 @@ HERE = Path(__file__).resolve().parent.parent
 DRAFT_DOCX = HERE.parent / "IEEE Conference Paper Draft - Revised 4 Oct 2026.docx"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from make_clean import matching_brace, resolve, strip_markup_block  # noqa: E402
+from make_clean import matching_brace, pick_rw, resolve, strip_markup_block  # noqa: E402
 
 ROMAN = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10}
 
@@ -41,6 +41,10 @@ def drop_chg_keep_del(text: str) -> str:
     """Reconstruct the draft wording: remove \\chg{..}, unwrap \\del{..}."""
     # Swap the macro names so resolve() (which unwraps chg, drops del)
     # does the inverse job.
+    # The authors' 16 Oct rewrites (\\rw{new}{old}) are checked separately by
+    # rewrite_check.py; here every rewritten passage contributes its old text,
+    # so this check still proves nothing outside those passages changed.
+    text = pick_rw(text, 1)
     inverse = {"chg": "del", "fix": "fixdel", "del": "chg", "fixdel": "fix"}
     swapped = re.sub(r"\\(chg|fixdel|fix|del)\{", lambda m: "\\" + inverse[m.group(1)] + "{", text)
     return resolve(swapped)

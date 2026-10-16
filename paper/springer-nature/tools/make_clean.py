@@ -8,10 +8,13 @@ made to the 4 Oct 2026 draft in one of four macros:
     \\del{old text}      draft text removed to fit the Springer format
     \\fix{new text}      factual correction against the implementation
     \\fixdel{old text}   draft text removed as a factual correction
+    \\rw{new}{old}       the authors' rewrite of a passage (16 Oct 2026, after the
+                       AI-writing report) followed by the text it replaced; inside
+                       ``new``, \\fix/\\fixdel mark corrections made to the rewrite
 
 and defines them between the lines ``%%% CHANGE-MARKUP-BEGIN`` and
 ``%%% CHANGE-MARKUP-END``. The clean file keeps the content of \\chg and
-\\fix, drops \\del and \\fixdel entirely, and removes the markup block, so
+\\fix, drops \\del and \\fixdel entirely, keeps only the ``new`` argument of \\rw, and removes the markup block, so
 Springer receives plain sn-jnl LaTeX with no custom macros and no coloured
 text.
 
@@ -76,6 +79,26 @@ def resolve(text: str, keep_del: bool = False) -> str:
     return "".join(out)
 
 
+def pick_rw(text: str, which: int) -> str:
+    """Replace every \\rw{new}{old} with its ``new`` (0) or ``old`` (1) argument."""
+    out: list[str] = []
+    pos = 0
+    pattern = re.compile(r"\\rw\{")
+    while (m := pattern.search(text, pos)) is not None:
+        close_new = matching_brace(text, m.end() - 1)
+        open_old = close_new + 1
+        while open_old < len(text) and text[open_old] in " \t\n":
+            open_old += 1
+        if open_old >= len(text) or text[open_old] != "{":
+            raise SystemExit(f"\\rw at offset {m.start()} has no second argument")
+        close_old = matching_brace(text, open_old)
+        out.append(text[pos : m.start()])
+        out.append(text[m.end() : close_new] if which == 0 else text[open_old + 1 : close_old])
+        pos = close_old + 1
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def strip_markup_block(text: str) -> str:
     return re.sub(
         r"^%%% CHANGE-MARKUP-BEGIN.*?^%%% CHANGE-MARKUP-END[^\n]*\n",
@@ -86,10 +109,10 @@ def strip_markup_block(text: str) -> str:
 
 
 def make_clean(marked: str) -> str:
-    clean = resolve(strip_markup_block(marked))
+    clean = resolve(pick_rw(strip_markup_block(marked), 0))
     # Removing an inline \del can leave a double space; tidy it.
     clean = re.sub(r"(?<=\S)  +(?=\S)", " ", clean)
-    if re.search(r"\\(?:chg|del|fix|fixdel)\b", clean):
+    if re.search(r"\\(?:chg|del|fix|fixdel|rw)\b", clean):
         raise SystemExit("change markup left in the clean file")
     return clean
 
