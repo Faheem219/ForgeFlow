@@ -167,10 +167,18 @@ def main() -> int:
     authors = re.findall(r"\\author(\*?)", body_nc)
     emails = re.findall(r"\\email\{([^}]*)\}", body_nc)
     corr = authors.count("*")
-    report("G13", "PASS" if len(authors) == 4 else "FAIL", f"{len(authors)} \\author entries (draft has 4)")
+    # The draft has 4 authors; the authors later added co-authors themselves
+    # (CHANGES R04, 17 Oct 2026). Those must be present, after the draft four.
+    added = ["Bidwe"]
+    expected = 4 + len(added)
+    present = all(f"\\sur{{\\chg{{{name}}}}}" in body_nc or f"\\sur{{{name}}}" in body_nc for name in added)
+    report("G13", "PASS" if len(authors) == expected and present else "FAIL",
+           f"{len(authors)} \\author entries (draft 4 + added {added})")
     hon = re.findall(r"\\author[^\n]*\b(Dr|Prof|Mr|Ms|Mrs)\.", body_nc)
     report("G13", "PASS" if not hon else "FAIL", f"honorifics in author block: {hon or 'none'}")
-    report("G14", "PASS" if corr == 1 and len(emails) == 4 else "FAIL", f"corresponding authors={corr} (need 1), emails={emails}")
+    report("G14", "PASS" if corr == 1 else "FAIL", f"corresponding authors={corr} (need 1)")
+    report("G14", "PASS" if len(emails) == len(authors) else "WARN",
+           f"{len(emails)} e-mails for {len(authors)} authors (an author without e-mail is valid in sn-jnl, but the authors should supply it)")
 
     # G15 affiliation
     affils = re.findall(r"\\affil\*?(?:\[[^\]]*\])?\{", body_nc)

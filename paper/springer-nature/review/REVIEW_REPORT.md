@@ -195,3 +195,12 @@ Re-run after the round:
 - 83 % of the authors' rewrite words are kept in place.
 
 The text was not re-submitted to Turnitin. Re-check it before submission if an AI-writing score is required.
+
+## Fifth author (17 Oct 2026)
+
+Ranjeet Bidwe was added at the authors' request (CHANGES R04). *Competing interests* now names the four people on the invention disclosure, and *Author contribution* includes him.
+
+Checks after the change:
+- Build: 27 pp, 0 undefined, 0 overfull.
+- `fidelity_check.py` and `rewrite_check.py`: 0 unmarked differences.
+- `guideline_checks.py`: 0 FAIL, 2 WARN (the postcode; his missing e-mail, G14).

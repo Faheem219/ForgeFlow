@@ -29,7 +29,7 @@ The unzipped package was compiled from scratch with no other files present: 0 er
    - Data and code: available on request.
    - The author-contribution roles.
 4. **Decide on an AI-use statement.** Springer requires one if generative AI was used for anything beyond copy-editing.
-5. **Check the author block:** names, emails, the corresponding author, and the department and address (Pune 412115, Maharashtra).
+5. **Check the author block:** names, emails, the corresponding author, and the department and address (Pune 412115, Maharashtra). Dr. Ranjeet Bidwe was added as fifth author on 17 Oct. His e-mail is still missing from the manuscript, and his contribution role ("Writing – review & editing") needs confirming.
 
 ## Review copy (for the authors, not for Springer)
 
