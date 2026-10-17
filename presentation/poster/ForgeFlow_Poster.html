@@ -167,7 +167,20 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
 .tile { border-top: 3pt solid var(--navy); padding-top: 0.08in; }
 .tile .v { font-weight: 600; font-size: 42pt; line-height: 1; color: var(--navy); }
 .tile .l { font-size: 17pt; color: var(--ink-2); line-height: 1.25; margin-top: 0.05in; }
+.tiles.inline .tile { display: flex; align-items: center; gap: 0.18in; }
+.tiles.inline .tile .v { font-size: 36pt; }
+.tiles.inline .tile .l { margin-top: 0; }
 .fn { font-size: 15.5pt; color: var(--ink-3); line-height: 1.28; margin-top: 0.08in; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3in; margin-top: 0.04in; }
+.kpi { border-top: 3pt solid var(--navy); padding-top: 0.08in; }
+.kpi .v { font-weight: 600; font-size: 36pt; line-height: 1; color: var(--navy); white-space: nowrap; }
+.kpi .v small { font-size: 0.62em; font-weight: 600; color: var(--ink-3); }
+.kpi .bar { position: relative; height: 8pt; background: #e3e7ec; margin: 0.1in 0 0.07in; }
+.kpi .bar i { position: absolute; top: 0; bottom: 0; left: 0; background: #1b3a6b; }
+.kpi .l { font-size: 16.5pt; color: var(--ink-2); line-height: 1.22; }
+.kpi.warn { border-top-color: #b07a10; }
+.kpi.warn .v { color: #7a5200; }
+.kpi.warn .bar i { background: #b07a10; }
 .concl { list-style: none; padding: 0; margin: 0; }
 .concl li { position: relative; padding-left: 0.32in; font-size: 20.5pt; line-height: 1.28; margin-bottom: 0.12in; }
 .concl li::before { content: ""; position: absolute; left: 0.02in; top: 0.13in; width: 0.12in; height: 0.12in; background: var(--sit-red); }
@@ -182,7 +195,7 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
 
 /* ---------- references / acknowledgement ---------- */
 .refs { list-style: none; margin: 0; padding: 0; font-size: 15pt; line-height: 1.24; color: var(--ink); }
-.refs li { padding-left: 0.32in; text-indent: -0.32in; margin-bottom: 0.075in; }
+.refs li { padding-left: 0.32in; text-indent: -0.32in; margin-bottom: 0.055in; }
 .refs a { color: inherit; text-decoration: none; }
 .ack { font-size: 19.5pt; line-height: 1.3; }
 
@@ -244,7 +257,7 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
         <div class="gapt">
           <div class="gap-h"><b>The gap</b></div>
           <table class="matrix"><thead><tr><th></th><th>Research repair agents</th><th>LLM test / repair tools</th><th>Prompt-to-app builders</th><th class="ff">Forge&shy;Flow</th></tr></thead><tbody><tr><td>Repair with an iteration cap and stall detection</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Hands back to a person when repair stalls</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Requirements compiled into traceable tests</td><td class="x">&#10005;</td><td class="p">partial</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Automated cloud deployment</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y">&#10003;</td><td class="y ff">&#10003;</td></tr><tr><td>Re-tests the deployed, live URL</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="y ff">&#10003;</td></tr><tr><td>Any stage can be skipped or revisited</td><td class="x">&#10005;</td><td class="x">&#10005;</td><td class="p">partial</td><td class="y ff">&#10003;</td></tr></tbody></table>
-          <div class="gap-n">Capabilities as described in the cited work, adapted from Table I of our paper; not a performance comparison.</div>
+          <div class="gap-n">Capabilities as described in the cited work, adapted from Table 1 of our paper; not a performance comparison.</div>
         </div>
         <p class="answer"><b>ForgeFlow</b> takes a web-app idea, given as screenshots or a structured spec, to a live URL that has been tested, and lets a person enter, refine or skip any stage on the way.</p>
       </section>
@@ -504,54 +517,54 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
 
     <!-- ================= RIGHT COLUMN ================= -->
     <div class="col">
-      <section class="panel" style="flex: 0 0 17.83in;">
+      <section class="panel" style="flex: 0 0 17.68in;">
         <h2 class="h2">Results &amp; Conclusions</h2>
         <p class="setup">One model (GLM-5.3-flash) through ForgeFlow's own model interface; one reproducible run, 2 Oct 2026. Problems from HumanEval <span class="cite">(Chen et al., 2021)</span>, MBPP <span class="cite">(Austin et al., 2021)</span> and HumanEval-TS <span class="cite">(Cassano et al., 2023)</span>.</p>
 
         <div class="rblock">
           <div class="h3">Bounded repair on 580 coding problems</div>
-          <svg viewBox="0 0 871 252" width="100%" role="img" aria-label="Dot plot: pass@1 and pass rate after bounded repair, per benchmark">
+          <svg viewBox="0 0 871 198" width="100%" role="img" aria-label="Dot plot: pass@1 and pass rate after bounded repair, per benchmark">
             <rect x="0" y="4" width="14" height="14" fill="#878f9b"/><text x="22" y="17" font-size="16" fill="#4a5361">pass@1, no repair</text>
             <circle cx="196" cy="11" r="7.5" fill="#24589e"/><text x="210" y="17" font-size="16" fill="#4a5361">after bounded repair (at most 5 attempts)</text>
             <text x="871" y="17" text-anchor="end" font-size="15" font-weight="700" fill="#4a5361">repaired</text>
-            <g stroke="#e6e9ed" stroke-width="1"><path d="M210 32 V222"/><path d="M320 32 V222"/><path d="M430 32 V222"/><path d="M540 32 V222"/><path d="M650 32 V222"/><path d="M760 32 V222"/></g>
-            <path d="M0 176 H871" stroke="#c9ced5" stroke-width="1"/>
-            <g font-size="14.5" fill="#6b7380" text-anchor="middle"><text x="210" y="244">95%</text><text x="320" y="244">96%</text><text x="430" y="244">97%</text><text x="540" y="244">98%</text><text x="650" y="244">99%</text><text x="760" y="244">100%</text></g>
-            <text x="0" y="52" font-size="17.5" font-weight="700" fill="#1d232c">HumanEval</text><text x="0" y="70" font-size="14" fill="#6b7380">Python · 164</text>
-            <path d="M438 56 H685" stroke="#b9bfc8" stroke-width="3"/>
-            <rect x="422.5" y="48.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
-            <circle cx="694" cy="56" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
-            <text x="414" y="62" font-size="16" fill="#4a5361" text-anchor="end">97.0</text>
-            <text x="710" y="62" font-size="16.5" font-weight="700" fill="#1d232c">99.4</text>
-            <text x="871" y="62" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">4 / 5</text>
-            <text x="0" y="98" font-size="17.5" font-weight="700" fill="#1d232c">MBPP</text><text x="0" y="116" font-size="14" fill="#6b7380">Python · 257</text>
-            <path d="M339 102 H619" stroke="#b9bfc8" stroke-width="3"/>
-            <rect x="323.5" y="94.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
-            <circle cx="628" cy="102" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
-            <text x="315" y="108" font-size="16" fill="#4a5361" text-anchor="end">96.1</text>
-            <text x="644" y="108" font-size="16.5" font-weight="700" fill="#1d232c">98.8</text>
-            <text x="871" y="108" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">7 / 10</text>
-            <text x="0" y="144" font-size="17.5" font-weight="700" fill="#1d232c">HumanEval-TS</text><text x="0" y="162" font-size="14" fill="#6b7380">TypeScript · 159</text>
-            <path d="M493 148 H608" stroke="#b9bfc8" stroke-width="3"/>
-            <rect x="477.5" y="140.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
-            <circle cx="617" cy="148" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
-            <text x="469" y="154" font-size="16" fill="#4a5361" text-anchor="end">97.5</text>
-            <text x="633" y="154" font-size="16.5" font-weight="700" fill="#1d232c">98.7</text>
-            <text x="871" y="154" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">2 / 4</text>
-            <text x="0" y="200" font-size="17.5" font-weight="700" fill="#1d232c">Pooled</text><text x="0" y="218" font-size="14" fill="#6b7380">all 580</text>
-            <path d="M405 204 H641" stroke="#b9bfc8" stroke-width="3"/>
-            <rect x="389.5" y="196.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
-            <circle cx="650" cy="204" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
-            <text x="381" y="210" font-size="16" fill="#4a5361" text-anchor="end">96.7</text>
-            <text x="666" y="210" font-size="16.5" font-weight="700" fill="#1d232c">99.0</text>
-            <text x="871" y="210" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">13 / 19</text>
+            <g stroke="#e6e9ed" stroke-width="1"><path d="M210 28 V172"/><path d="M320 28 V172"/><path d="M430 28 V172"/><path d="M540 28 V172"/><path d="M650 28 V172"/><path d="M760 28 V172"/></g>
+            <path d="M0 134 H871" stroke="#c9ced5" stroke-width="1"/>
+            <g font-size="14.5" fill="#6b7380" text-anchor="middle"><text x="210" y="192">95%</text><text x="320" y="192">96%</text><text x="430" y="192">97%</text><text x="540" y="192">98%</text><text x="650" y="192">99%</text><text x="760" y="192">100%</text></g>
+            <text x="0" y="52" font-size="17.5" font-weight="700" fill="#1d232c" stroke="#fff" stroke-width="5" paint-order="stroke">HumanEval<tspan dx="9" font-size="14.5" font-weight="400" fill="#6b7380">Python · 164</tspan></text>
+            <path d="M438 46 H685" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="422.5" y="38.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="694" cy="46" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="414" y="52" font-size="16" fill="#4a5361" text-anchor="end">97.0</text>
+            <text x="710" y="52" font-size="16.5" font-weight="700" fill="#1d232c">99.4</text>
+            <text x="871" y="52" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">4 / 5</text>
+            <text x="0" y="86" font-size="17.5" font-weight="700" fill="#1d232c" stroke="#fff" stroke-width="5" paint-order="stroke">MBPP<tspan dx="9" font-size="14.5" font-weight="400" fill="#6b7380">Python · 257</tspan></text>
+            <path d="M339 80 H619" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="323.5" y="72.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="628" cy="80" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="315" y="86" font-size="16" fill="#4a5361" text-anchor="end">96.1</text>
+            <text x="644" y="86" font-size="16.5" font-weight="700" fill="#1d232c">98.8</text>
+            <text x="871" y="86" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">7 / 10</text>
+            <text x="0" y="120" font-size="17.5" font-weight="700" fill="#1d232c" stroke="#fff" stroke-width="5" paint-order="stroke">HumanEval-TS<tspan dx="9" font-size="14.5" font-weight="400" fill="#6b7380">TypeScript · 159</tspan></text>
+            <path d="M493 114 H608" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="477.5" y="106.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="617" cy="114" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="469" y="120" font-size="16" fill="#4a5361" text-anchor="end">97.5</text>
+            <text x="633" y="120" font-size="16.5" font-weight="700" fill="#1d232c">98.7</text>
+            <text x="871" y="120" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">2 / 4</text>
+            <text x="0" y="162" font-size="17.5" font-weight="700" fill="#1d232c" stroke="#fff" stroke-width="5" paint-order="stroke">Pooled<tspan dx="9" font-size="14.5" font-weight="400" fill="#6b7380">all 580</tspan></text>
+            <path d="M405 156 H641" stroke="#b9bfc8" stroke-width="3"/>
+            <rect x="389.5" y="148.5" width="15" height="15" fill="#878f9b" stroke="#fff" stroke-width="2"/>
+            <circle cx="650" cy="156" r="9" fill="#24589e" stroke="#fff" stroke-width="2"/>
+            <text x="381" y="162" font-size="16" fill="#4a5361" text-anchor="end">96.7</text>
+            <text x="666" y="162" font-size="16.5" font-weight="700" fill="#1d232c">99.0</text>
+            <text x="871" y="162" font-size="17.5" font-weight="700" fill="#1d232c" text-anchor="end">13 / 19</text>
             </svg>
-          <div class="fn">Per-benchmark 95% Wilson intervals overlap. The pooled gain is significant (exact McNemar p = 0.00024); per benchmark only MBPP is (p = 0.016).</div>
+          <div class="fn">The pooled gain is significant (exact McNemar p = 0.00024); per benchmark, only MBPP&rsquo;s is (p = 0.016).</div>
         </div>
 
         <div class="rblock">
           <div class="h3">What happened to the 19 first-attempt failures</div>
-          <svg viewBox="0 0 871 100" width="100%" role="img" aria-label="19 failures: 10 fixed on first attempt, 3 on second, 6 stopped by stall guard">
+          <svg viewBox="0 0 871 92" width="100%" role="img" aria-label="19 failures: 10 fixed on first attempt, 3 on second, 6 stopped by stall guard">
             <g fill="#1b3a6b">
               <rect x="0" y="0" width="38" height="38" rx="4"/><rect x="43" y="0" width="38" height="38" rx="4"/><rect x="86" y="0" width="38" height="38" rx="4"/><rect x="129" y="0" width="38" height="38" rx="4"/><rect x="172" y="0" width="38" height="38" rx="4"/><rect x="215" y="0" width="38" height="38" rx="4"/><rect x="258" y="0" width="38" height="38" rx="4"/><rect x="301" y="0" width="38" height="38" rx="4"/><rect x="344" y="0" width="38" height="38" rx="4"/><rect x="387" y="0" width="38" height="38" rx="4"/>
             </g>
@@ -562,40 +575,38 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
               <rect x="559" y="0" width="38" height="38" rx="4"/><rect x="602" y="0" width="38" height="38" rx="4"/><rect x="645" y="0" width="38" height="38" rx="4"/><rect x="688" y="0" width="38" height="38" rx="4"/><rect x="731" y="0" width="38" height="38" rx="4"/><rect x="774" y="0" width="38" height="38" rx="4"/>
             </g>
             <g stroke="#9aa1ab" stroke-width="1.4" fill="none">
-              <path d="M1 46 V52 H424 V46"/><path d="M431 46 V52 H553 V46"/><path d="M560 46 V52 H811 V46"/>
+              <path d="M1 44 V49 H424 V44"/><path d="M431 44 V49 H553 V44"/><path d="M560 44 V49 H811 V44"/>
             </g>
             <g font-size="16" fill="#1d232c" text-anchor="middle">
-              <text x="212" y="75"><tspan font-weight="700">fixed on 1st attempt</tspan> (10)</text>
-              <text x="492" y="75"><tspan font-weight="700">2nd</tspan> (3)</text>
-              <text x="685" y="75"><tspan font-weight="700">stall guard stopped</tspan> (6)</text>
+              <text x="212" y="70"><tspan font-weight="700">fixed on 1st attempt</tspan> (10)</text>
+              <text x="492" y="70"><tspan font-weight="700">2nd</tspan> (3)</text>
+              <text x="685" y="70"><tspan font-weight="700">stall guard stopped</tspan> (6)</text>
             </g>
-            <text x="685" y="95" font-size="14.5" fill="#6b7380" text-anchor="middle">after 2&ndash;4 attempts each</text>
+            <text x="685" y="88" font-size="14.5" fill="#6b7380" text-anchor="middle">after 2&ndash;4 attempts each</text>
           </svg>
-          <div class="tiles">
+          <div class="tiles inline">
             <div class="tile"><div class="v">+5.7%</div><div class="l">model calls for the repairs (33 on top of 580)</div></div>
             <div class="tile"><div class="v">0</div><div class="l">runs reached the cap of 5; the stall guard did the bounding</div></div>
           </div>
         </div>
 
         <div class="rblock">
+          <div class="h3">Tool calling: BFCL v3 <span class="aside">1,240 cases, official AST checker, no repair <span class="cite">(Patil et al., 2025)</span></span></div>
+          <div class="kpis">
+            <div class="kpi"><div class="v">92.7%</div><div class="bar"><i style="width: 92.7%;"></i></div><div class="l">mean of the 4 AST categories</div></div>
+            <div class="kpi"><div class="v">90.0<span style="color: var(--ink-3); font-weight: 400;">&thinsp;&ndash;&thinsp;</span>96.2%</div><div class="bar"><i style="left: 90%; width: 6.2%;"></i></div><div class="l">range across the 4 categories</div></div>
+            <div class="kpi warn"><div class="v">68.8%</div><div class="bar"><i style="width: 68.8%;"></i></div><div class="l">irrelevance: calls no tool</div></div>
+          </div>
+        </div>
+
+        <div class="rblock">
           <div class="h3">Whole applications <span class="aside">2 of 10 specs run, once each</span></div>
-          <svg viewBox="0 0 871 132" width="100%" role="img" aria-label="Unit tests 78 of 78, browser E2E tests 2 of 13, criteria met 12 of 16">
-            <path d="M300 2 V130" stroke="#c4c9d0" stroke-width="1"/>
-            <g font-size="17" fill="#1d232c">
-              <text x="0" y="28">Unit tests passing</text>
-              <text x="0" y="72">Browser E2E tests passing</text>
-              <text x="0" y="116">Acceptance criteria met</text>
-            </g>
-            <g fill="#1b3a6b">
-              <path d="M301 10 H766 Q770 10 770 14 V30 Q770 34 766 34 H301 Z"/>
-              <path d="M301 54 H368 Q372 54 372 58 V74 Q372 78 368 78 H301 Z"/>
-              <path d="M301 98 H649 Q653 98 653 102 V118 Q653 122 649 122 H301 Z"/>
-            </g>
-            <g font-size="17.5" font-weight="700" fill="#1d232c">
-              <text x="780" y="28">78 / 78</text><text x="382" y="72">2 / 13</text><text x="663" y="116">12 / 16</text>
-            </g>
-          </svg>
-          <div class="fn" style="font-size: 16.5pt; color: var(--ink-2);">Every unmet criterion was a browser test. Browser tests import no app source, so the minimal context had nothing to edit and the loop escalated (reason: <span class="mono">blocked</span>) in about 1.3 s instead of guessing. Neither app was delivered.</div>
+          <div class="kpis">
+            <div class="kpi"><div class="v">78<small> / 78</small></div><div class="bar"><i style="width: 100%;"></i></div><div class="l">unit tests passing</div></div>
+            <div class="kpi"><div class="v">2<small> / 13</small></div><div class="bar"><i style="width: 15.4%;"></i></div><div class="l">browser E2E tests passing</div></div>
+            <div class="kpi"><div class="v">12<small> / 16</small></div><div class="bar"><i style="width: 75%;"></i></div><div class="l">acceptance criteria met</div></div>
+          </div>
+          <div class="fn" style="font-size: 16.5pt; color: var(--ink-2);">Every unmet criterion was a browser test, which imports no app source, so the loop had nothing to edit and escalated (<span class="mono">blocked</span>) in about 1.3 s instead of guessing. Neither app was delivered.</div>
         </div>
 
         <div style="margin-top: auto;">
@@ -621,11 +632,12 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
           <li>Cassano, F., Gouwar, J., Nguyen, D., et al. (2023). MultiPL-E: A scalable and polyglot approach to benchmarking neural code generation. <i>IEEE Transactions on Software Engineering, 49</i>(7), 3675&ndash;3691. https://doi.org/10.1109/TSE.2023.3267446</li>
           <li>Chen, M., Tworek, J., Jun, H., et al. (2021). <i>Evaluating large language models trained on code</i> (arXiv:2107.03374). arXiv.</li>
           <li>Haroon, S., Khan, M. T., &amp; Gulzar, M. A. (2026). <i>Evaluating LLM-based test generation under software evolution</i> (arXiv:2603.23443). arXiv.</li>
-          <li>Huang, R., Reyna, A., Lerner, S., Xia, H., &amp; Hempel, B. (2025). <i>Professional software developers don't vibe, they control: AI agent use for coding in 2025</i> (arXiv:2512.14012). arXiv.</li>
-          <li>Kiecker, T., Reichmann, E., Kang, H., An, G., &amp; Grunske, L. (2026). <i>Is three the magic number? An empirical evaluation of LLM-based repair loops</i> (arXiv:2607.05197). arXiv.</li>
+          <li>Huang, R., Reyna, A., Lerner, S., et al. (2025). <i>Professional software developers don't vibe, they control: AI agent use for coding in 2025</i> (arXiv:2512.14012). arXiv.</li>
+          <li>Kiecker, T., Reichmann, E., Kang, H., et al. (2026). <i>Is three the magic number? An empirical evaluation of LLM-based repair loops</i> (arXiv:2607.05197). arXiv.</li>
+          <li>Patil, S. G., Mao, H., Yan, F., et al. (2025). The Berkeley Function Calling Leaderboard (BFCL): From tool use to agentic evaluation of large language models. In <i>Proc. 42nd International Conference on Machine Learning (ICML)</i>, PMLR 267.</li>
           <li>Shukla, S., Joshi, H., &amp; Syed, R. (2025). Security degradation in iterative AI code generation: A systematic analysis of the paradox. In <i>Proc. 2025 IEEE International Symposium on Technology and Society (ISTAS)</i> (pp. 1&ndash;8). https://doi.org/10.1109/ISTAS65609.2025.11269659</li>
           <li>Tang, N., Chen, C., Xu, G., et al. (2026). <i>How coding agents fail their users: A large-scale analysis of developer-agent misalignment in 20,574 real-world sessions</i> (arXiv:2605.29442). arXiv.</li>
-          <li>Zhang, T., Pan, S., Zhang, Z., Xing, Z., &amp; Sun, X. (2026). Deployability-centric infrastructure-as-code generation: Fail, learn, refine, and succeed through LLM-empowered DevOps simulation. In <i>Proc. ACM International Conference on the Foundations of Software Engineering (FSE)</i>. arXiv:2506.05623</li>
+          <li>Zhang, T., Pan, S., Zhang, Z., et al. (2026). Deployability-centric infrastructure-as-code generation: Fail, learn, refine, and succeed through LLM-empowered DevOps simulation. In <i>Proc. ACM International Conference on the Foundations of Software Engineering (FSE)</i>.</li>
         </ol>
       </section>
 
@@ -641,9 +653,9 @@ svg { display: block; overflow: visible; font-family: var(--sans); }
       <div class="fbox outcome">
         <h2 class="h2">Outcome of the Project Work</h2>
         <div class="oc">
-          <div><b>IEEE conference paper</b>Submitted; under review.</div>
+          <div><b>Springer Nature research paper</b>Submitted to <i>Software and Systems Modeling</i>, 17 Oct 2026; under review.</div>
           <div><b>Invention disclosure</b>Bounded diff-aware self-healing delivery; submitted for filing.</div>
-          <div><b>IBM Bob 2.0 Hackathon</b>ForgeFlow submitted, lablab.ai, 25&ndash;27 Sep 2026.</div>
+          <div><b>IBM Bob 2.0 Hackathon</b>ForgeFlow submitted on lablab.ai, 25&ndash;27 Sep 2026; completion certificates for all three members.</div>
           <div><b>Working platform</b>65 phases, about 54k lines, 2,323 automated tests; all 2,253 run on the dev host pass.</div>
           <div><b>Platform CI/CD</b>Six-job CI; health-checked deploys. Rollback drill: 807 requests, 0 failed.</div>
         </div>
