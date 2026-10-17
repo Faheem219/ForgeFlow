@@ -204,3 +204,5 @@ Checks after the change:
 - Build: 27 pp, 0 undefined, 0 overfull.
 - `fidelity_check.py` and `rewrite_check.py`: 0 unmarked differences.
 - `guideline_checks.py`: 0 FAIL, 2 WARN (the postcode; his missing e-mail, G14).
+
+E-mail added later the same day (ranjeet.bidwe@sitpune.edu.in). G14 now passes: 5 e-mails for 5 authors.
