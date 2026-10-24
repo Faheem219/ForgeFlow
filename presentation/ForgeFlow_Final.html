@@ -477,7 +477,7 @@
       <div class="tocrow card"><span class="tn">10</span><span class="tt">References</span><span class="tp">23&ndash;24</span></div>
     </div>
 
-    <div class="callout"><span class="q">&ldquo;</span><p>Review 1 showed the pipeline exists. Review 2 showed why it is designed this way. Review 3 shows it <b>verified end-to-end</b> - with the evidence - and delivery of the platform itself being automated.</p></div>
+    <div class="callout"><span class="q">&ldquo;</span><p>Review 1 showed the pipeline exists. Review 2 showed why it is designed this way. Review 3 showed it <b>verified end-to-end</b>. This final review presents the complete platform - verified, benchmarked and delivered continuously.</p></div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>02 / 24</span></footer>
   </div>
 </section>
@@ -548,7 +548,7 @@
       <div class="fact card"><span class="ic"><svg><use href="#i-globe"/></svg></span><p><b>Verified end-to-end.</b> The full hero path has been run on real deployments - frontend and backend on Vercel, data on MongoDB Atlas - and re-validated on the live URL.</p></div>
       <div class="fact card"><span class="ic"><svg><use href="#i-flow"/></svg></span><p><b>No stage is mandatory - and now no skip is final.</b> Skips are reversible through restore points, and a human can approve a Build instead of paying for a re-run.</p></div>
       <div class="fact card contrib"><span class="ic"><svg><use href="#i-loop"/></svg></span><p><b>Core contribution, sharpened:</b> the bounded, diff-aware repair loop now follows the failing test&rsquo;s import graph, so it can reach the file that actually holds the bug.</p></div>
-      <div class="fact card"><span class="ic"><svg><use href="#i-rocket"/></svg></span><p><b>Now: delivering ForgeFlow itself continuously.</b> A 6-job CI already gates every push and pull request; continuous deployment of the platform is in progress.</p></div>
+      <div class="fact card"><span class="ic"><svg><use href="#i-rocket"/></svg></span><p><b>Delivered continuously.</b> A 6-job CI gates every push and pull request, and CD ships each green build with automatic rollback.</p></div>
     </div>
 
     <div class="callout"><span class="q">&ldquo;</span><p>Existing tools generate apps. ForgeFlow generates apps it can <em>prove</em> work - and then proves it again on the live URL.</p></div>
@@ -671,7 +671,7 @@
   <div class="pad">
     <header class="shead">
       <div class="kick">Status of Current Work</div>
-      <h2>Pipeline Verified End-to-End - Now Hardening Delivery Itself</h2>
+      <h2>Pipeline Verified End-to-End - and Delivered Continuously</h2>
       <div class="rule"></div>
     </header>
 
@@ -691,26 +691,26 @@
       <div class="m"><div class="mv tnum">2,148</div><div class="ml">AUTOMATED TESTS PASSING · 19 SEP</div></div>
       <div class="m done"><div class="mv"><svg><use href="#i-check"/></svg>VERIFIED</div><div class="ml">END-TO-END HERO PATH · LIVE URL</div></div>
       <div class="m"><div class="mv">6 jobs · 21</div><div class="ml">CI GATES ON EVERY PUSH / PR</div></div>
-      <div class="m wip"><div class="mv"><svg><use href="#i-half"/></svg>IN PROGRESS</div><div class="ml">CONTINUOUS DEPLOYMENT</div></div>
+      <div class="m done"><div class="mv"><svg><use href="#i-check"/></svg>LIVE</div><div class="ml">CONTINUOUS DEPLOYMENT</div></div>
     </div>
 
-    <div class="subsys-label">Subsystems - shipped, and what changed since Review 2</div>
+    <div class="subsys-label">Subsystems - all complete; tagged where hardened after Review 2</div>
     <div class="subsys">
-      <div class="ss card new"><span class="tag">New since R2</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Control plane</h4><p>Conductor + stage machine; skips reversible, Build human-approvable</p></div></div>
+      <div class="ss card new"><span class="tag">Hardened</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Control plane</h4><p>Conductor + stage machine; skips reversible, Build human-approvable</p></div></div>
       <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>PWA + web IDE</h4><p>Monaco, xterm.js, live preview; resizable, focusable workspace</p></div></div>
-      <div class="ss card new"><span class="tag">New since R2</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Execution sandbox</h4><p>Per-project Docker; dependency-restart detection &amp; diagnostics</p></div></div>
-      <div class="ss card new"><span class="tag">New since R2</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Design stage</h4><p>Stitch / Figma; a provider&rsquo;s question now waits for the user</p></div></div>
+      <div class="ss card new"><span class="tag">Hardened</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Execution sandbox</h4><p>Per-project Docker; dependency-restart detection &amp; diagnostics</p></div></div>
+      <div class="ss card new"><span class="tag">Hardened</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Design stage</h4><p>Stitch / Figma; a provider&rsquo;s question now waits for the user</p></div></div>
       <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Build stage</h4><p>Phased plan &rarr; verify &rarr; bounded self-heal; stale-demo-test stop</p></div></div>
       <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Requirements &rarr; tests</h4><p>Structured capture &rarr; unit + Playwright; sandbox &amp; live runs scoped</p></div></div>
       <div class="ss card contrib"><span class="tag">Core · upgraded</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Self-healing repair loop</h4><p>Import-graph context, bounded file request, no-op guard</p></div></div>
-      <div class="ss card new"><span class="tag">New since R2</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Deploy</h4><p>Vercel FE + BE, Atlas; env mirrored, real logs, teardown</p></div></div>
+      <div class="ss card new"><span class="tag">Hardened</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Deploy</h4><p>Vercel FE + BE, Atlas; env mirrored, real logs, teardown</p></div></div>
       <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Live validation</h4><p>Playwright suite re-run on the live URL - verified end-to-end</p></div></div>
-      <div class="ss card new"><span class="tag">New since R2</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>LLM transport &amp; cost</h4><p>Provider-agnostic; cheapest-upstream routing; &#8377; budget caps</p></div></div>
+      <div class="ss card new"><span class="tag">Hardened</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>LLM transport &amp; cost</h4><p>Provider-agnostic; cheapest-upstream routing; &#8377; budget caps</p></div></div>
       <div class="ss card"><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Data &amp; evaluation</h4><p>Per-project DBs + CRUD browser; headless harness, 10 specs</p></div></div>
-      <div class="ss card wip"><span class="tag">In progress</span><span class="ic"><svg><use href="#i-half"/></svg></span><div><h4>Platform CI/CD</h4><p>6-job CI live on every push; CD for ForgeFlow in progress</p></div></div>
+      <div class="ss card new"><span class="tag">Complete</span><span class="ic"><svg><use href="#i-check"/></svg></span><div><h4>Platform CI/CD</h4><p>6-job CI on every push; CD with automatic rollback</p></div></div>
     </div>
 
-    <div class="callout" style="background:#eafaea; border-left-color:var(--good)"><span class="ic" style="color:var(--good)"><svg width="24" height="24"><use href="#i-check"/></svg></span><p><b>New since Review 2:</b> verified on real deployments - every defect it surfaced became a fix plus regression tests (<b>+248 tests</b>).</p></div>
+    <div class="callout" style="background:#eafaea; border-left-color:var(--good)"><span class="ic" style="color:var(--good)"><svg width="24" height="24"><use href="#i-check"/></svg></span><p><b>Verified on real deployments:</b> every defect it surfaced became a fix plus regression tests (<b>+248 tests</b>).</p></div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>06 / 24</span></footer>
   </div>
 </section>
@@ -1064,11 +1064,11 @@
       </div>
 
       <div style="display:flex; flex-direction:column; min-height:0">
-        <p class="lit-h">Gap &rarr; 2026 evidence &rarr; ForgeFlow response (shipped since Review 2)</p>
+        <p class="lit-h">Gap &rarr; 2026 evidence &rarr; ForgeFlow response (all shipped)</p>
         <table class="jtable tight">
           <thead><tr><th style="width:36%">Gap</th><th style="width:13%">Evidence</th><th style="width:51%">ForgeFlow response</th></tr></thead>
           <tbody>
-            <tr><td>Agent work is judged by CI, and CI repair rarely succeeds</td><td><span class="ref" style="vertical-align:baseline">[7][25][27]</span></td><td><b>6-job CI on every push</b>; platform CD in progress</td></tr>
+            <tr><td>Agent work is judged by CI, and CI repair rarely succeeds</td><td><span class="ref" style="vertical-align:baseline">[7][25][27]</span></td><td><b>6-job CI on every push</b>; CD ships each green build</td></tr>
             <tr class="hl"><td>The right file matters more than more context</td><td><span class="ref" style="vertical-align:baseline">[29]&ndash;[31]</span></td><td><b>Import-graph repair context</b> + bounded <span class="mono">request_file</span> (&le; 3)</td></tr>
             <tr class="hl"><td>Repair gains stop after 3&ndash;4 iterations</td><td><span class="ref" style="vertical-align:baseline">[32][33]</span></td><td>Cap 5 · stall 2 · regressions 2 · <b>new no-op guard 2</b></td></tr>
             <tr><td>Models do not ask when a brief is ambiguous</td><td><span class="ref" style="vertical-align:baseline">[34][35]</span></td><td><b>Provider questions routed to the user</b></td></tr>
@@ -1093,7 +1093,7 @@
   <div class="pad" style="padding:34px 44px 26px">
     <header class="shead" style="margin-bottom:11px">
       <div class="kick">Prototype / Software Development (1/3) - Changelog</div>
-      <h2>What Was Built Since Review 2 - Every Change Traced to a Defect</h2>
+      <h2>What Was Built After Review 2 - Every Change Traced to a Defect</h2>
       <div class="rule"></div>
     </header>
 
@@ -1114,11 +1114,11 @@
         <tr><td><b>Coverage refactor</b> &middot; sandbox, testing</td><td>Shared sandbox fixtures, and an end-to-end test that pressing <b>Repair</b> really patches code.</td><td class="tnum">+21</td></tr>
         <tr><td><b>Test runs scoped by environment</b></td><td>A live-validation run (E2E subset only) could masquerade as the Test stage&rsquo;s latest result. Sandbox runs by default, explicit <span class="mono">env</span> filter.</td><td class="tnum">+2</td></tr>
         <tr class="hl"><td><b>Design clarifying questions</b></td><td>A provider&rsquo;s question was treated as an error, so failover produced a design nobody asked for. Question parked; stage <span class="mono">awaiting_user</span>; the answer resumes the same provider.</td><td class="tnum">+18</td></tr>
-        <tr><td><b>Platform continuous deployment</b></td><td>CI verifies every push, but nothing yet deploys ForgeFlow itself - in progress (slide 15).</td><td>-</td></tr>
+        <tr><td><b>Platform continuous deployment</b></td><td>CI verified every push, but nothing deployed ForgeFlow itself. CD now ships each green build, with automatic rollback (slide 15).</td><td>-</td></tr>
       </tbody>
     </table>
 
-    <div class="dcap" style="margin-top:8px; font-size:11.6px; color:var(--ink2)"><b style="color:var(--ink)">248 new test definitions since the Review 2 cut</b> (189 backend · 59 frontend), including datetime formatting (+16) and pane sizing (+6), not listed. Source: git history.</div>
+    <div class="dcap" style="margin-top:8px; font-size:11.6px; color:var(--ink2)"><b style="color:var(--ink)">248 new test definitions after the Review 2 cut</b> (189 backend · 59 frontend), including datetime formatting (+16) and pane sizing (+6), not listed. Source: git history.</div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>13 / 24</span></footer>
   </div>
 </section>
@@ -1259,12 +1259,12 @@
   <div class="pad" style="padding:34px 44px 26px">
     <header class="shead" style="margin-bottom:10px">
       <div class="kick">Prototype / Software Development (3/3) - Platform CI/CD</div>
-      <h2>Delivering ForgeFlow Itself - CI Gates Live, CD In Progress</h2>
+      <h2>Delivering ForgeFlow Itself - CI and CD Both Live</h2>
       <div class="rule"></div>
     </header>
 
     <svg viewBox="0 0 1180 318" style="width:100%; flex:none" role="img"
-         aria-label="Continuous integration with six parallel GitHub Actions jobs and twenty-one gates is live; continuous deployment of the platform is in progress">
+         aria-label="Continuous integration with six parallel GitHub Actions jobs and twenty-one gates is live; continuous deployment of the platform is live with automatic rollback">
       <defs>
         <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#52514e"/></marker>
         <marker id="ci" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4338CA"/></marker>
@@ -1325,17 +1325,17 @@
 
       <!-- CD container -->
       <rect x="883" y="1" width="296" height="316" rx="10" fill="#fbfbfe" stroke="#4338CA" stroke-width="1.5" stroke-dasharray="6 3"/>
-      <text x="899" y="23" font-size="11.4" font-weight="800" fill="#4338CA" letter-spacing=".5">CD - IN PROGRESS</text>
-      <text x="1165" y="23" font-size="9.4" font-weight="650" fill="#898781" text-anchor="end">target design</text>
+      <text x="899" y="23" font-size="11.4" font-weight="800" fill="#4338CA" letter-spacing=".5">CD - LIVE</text>
+      <text x="1165" y="23" font-size="9.4" font-weight="650" fill="#898781" text-anchor="end">since 20 Sep</text>
       <g font-size="10.2" fill="#52514e">
         <rect x="899" y="36" width="264" height="56" rx="8" fill="#ffffff" stroke="#c9c4ee"/>
-        <text x="913" y="58" font-size="11.6" font-weight="750" fill="#1a1a1a">1 · Package release artefacts</text><text x="913" y="76">API · PWA · sandbox image, versioned</text>
+        <text x="913" y="58" font-size="11.6" font-weight="750" fill="#1a1a1a">1 · Build the release image</text><text x="913" y="76">multi-arch, SHA-tagged, pushed to GHCR</text>
         <rect x="899" y="108" width="264" height="56" rx="8" fill="#ffffff" stroke="#c9c4ee"/>
         <text x="913" y="130" font-size="11.6" font-weight="750" fill="#1a1a1a">2 · Deploy the green build</text><text x="913" y="148">exactly the commit that passed CI</text>
         <rect x="899" y="180" width="264" height="56" rx="8" fill="#ffffff" stroke="#c9c4ee"/>
-        <text x="913" y="202" font-size="11.6" font-weight="750" fill="#1a1a1a">3 · Post-deploy smoke test</text><text x="913" y="220">health checks + Playwright on the URL</text>
+        <text x="913" y="202" font-size="11.6" font-weight="750" fill="#1a1a1a">3 · Post-deploy health check</text><text x="913" y="220">container health + public /health over TLS</text>
         <rect x="899" y="252" width="264" height="56" rx="8" fill="#eef0fb" stroke="#4338CA"/>
-        <text x="913" y="274" font-size="11.6" font-weight="750" fill="#332a99">4 · Promote - or roll back</text><text x="913" y="292" fill="#4b459c">a failed smoke test never goes live</text>
+        <text x="913" y="274" font-size="11.6" font-weight="750" fill="#332a99">4 · Promote - or roll back</text><text x="913" y="292" fill="#4b459c">an unhealthy build rolls back automatically</text>
       </g>
       <g stroke="#4338CA" stroke-width="1.5" marker-end="url(#ci)">
         <line x1="1031" y1="93" x2="1031" y2="106"/><line x1="1031" y1="165" x2="1031" y2="178"/><line x1="1031" y1="237" x2="1031" y2="250"/>
@@ -1345,10 +1345,10 @@
     <div class="card3" style="margin-top:12px">
       <div class="mini3 card"><span class="ic"><svg><use href="#i-shield"/></svg></span><div><h4>Why CD must be gated</h4><p>81% of leaders report more AI-linked production incidents <span class="ref">[4]</span>; AI adoption still correlates with lower delivery stability <span class="ref">[2]</span>.</p></div></div>
       <div class="mini3 card"><span class="ic"><svg><use href="#i-loop"/></svg></span><div><h4>Same principle as the product</h4><p>Generated apps are checked by their own generated tests in the sandbox, then again on the live URL. ForgeFlow&rsquo;s own releases get the same treatment.</p></div></div>
-      <div class="mini3 card alert"><span class="ic"><svg><use href="#i-x"/></svg></span><div><h4>Already caught by the gate</h4><p><b>mypy</b> reports 4 type errors in 2 test files from the 12 Sep design-questions commit - CD must not promote until they are fixed.</p></div></div>
+      <div class="mini3 card alert"><span class="ic"><svg><use href="#i-x"/></svg></span><div><h4>Already caught by the gate</h4><p><b>mypy</b> reports 4 type errors in 2 test files from the 12 Sep design-questions commit - fixed on 19 Sep, before CD went live.</p></div></div>
     </div>
 
-    <div class="callout"><span class="q">&ldquo;</span><p>ForgeFlow holds a generated app to its tests - in the sandbox and again on the live URL. Review 3 puts <b>the platform itself</b> under the same rule.</p></div>
+    <div class="callout"><span class="q">&ldquo;</span><p>ForgeFlow holds a generated app to its tests - in the sandbox and again on the live URL. <b>The platform itself</b> now ships under the same rule.</p></div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>15 / 24</span></footer>
   </div>
 </section>
@@ -1382,11 +1382,11 @@
           <span class="pill ok"><svg><use href="#i-check"/></svg>tsc &middot; strict</span>
           <span class="pill ok"><svg><use href="#i-check"/></svg>ESLint &middot; 0 warnings</span>
           <span class="pill ok"><svg><use href="#i-check"/></svg>Prettier</span>
-          <span class="pill bad"><svg><use href="#i-x"/></svg>mypy &middot; 4 errors, 2 test files - open</span>
+          <span class="pill ok"><svg><use href="#i-check"/></svg>mypy &middot; 4 errors fixed 19 Sep</span>
         </div>
-        <p class="note">The mypy errors (<span class="mono">Any | None</span> indexed in two new design tests, 12 Sep) are real and would fail the CI backend job; they are tracked as the first item that CD must not promote past.</p>
+        <p class="note">The mypy errors (<span class="mono">Any | None</span> indexed in two new design tests, 12 Sep) were real and would have failed the CI backend job; they were fixed the same day, before CD went live.</p>
 
-        <p class="lit-h" style="margin-top:12px">Growth since the Review 2 cut (24 Aug &rarr; 12 Sep)</p>
+        <p class="lit-h" style="margin-top:12px">Growth after the Review 2 cut (24 Aug &rarr; 12 Sep)</p>
         <div class="mstrip" style="margin:0">
           <div class="m"><div class="mv tnum">1,726 &rarr; 1,955</div><div class="ml">TEST DEFINITIONS (+13%)</div></div>
           <div class="m"><div class="mv tnum">+5,433</div><div class="ml">LINES OF TEST CODE</div></div>
@@ -1504,7 +1504,7 @@
         </div>
         <div class="conseq" style="margin-top:11px">
           <span class="ic"><svg><use href="#i-chart"/></svg></span>
-          <p><b>Status:</b> first scored run done &ndash; four industry benchmarks in full and 2 of 10 apps (next slide). The <b>three-arm study</b> - no repair · bounded diff-aware · context-ablated - is the next milestone.</p>
+          <p><b>Status:</b> first scored run done &ndash; four industry benchmarks in full and 2 of 10 apps (next slide). The <b>three-arm study</b> - no repair · bounded diff-aware · context-ablated - is the first item of future work.</p>
         </div>
       </div>
     </div>
@@ -1563,7 +1563,7 @@
         </ul>
         <div class="conseq" style="margin-top:auto; margin-bottom:14px; padding:10px 14px">
           <span class="ic"><svg><use href="#i-chart"/></svg></span>
-          <p><b>Next:</b> all 10 apps with fewer parallel builds, in the no-repair, bounded and context-ablated arms with repeated runs &ndash; and E2E-aware repair context.</p>
+          <p><b>Future work:</b> all 10 apps with fewer parallel builds, in the no-repair, bounded and context-ablated arms with repeated runs &ndash; and E2E-aware repair context.</p>
         </div>
       </div>
     </div>
@@ -1576,57 +1576,57 @@
   <div class="pad">
     <header class="shead" style="margin-bottom:12px">
       <div class="kick">Gantt Chart / Project Tracking</div>
-      <h2>Project Tracking - Plan vs. Actual at Week 7 of 13</h2>
+      <h2>Project Tracking - Plan vs. Actual at Project Close</h2>
       <div class="rule"></div>
     </header>
 
-    <svg viewBox="0 0 1180 304" style="width:100%; flex:none" role="img" aria-label="Gantt chart comparing planned and actual progress for workstreams A to E, 1 August to 31 October, as of week 7">
+    <svg viewBox="0 0 1180 304" style="width:100%; flex:none" role="img" aria-label="Gantt chart comparing planned and actual progress for workstreams A to E, 1 August to 31 October, at project close">
       <g stroke="#eeece6" stroke-width="1"><line x1="200.0" y1="30" x2="200.0" y2="280"/><line x1="349.23" y1="30" x2="349.23" y2="280"/><line x1="498.46" y1="30" x2="498.46" y2="280"/><line x1="647.69" y1="30" x2="647.69" y2="280"/><line x1="796.92" y1="30" x2="796.92" y2="280"/><line x1="946.15" y1="30" x2="946.15" y2="280"/><line x1="1095.38" y1="30" x2="1095.38" y2="280"/><line x1="1170.0" y1="30" x2="1170.0" y2="280"/></g>
       <g font-size="10.4" fill="#898781" text-anchor="middle"><text x="200.0" y="297">W0 · 1 Aug</text><text x="349.23" y="297">W2</text><text x="498.46" y="297">W4 · 29 Aug</text><text x="647.69" y="297">W6</text><text x="796.92" y="297">W8 · 26 Sep</text><text x="946.15" y="297">W10 · 10 Oct</text><text x="1170.0" y="297" text-anchor="end">W13 · 31 Oct</text></g>
       <g fill="#1a1a1a"><polygon points="200,19 205,24 200,29 195,24"/><text x="209" y="28" font-size="10.4" font-weight="750">Review 1</text><polygon points="509.12,19 514.12,24 509.12,29 504.12,24"/><text x="518.12" y="28" font-size="10.4" font-weight="750">Review 2</text></g>
-      <line x1="722.31" y1="20" x2="722.31" y2="282" stroke="#C11B24" stroke-width="1.5" stroke-dasharray="5 3"/>
-      <text x="728.31" y="14" font-size="10.6" font-weight="800" fill="#C11B24">today · 19 Sep (W7) · Review 3</text>
+      <g fill="#1a1a1a"><polygon points="722.31,19 727.31,24 722.31,29 717.31,24"/><text x="731.31" y="28" font-size="10.4" font-weight="750">Review 3</text><polygon points="1020.77,19 1025.77,24 1020.77,29 1015.77,24"/><text x="1029.77" y="28" font-size="10.4" font-weight="750">Final report</text></g>
       <text x="0" y="59" font-size="12" font-weight="750" fill="#1a1a1a">A · Gap-finding &amp; hardening</text>
       <text x="0" y="75" font-size="10.6" font-weight="700" fill="#0a7d0a">&#10003; Done · W2&ndash;W6</text>
       <rect x="274.62" y="49" width="223.84" height="26" rx="6" fill="#86b6ef" fill-opacity=".2" stroke="#86b6ef" stroke-width="1.2"/>
       <g><title>A actual: 15 Aug - 12 Sep (phases 54-63, live-session fixes)</title><rect x="349.23" y="56" width="298.46" height="12" rx="3" fill="#86b6ef"/></g>
       <text x="0" y="107" font-size="12" font-weight="750" fill="#1a1a1a">B · Repair-loop refinement</text>
-      <text x="0" y="123" font-size="10.6" font-weight="700" fill="#332a99">&#9680; In progress · ablation pending</text>
+      <text x="0" y="123" font-size="10.6" font-weight="700" fill="#0a7d0a">&#10003; Done · W4&ndash;W7</text>
       <rect x="423.85" y="97" width="298.46" height="26" rx="6" fill="#5598e7" fill-opacity=".16" stroke="#5598e7" stroke-width="1.2"/>
-      <g><title>B actual: 30 Aug - today (phase 63; ablation not yet run)</title><rect x="509.12" y="104" width="213.19" height="12" rx="3" fill="#5598e7"/></g>
+      <g><title>B actual: 30 Aug - 19 Sep (phases 63-64)</title><rect x="509.12" y="104" width="213.19" height="12" rx="3" fill="#5598e7"/></g>
       <text x="0" y="155" font-size="12" font-weight="750" fill="#1a1a1a">C · Evaluation at scale</text>
-      <text x="0" y="171" font-size="10.6" font-weight="700" fill="#8a4306">&#9675; Not started · ~1 week behind</text>
+      <text x="0" y="171" font-size="10.6" font-weight="700" fill="#8a4306">&#9680; Partial · benchmarks done, apps 2 of 10</text>
       <rect x="647.69" y="145" width="298.46" height="26" rx="6" fill="#2a78d6" fill-opacity=".12" stroke="#2a78d6" stroke-width="1.2"/>
-      <text x="734.3" y="162" font-size="10.4" font-weight="650" fill="#1c5cab">harness + 10 specs ready</text>
+      <text x="852" y="162" font-size="10.4" font-weight="650" fill="#1c5cab" text-anchor="end">industry benchmarks run</text>
+      <g><title>C actual: 2 Oct - 9 Oct (industry benchmarks in full; 2 of 10 apps; repair-results figure)</title><rect x="860.88" y="152" width="74.61" height="12" rx="3" fill="#2a78d6"/></g>
       <text x="0" y="203" font-size="12" font-weight="750" fill="#1a1a1a">D · Production-worthiness</text>
-      <text x="0" y="219" font-size="10.6" font-weight="700" fill="#332a99">&#9680; Started early · CD in progress</text>
+      <text x="0" y="219" font-size="10.6" font-weight="700" fill="#0a7d0a">&#10003; Done early · CD live 20 Sep</text>
       <rect x="796.92" y="193" width="298.46" height="26" rx="6" fill="#1c5cab" fill-opacity=".1" stroke="#1c5cab" stroke-width="1.2"/>
-      <g><title>D actual: 30 Aug - today (price routing, reversible skip, platform CD)</title><rect x="509.12" y="200" width="213.19" height="12" rx="3" fill="#1c5cab"/></g>
+      <g><title>D actual: 30 Aug - 20 Sep (price routing, reversible skip, platform CI/CD)</title><rect x="509.12" y="200" width="223.85" height="12" rx="3" fill="#1c5cab"/></g>
       <text x="0" y="251" font-size="12" font-weight="750" fill="#1a1a1a">E · Dissemination</text>
-      <text x="0" y="267" font-size="10.6" font-weight="700" fill="#332a99">&#9680; Started early · paper + disclosure</text>
+      <text x="0" y="267" font-size="10.6" font-weight="700" fill="#0a7d0a">&#10003; Done · paper + disclosure submitted</text>
       <rect x="946.15" y="241" width="223.85" height="26" rx="6" fill="#104281" fill-opacity=".1" stroke="#104281" stroke-width="1.2"/>
-      <g><title>E actual: 16 Aug - 12 Sep (IEEE paper draft, figures, patent disclosure)</title><rect x="359.89" y="248" width="287.8" height="12" rx="3" fill="#104281"/></g>
+      <g><title>E actual: 16 Aug - 17 Oct (paper submitted, patent disclosure submitted for filing, hackathon entry, black book and poster)</title><rect x="359.89" y="248" width="660.88" height="12" rx="3" fill="#104281"/></g>
       <rect x="0" y="287" width="16" height="10" rx="3" fill="#2a78d6" fill-opacity=".15" stroke="#2a78d6" stroke-width="1.2"/><text x="21" y="296" font-size="10.4" fill="#52514e">planned</text>
       <rect x="80" y="289" width="16" height="6" rx="2" fill="#2a78d6"/><text x="101" y="296" font-size="10.4" fill="#52514e">actual</text>
     </svg>
 
     <div class="track3">
-      <div class="card" style="padding:11px 14px"><h4 style="color:#0a7d0a"><svg><use href="#i-check"/></svg>Done since Review 2</h4><ul>
-        <li><b>Phases 62&ndash;63</b>: deploy truthfulness, repair reachability</li>
+      <div class="card" style="padding:11px 14px"><h4 style="color:#0a7d0a"><svg><use href="#i-check"/></svg>Delivered</h4><ul>
+        <li><b>Phases 62&ndash;65</b>: deploy truthfulness, repair reachability, truthful build, offline test DB</li>
         <li>Reversible skip, human build approval, design questions</li>
-        <li>Sandbox restart diagnostics; price-sorted routing</li>
-        <li>Patent disclosure revised; paper figures revised</li></ul></div>
-      <div class="card" style="padding:11px 14px; border-color:#c9c4ee; background:#fbfbfe"><h4 style="color:var(--indigo-dk)"><svg><use href="#i-half"/></svg>In progress</h4><ul>
-        <li><b>Platform CD</b>: package &rarr; deploy green build &rarr; smoke &rarr; promote / roll back</li>
-        <li>Clear the 4 mypy errors so the gate is green</li>
-        <li>Repair-loop tuning ahead of the ablation</li></ul></div>
-      <div class="card" style="padding:11px 14px"><h4><svg><use href="#i-clock"/></svg>Next &middot; W8&ndash;W13 (to 31 Oct)</h4><ul>
-        <li><b>Scored three-arm benchmark</b> on the 10 specs, repeated runs for variance</li>
+        <li><b>Platform CI/CD</b> live 20 Sep, with automatic rollback</li>
+        <li>Industry benchmarks: HumanEval 97.0% &rarr; 99.4% with repair</li></ul></div>
+      <div class="card" style="padding:11px 14px; border-color:#c9c4ee; background:#fbfbfe"><h4 style="color:var(--indigo-dk)"><svg><use href="#i-doc"/></svg>Submitted</h4><ul>
+        <li><b>Paper</b>: submitted to Springer Nature, under review</li>
+        <li><b>Invention disclosure</b>: revised after IP review, submitted for filing</li>
+        <li>IBM Bob 2.0 Hackathon entry; black book and poster (17 Oct)</li></ul></div>
+      <div class="card" style="padding:11px 14px"><h4><svg><use href="#i-clock"/></svg>Future work</h4><ul>
+        <li><b>Three-arm ablation</b> on all 10 apps, repeated runs for variance</li>
         <li>Expand to 20&ndash;30 specs; sweep iteration cap &amp; stall threshold</li>
-        <li>Results into the paper; disclosure submitted for filing</li></ul></div>
+        <li>E2E-aware repair context for failing browser tests</li></ul></div>
     </div>
 
-    <div class="callout"><span class="q">&ldquo;</span><p>A is done, B is in progress, C has slipped about a week, and D and E started early. <b>Evaluation is now the critical path.</b></p></div>
+    <div class="callout"><span class="q">&ldquo;</span><p>A, B, D and E are done - D ahead of plan. C is partial: the benchmarks ran in full, the apps 2 of 10. <b>The full ablation is the first item of future work.</b></p></div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>20 / 24</span></footer>
   </div>
 </section>
@@ -1698,7 +1698,7 @@
   <div class="pad">
     <header class="shead">
       <div class="kick">Conclusion</div>
-      <h2>Verified End-to-End - Next: Measure It, Ship It Continuously</h2>
+      <h2>Verified End-to-End, Benchmarked and Shipped Continuously</h2>
       <div class="rule"></div>
     </header>
 
@@ -1707,13 +1707,13 @@
       <div class="concrow"><span class="ic"><svg><use href="#i-check"/></svg></span><p>The <b>full hero path has been verified end-to-end</b> on real deployments - 63 / 63 phases, 2,148 automated tests passing, 6 CI jobs gating every change.</p></div>
       <div class="concrow"><span class="ic accent"><svg><use href="#i-loop"/></svg></span><p>Live validation <b>sharpened the core contribution</b>: repair now follows the failing test&rsquo;s import graph, with a bounded file request and a no-op guard - as 2026 localization evidence recommends <span class="ref">[29]&ndash;[31]</span>.</p></div>
       <div class="concrow"><span class="ic"><svg><use href="#i-doc"/></svg></span><p>Review became evidence: <b>six IP-review points</b> applied to the patent disclosure, and every live-session defect turned into a phase, a fix and regression tests (<b>+248</b>).</p></div>
-      <div class="concrow"><span class="ic accent"><svg><use href="#i-rocket"/></svg></span><p><b>Now:</b> continuous deployment of the platform, gated on a green CI - starting with the 4 open mypy errors the gate already caught.</p></div>
-      <div class="concrow"><span class="ic"><svg><use href="#i-gauge"/></svg></span><p><b>Next:</b> the three-arm benchmark on all 10 apps, with variance - the first scored run (97% HumanEval pass@1, 92.7% BFCL) already shows where repair helps and where it cannot reach.</p></div>
+      <div class="concrow"><span class="ic accent"><svg><use href="#i-rocket"/></svg></span><p><b>Shipped continuously:</b> CD deploys only a commit that passed CI, health-checks it and rolls back automatically - the 4 mypy errors the gate caught were fixed first.</p></div>
+      <div class="concrow"><span class="ic"><svg><use href="#i-gauge"/></svg></span><p><b>Benchmarked:</b> 97% HumanEval pass@1 (99.4% with repair) and 92.7% BFCL show where repair helps and where it cannot reach; the three-arm study on all 10 apps is future work.</p></div>
     </div>
 
     <div class="closing">
       <span class="q">&ldquo;</span>
-      <p>Anyone can make an AI write an app. ForgeFlow knows when to stop - Review 3 shows it working end-to-end; next, we measure how often it succeeds.</p>
+      <p>Anyone can make an AI write an app. ForgeFlow knows when to stop - and it is now built, verified end-to-end and shipping continuously.</p>
     </div>
     <footer class="foot"><span>ForgeFlow · B.Tech Project - Final ESE Presentation · Group 04</span><span>22 / 24</span></footer>
   </div>
